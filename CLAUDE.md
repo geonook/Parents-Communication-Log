@@ -1,9 +1,9 @@
-# CLAUDE.md - Google Apps Script Educational Management System
+# CLAUDE.md - Parents Communication Log
 
 > **Documentation Version**: 1.0  
 > **Last Updated**: 2025-07-13  
-> **Project**: Google Apps Script Educational Management System  
-> **Description**: Educational management system with teacher management, student data import, dashboard, and automation features  
+> **Project**: Parents Communication Log  
+> **Description**: Parent-teacher communication tracking system with teacher management, student data import, dashboard, and automation features  
 > **Features**: GitHub auto-backup, Task agents, technical debt prevention
 
 This file provides essential guidance to Claude Code (claude.ai/code) when working with code in this repository.

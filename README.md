@@ -1,6 +1,6 @@
-# Google Apps Script Educational Management System
+# Parents Communication Log
 
-A comprehensive educational management system built with Google Apps Script, featuring teacher management, student data import, progress tracking, and automated dashboards.
+A comprehensive parent-teacher communication tracking system built with Google Apps Script, featuring teacher management, student data import, progress tracking, and automated dashboards.
 
 ## 🚀 Quick Start
 
@@ -31,6 +31,7 @@ comm/
 
 - **Teacher Management**: Comprehensive teacher data management and operations
 - **Student Data Import**: Automated student data import and processing
+- **Communication Tracking**: Parent-teacher communication logging and monitoring
 - **Progress Tracking**: Real-time student progress monitoring
 - **Dashboard Interface**: Interactive web-based dashboard
 - **Automation Triggers**: Scheduled tasks and automated workflows
