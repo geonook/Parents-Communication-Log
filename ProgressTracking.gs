@@ -377,6 +377,145 @@ function autoProgressCheck() {
 /**
  * 發送進度提醒
  */
+/**
+ * 顯示進度檢查摘要
+ */
+function displayProgressSummary(progressResults) {
+  if (!progressResults || progressResults.length === 0) {
+    SpreadsheetApp.getUi().alert('進度檢查結果', '沒有找到任何老師記錄簿', SpreadsheetApp.getUi().ButtonSet.OK);
+    return;
+  }
+  
+  // 統計分析
+  const totalTeachers = progressResults.length;
+  const needAttention = progressResults.filter(p => p.status === '需要關注').length;
+  const needImprovement = progressResults.filter(p => p.status === '待改善').length;
+  const normal = progressResults.filter(p => p.status === '正常').length;
+  const totalContacts = progressResults.reduce((sum, p) => sum + p.totalContacts, 0);
+  const totalThisMonth = progressResults.reduce((sum, p) => sum + p.thisMonthContacts, 0);
+  
+  // 建立摘要報告
+  let summaryMessage = '🔍 全體老師電聯進度檢查結果\n\n';
+  summaryMessage += `📊 總體統計：\n`;
+  summaryMessage += `• 老師總數：${totalTeachers} 位\n`;
+  summaryMessage += `• 累計電聯記錄：${totalContacts} 筆\n`;
+  summaryMessage += `• 本月電聯記錄：${totalThisMonth} 筆\n\n`;
+  
+  summaryMessage += `📈 狀態分布：\n`;
+  summaryMessage += `• ✅ 正常：${normal} 位 (${Math.round(normal/totalTeachers*100)}%)\n`;
+  summaryMessage += `• ⚠️ 待改善：${needImprovement} 位 (${Math.round(needImprovement/totalTeachers*100)}%)\n`;
+  summaryMessage += `• 🚨 需要關注：${needAttention} 位 (${Math.round(needAttention/totalTeachers*100)}%)\n\n`;
+  
+  // 詳細列表
+  if (needAttention > 0 || needImprovement > 0) {
+    summaryMessage += `📋 需要關注的老師：\n`;
+    progressResults.forEach(progress => {
+      if (progress.status !== '正常') {
+        summaryMessage += `\n• ${progress.teacherName} (${progress.status})\n`;
+        summaryMessage += `  - 總電聯：${progress.totalContacts} 筆\n`;
+        summaryMessage += `  - 本月：${progress.thisMonthContacts} 筆\n`;
+        summaryMessage += `  - 最後聯繫：${progress.lastContactDate}\n`;
+        if (progress.alertMessage) {
+          summaryMessage += `  - 提醒：${progress.alertMessage}\n`;
+        }
+      }
+    });
+  }
+  
+  // 顯示結果
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    '進度檢查結果',
+    summaryMessage + '\n是否要生成詳細報告？',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response === ui.Button.YES) {
+    generateDetailedProgressReport(progressResults);
+  }
+}
+
+/**
+ * 生成詳細的進度報告並保存為檔案
+ */
+function generateDetailedProgressReport(progressResults) {
+  try {
+    const reportSheet = SpreadsheetApp.create(`電聯進度報告_${new Date().toLocaleDateString()}`);
+    const sheet = reportSheet.getActiveSheet();
+    sheet.setName('進度報告');
+    
+    // 設定報告標題
+    sheet.getRange('A1').setValue('電聯記錄進度報告');
+    sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
+    sheet.getRange('A2').setValue(`生成時間：${new Date().toLocaleString()}`);
+    
+    // 設定表頭
+    const headers = [
+      '老師姓名', '授課班級數', '總電聯次數', '本月電聯次數', 
+      '最後聯繫日期', '距今天數', '狀態', '月度目標達成', '提醒訊息'
+    ];
+    sheet.getRange(4, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(4, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+    
+    // 填入數據
+    const data = progressResults.map(progress => [
+      progress.teacherName,
+      progress.totalClasses,
+      progress.totalContacts,
+      progress.thisMonthContacts,
+      progress.lastContactDate,
+      progress.daysSinceLastContact === 999 ? '無記錄' : progress.daysSinceLastContact,
+      progress.status,
+      progress.monthlyGoalMet ? '是' : '否',
+      progress.alertMessage || '無'
+    ]);
+    
+    if (data.length > 0) {
+      sheet.getRange(5, 1, data.length, headers.length).setValues(data);
+    }
+    
+    // 條件式格式
+    const statusRange = sheet.getRange(5, 7, data.length, 1);
+    const normalRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo('正常')
+      .setBackground('#D4EDDA')
+      .setRanges([statusRange])
+      .build();
+    const improvementRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo('待改善')
+      .setBackground('#FFF3CD')
+      .setRanges([statusRange])
+      .build();
+    const attentionRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo('需要關注')
+      .setBackground('#F8D7DA')
+      .setRanges([statusRange])
+      .build();
+    
+    sheet.setConditionalFormatRules([normalRule, improvementRule, attentionRule]);
+    
+    // 調整欄寬
+    sheet.autoResizeColumns(1, headers.length);
+    
+    // 移動到主資料夾
+    const mainFolder = getSystemMainFolder();
+    const reportFolder = mainFolder.getFoldersByName('進度報告').next();
+    const reportFile = DriveApp.getFileById(reportSheet.getId());
+    reportFolder.addFile(reportFile);
+    DriveApp.getRootFolder().removeFile(reportFile);
+    
+    SpreadsheetApp.getUi().alert(
+      '報告生成完成',
+      `詳細進度報告已生成：\n${reportSheet.getUrl()}`,
+      SpreadsheetApp.getUi().ButtonSet.OK
+    );
+    
+  } catch (error) {
+    Logger.log('生成詳細報告失敗：' + error.toString());
+    SpreadsheetApp.getUi().alert('錯誤', '生成詳細報告失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
 function sendProgressAlert(alertTeachers) {
   // 這裡可以整合 Gmail API 或其他通知方式
   let alertMessage = '電聯記錄提醒通知：\n\n';

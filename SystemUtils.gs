@@ -444,4 +444,664 @@ function getAdminConsole(mainFolder) {
     return SpreadsheetApp.openById(files.next().getId());
   }
   throw new Error('找不到管理控制台');
+}
+
+/**
+ * 系統健康檢查功能
+ */
+function checkFileIntegrity() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const healthReport = performSystemHealthCheck();
+    
+    displayHealthCheckResults(healthReport);
+    
+  } catch (error) {
+    Logger.log('系統健康檢查失敗：' + error.toString());
+    SpreadsheetApp.getUi().alert('錯誤', '系統健康檢查失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+/**
+ * 執行系統健康檢查
+ */
+function performSystemHealthCheck() {
+  const healthReport = {
+    systemStatus: '檢查中...',
+    mainFolder: { status: false, message: '' },
+    subFolders: { status: false, message: '', details: [] },
+    teacherBooks: { status: false, message: '', count: 0, issues: [] },
+    templates: { status: false, message: '' },
+    adminConsole: { status: false, message: '' },
+    overallHealth: 0,
+    recommendations: []
+  };
+  
+  try {
+    // 1. 檢查主資料夾
+    Logger.log('檢查主資料夾...');
+    const mainFolder = getSystemMainFolder();
+    healthReport.mainFolder.status = true;
+    healthReport.mainFolder.message = `主資料夾正常：${mainFolder.getName()}`;
+    
+    // 2. 檢查子資料夾結構
+    Logger.log('檢查子資料夾結構...');
+    const requiredFolders = [
+      SYSTEM_CONFIG.TEACHERS_FOLDER_NAME,
+      SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME,
+      '系統備份',
+      '進度報告'
+    ];
+    
+    const missingFolders = [];
+    const existingFolders = [];
+    
+    requiredFolders.forEach(folderName => {
+      const folders = mainFolder.getFoldersByName(folderName);
+      if (folders.hasNext()) {
+        existingFolders.push(folderName);
+      } else {
+        missingFolders.push(folderName);
+      }
+    });
+    
+    healthReport.subFolders.status = missingFolders.length === 0;
+    healthReport.subFolders.message = `子資料夾檢查：${existingFolders.length}/${requiredFolders.length} 個存在`;
+    healthReport.subFolders.details = {
+      existing: existingFolders,
+      missing: missingFolders
+    };
+    
+    if (missingFolders.length > 0) {
+      healthReport.recommendations.push(`缺少子資料夾：${missingFolders.join(', ')}`);
+    }
+    
+    // 3. 檢查老師記錄簿
+    Logger.log('檢查老師記錄簿...');
+    const teacherBooks = getAllTeacherBooks();
+    const bookIssues = [];
+    
+    teacherBooks.forEach(book => {
+      const issues = validateTeacherBook(book);
+      if (issues.length > 0) {
+        bookIssues.push({
+          name: book.getName(),
+          issues: issues
+        });
+      }
+    });
+    
+    healthReport.teacherBooks.status = bookIssues.length === 0;
+    healthReport.teacherBooks.count = teacherBooks.length;
+    healthReport.teacherBooks.message = `找到 ${teacherBooks.length} 個老師記錄簿`;
+    healthReport.teacherBooks.issues = bookIssues;
+    
+    if (bookIssues.length > 0) {
+      healthReport.recommendations.push(`${bookIssues.length} 個記錄簿存在結構問題`);
+    }
+    
+    // 4. 檢查範本檔案
+    Logger.log('檢查範本檔案...');
+    try {
+      const templatesFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME).next();
+      const templateFiles = templatesFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+      let templateCount = 0;
+      while (templateFiles.hasNext()) {
+        templateFiles.next();
+        templateCount++;
+      }
+      healthReport.templates.status = templateCount > 0;
+      healthReport.templates.message = `找到 ${templateCount} 個範本檔案`;
+      
+      if (templateCount === 0) {
+        healthReport.recommendations.push('缺少範本檔案，建議重新初始化系統');
+      }
+    } catch (error) {
+      healthReport.templates.status = false;
+      healthReport.templates.message = '範本資料夾檢查失敗';
+      healthReport.recommendations.push('範本資料夾不存在或無法存取');
+    }
+    
+    // 5. 檢查管理控制台
+    Logger.log('檢查管理控制台...');
+    try {
+      const adminConsole = getAdminConsole(mainFolder);
+      healthReport.adminConsole.status = true;
+      healthReport.adminConsole.message = '管理控制台正常';
+    } catch (error) {
+      healthReport.adminConsole.status = false;
+      healthReport.adminConsole.message = '管理控制台不存在';
+      healthReport.recommendations.push('管理控制台缺失，建議重新初始化系統');
+    }
+    
+    // 計算整體健康度
+    const checks = [
+      healthReport.mainFolder.status,
+      healthReport.subFolders.status,
+      healthReport.teacherBooks.status,
+      healthReport.templates.status,
+      healthReport.adminConsole.status
+    ];
+    const passedChecks = checks.filter(check => check).length;
+    healthReport.overallHealth = Math.round((passedChecks / checks.length) * 100);
+    
+    // 設定整體狀態
+    if (healthReport.overallHealth >= 90) {
+      healthReport.systemStatus = '良好';
+    } else if (healthReport.overallHealth >= 70) {
+      healthReport.systemStatus = '正常';
+    } else if (healthReport.overallHealth >= 50) {
+      healthReport.systemStatus = '需要注意';
+    } else {
+      healthReport.systemStatus = '需要修復';
+    }
+    
+  } catch (error) {
+    Logger.log('系統健康檢查執行失敗：' + error.toString());
+    healthReport.systemStatus = '檢查失敗';
+    healthReport.recommendations.push('系統健康檢查執行失敗，請檢查系統設定');
+  }
+  
+  return healthReport;
+}
+
+/**
+ * 驗證老師記錄簿結構
+ */
+function validateTeacherBook(recordBook) {
+  const issues = [];
+  const requiredSheets = Object.values(SYSTEM_CONFIG.SHEET_NAMES);
+  
+  try {
+    const sheets = recordBook.getSheets();
+    const sheetNames = sheets.map(sheet => sheet.getName());
+    
+    // 檢查必要工作表
+    requiredSheets.forEach(requiredSheet => {
+      if (!sheetNames.includes(requiredSheet)) {
+        issues.push(`缺少工作表：${requiredSheet}`);
+      }
+    });
+    
+    // 檢查總覽工作表的基本資訊
+    if (sheetNames.includes(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY)) {
+      const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+      const teacherName = summarySheet.getRange('B3').getValue();
+      if (!teacherName || teacherName.toString().trim() === '') {
+        issues.push('總覽工作表缺少老師姓名');
+      }
+    }
+    
+    // 檢查電聯記錄工作表的格式
+    if (sheetNames.includes(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG)) {
+      const contactSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+      const headers = contactSheet.getRange(1, 1, 1, SYSTEM_CONFIG.CONTACT_FIELDS.length).getValues()[0];
+      
+      SYSTEM_CONFIG.CONTACT_FIELDS.forEach((field, index) => {
+        if (headers[index] !== field) {
+          issues.push(`電聯記錄工作表標題格式不正確`);
+          return; // 只報告一次格式錯誤
+        }
+      });
+    }
+    
+  } catch (error) {
+    issues.push(`記錄簿結構檢查失敗：${error.message}`);
+  }
+  
+  return issues;
+}
+
+/**
+ * 顯示健康檢查結果
+ */
+function displayHealthCheckResults(healthReport) {
+  const ui = SpreadsheetApp.getUi();
+  
+  let message = `🔍 系統健康檢查報告\n\n`;
+  message += `📊 整體健康度：${healthReport.overallHealth}% (${healthReport.systemStatus})\n\n`;
+  
+  // 詳細檢查結果
+  message += `📋 檢查項目：\n`;
+  message += `• 主資料夾：${healthReport.mainFolder.status ? '✅' : '❌'} ${healthReport.mainFolder.message}\n`;
+  message += `• 子資料夾：${healthReport.subFolders.status ? '✅' : '❌'} ${healthReport.subFolders.message}\n`;
+  message += `• 老師記錄簿：${healthReport.teacherBooks.status ? '✅' : '❌'} ${healthReport.teacherBooks.message}\n`;
+  message += `• 範本檔案：${healthReport.templates.status ? '✅' : '❌'} ${healthReport.templates.message}\n`;
+  message += `• 管理控制台：${healthReport.adminConsole.status ? '✅' : '❌'} ${healthReport.adminConsole.message}\n\n`;
+  
+  // 問題和建議
+  if (healthReport.recommendations.length > 0) {
+    message += `🔧 建議改善項目：\n`;
+    healthReport.recommendations.forEach(rec => {
+      message += `• ${rec}\n`;
+    });
+    message += `\n`;
+  }
+  
+  // 記錄簿問題詳情
+  if (healthReport.teacherBooks.issues.length > 0) {
+    message += `⚠️ 記錄簿問題詳情：\n`;
+    healthReport.teacherBooks.issues.forEach(issue => {
+      message += `• ${issue.name}：${issue.issues.join(', ')}\n`;
+    });
+  }
+  
+  // 根據健康度決定按鈕選項
+  let buttonSet;
+  if (healthReport.overallHealth < 70) {
+    message += `\n是否要執行系統修復？`;
+    buttonSet = ui.ButtonSet.YES_NO;
+  } else {
+    buttonSet = ui.ButtonSet.OK;
+  }
+  
+  const response = ui.alert('系統健康檢查', message, buttonSet);
+  
+  if (response === ui.Button.YES && healthReport.overallHealth < 70) {
+    // 執行自動修復
+    performSystemRepair(healthReport);
+  }
+}
+
+/**
+ * 執行系統自動修復
+ */
+function performSystemRepair(healthReport) {
+  const ui = SpreadsheetApp.getUi();
+  
+  try {
+    let repairActions = [];
+    
+    // 修復缺少的子資料夾
+    if (!healthReport.subFolders.status && healthReport.subFolders.details.missing.length > 0) {
+      const mainFolder = getSystemMainFolder();
+      healthReport.subFolders.details.missing.forEach(folderName => {
+        mainFolder.createFolder(folderName);
+        repairActions.push(`創建資料夾：${folderName}`);
+      });
+    }
+    
+    // 修復缺少的管理控制台
+    if (!healthReport.adminConsole.status) {
+      const mainFolder = getSystemMainFolder();
+      const adminSheet = createAdminConsole(mainFolder);
+      repairActions.push('重新創建管理控制台');
+    }
+    
+    // 修復缺少的範本檔案
+    if (!healthReport.templates.status) {
+      const mainFolder = getSystemMainFolder();
+      const templateSheet = createTemplateFiles(mainFolder);
+      repairActions.push('重新創建範本檔案');
+    }
+    
+    if (repairActions.length > 0) {
+      ui.alert(
+        '修復完成',
+        `已執行以下修復動作：\n${repairActions.join('\n')}\n\n建議重新執行健康檢查以確認修復結果。`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('提醒', '沒有可自動修復的項目', ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    Logger.log('系統修復失敗：' + error.toString());
+    ui.alert('錯誤', '系統修復失敗：' + error.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * 統一的錯誤處理和日誌系統
+ */
+
+// 錯誤級別常數
+const ERROR_LEVELS = {
+  INFO: 'INFO',
+  WARNING: 'WARNING',
+  ERROR: 'ERROR',
+  CRITICAL: 'CRITICAL'
+};
+
+// 日誌設定
+const LOG_CONFIG = {
+  MAX_LOG_ENTRIES: 1000,  // 最大日誌條目數
+  LOG_RETENTION_DAYS: 30, // 日誌保留天數
+  ENABLE_EMAIL_ALERTS: false, // 是否啟用郵件警報
+  ADMIN_EMAIL: '', // 管理員郵件地址
+  LOG_SHEET_NAME: '系統日誌'
+};
+
+/**
+ * 統一日誌記錄函數
+ * @param {string} level - 錯誤級別 (INFO, WARNING, ERROR, CRITICAL)
+ * @param {string} module - 模組名稱
+ * @param {string} function_name - 函數名稱
+ * @param {string} message - 日誌訊息
+ * @param {Error} error - 錯誤物件 (可選)
+ * @param {Object} context - 額外上下文資訊 (可選)
+ */
+function systemLog(level, module, function_name, message, error = null, context = null) {
+  try {
+    const timestamp = new Date().toISOString();
+    const errorDetails = error ? {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    } : null;
+    
+    const logEntry = {
+      timestamp: timestamp,
+      level: level,
+      module: module,
+      function: function_name,
+      message: message,
+      error: errorDetails,
+      context: context,
+      session_id: getSessionId()
+    };
+    
+    // 記錄到 Google Apps Script 日誌
+    const logMessage = `[${level}] ${module}.${function_name}: ${message}`;
+    Logger.log(logMessage);
+    
+    // 記錄到系統日誌表（如果存在）
+    writeToSystemLogSheet(logEntry);
+    
+    // 檢查是否需要發送警報
+    if ((level === ERROR_LEVELS.ERROR || level === ERROR_LEVELS.CRITICAL) && LOG_CONFIG.ENABLE_EMAIL_ALERTS) {
+      sendErrorAlert(logEntry);
+    }
+    
+  } catch (loggingError) {
+    // 日誌系統本身出錯時，只記錄到基本日誌
+    Logger.log(`日誌系統錯誤：${loggingError.toString()}`);
+    Logger.log(`原始日誌：[${level}] ${module}.${function_name}: ${message}`);
+  }
+}
+
+/**
+ * 獲取會話 ID
+ */
+function getSessionId() {
+  try {
+    const session = Session.getActiveUser().getEmail() + '_' + new Date().getTime().toString().slice(-6);
+    return session;
+  } catch (error) {
+    return 'unknown_session_' + new Date().getTime().toString().slice(-6);
+  }
+}
+
+/**
+ * 寫入系統日誌表
+ */
+function writeToSystemLogSheet(logEntry) {
+  try {
+    const mainFolder = getSystemMainFolder();
+    let logSheet = getOrCreateLogSheet(mainFolder);
+    
+    if (!logSheet) return; // 如果無法建立日誌表，不影響主要功能
+    
+    // 準備日誌資料
+    const logData = [
+      logEntry.timestamp,
+      logEntry.level,
+      logEntry.module,
+      logEntry.function,
+      logEntry.message,
+      logEntry.error ? JSON.stringify(logEntry.error) : '',
+      logEntry.context ? JSON.stringify(logEntry.context) : '',
+      logEntry.session_id
+    ];
+    
+    // 寫入日誌
+    const lastRow = logSheet.getLastRow();
+    logSheet.getRange(lastRow + 1, 1, 1, logData.length).setValues([logData]);
+    
+    // 清理舊日誌
+    cleanupOldLogs(logSheet);
+    
+  } catch (error) {
+    Logger.log('寫入系統日誌表失敗：' + error.toString());
+  }
+}
+
+/**
+ * 獲取或建立日誌表
+ */
+function getOrCreateLogSheet(mainFolder) {
+  try {
+    // 查找現有的日誌檔案
+    const logFiles = mainFolder.getFilesByName('系統運行日誌');
+    let logSpreadsheet;
+    
+    if (logFiles.hasNext()) {
+      logSpreadsheet = SpreadsheetApp.openById(logFiles.next().getId());
+    } else {
+      // 建立新的日誌檔案
+      logSpreadsheet = SpreadsheetApp.create('系統運行日誌');
+      const logFile = DriveApp.getFileById(logSpreadsheet.getId());
+      mainFolder.addFile(logFile);
+      DriveApp.getRootFolder().removeFile(logFile);
+    }
+    
+    // 獲取或建立日誌工作表
+    let logSheet;
+    try {
+      logSheet = logSpreadsheet.getSheetByName(LOG_CONFIG.LOG_SHEET_NAME);
+    } catch (error) {
+      logSheet = logSpreadsheet.insertSheet(LOG_CONFIG.LOG_SHEET_NAME);
+      setupLogSheetHeaders(logSheet);
+    }
+    
+    // 檢查標題列
+    if (logSheet.getLastRow() === 0) {
+      setupLogSheetHeaders(logSheet);
+    }
+    
+    return logSheet;
+    
+  } catch (error) {
+    Logger.log('建立日誌表失敗：' + error.toString());
+    return null;
+  }
+}
+
+/**
+ * 設定日誌表標題
+ */
+function setupLogSheetHeaders(logSheet) {
+  const headers = [
+    '時間戳記', '等級', '模組', '函數', '訊息', '錯誤詳情', '上下文', '會話ID'
+  ];
+  
+  logSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  logSheet.getRange(1, 1, 1, headers.length)
+    .setFontWeight('bold')
+    .setBackground('#4285F4')
+    .setFontColor('white');
+  
+  // 設定欄寬
+  logSheet.setColumnWidth(1, 150); // 時間戳記
+  logSheet.setColumnWidth(2, 80);  // 等級
+  logSheet.setColumnWidth(3, 100); // 模組
+  logSheet.setColumnWidth(4, 120); // 函數
+  logSheet.setColumnWidth(5, 300); // 訊息
+  logSheet.setColumnWidth(6, 200); // 錯誤詳情
+  logSheet.setColumnWidth(7, 150); // 上下文
+  logSheet.setColumnWidth(8, 120); // 會話ID
+  
+  // 凍結標題列
+  logSheet.setFrozenRows(1);
+}
+
+/**
+ * 清理舊日誌
+ */
+function cleanupOldLogs(logSheet) {
+  try {
+    const lastRow = logSheet.getLastRow();
+    
+    // 如果日誌條目超過最大限制，刪除最舊的記錄
+    if (lastRow > LOG_CONFIG.MAX_LOG_ENTRIES + 1) { // +1 因為有標題列
+      const rowsToDelete = lastRow - LOG_CONFIG.MAX_LOG_ENTRIES;
+      logSheet.deleteRows(2, rowsToDelete); // 從第2列開始刪除（保留標題）
+    }
+    
+    // 根據日期清理舊日誌
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - LOG_CONFIG.LOG_RETENTION_DAYS);
+    
+    const timestamps = logSheet.getRange(2, 1, logSheet.getLastRow() - 1, 1).getValues();
+    let deleteCount = 0;
+    
+    for (let i = 0; i < timestamps.length; i++) {
+      const logDate = new Date(timestamps[i][0]);
+      if (logDate < cutoffDate) {
+        deleteCount++;
+      } else {
+        break; // 假設日誌是按時間順序排列的
+      }
+    }
+    
+    if (deleteCount > 0) {
+      logSheet.deleteRows(2, deleteCount);
+    }
+    
+  } catch (error) {
+    Logger.log('清理舊日誌失敗：' + error.toString());
+  }
+}
+
+/**
+ * 發送錯誤警報郵件
+ */
+function sendErrorAlert(logEntry) {
+  try {
+    if (!LOG_CONFIG.ADMIN_EMAIL) return;
+    
+    const subject = `系統錯誤警報 - ${logEntry.level}`;
+    const body = `
+系統錯誤警報
+
+時間：${logEntry.timestamp}
+等級：${logEntry.level}
+模組：${logEntry.module}
+函數：${logEntry.function}
+訊息：${logEntry.message}
+
+${logEntry.error ? '錯誤詳情：\n' + JSON.stringify(logEntry.error, null, 2) : ''}
+
+${logEntry.context ? '上下文資訊：\n' + JSON.stringify(logEntry.context, null, 2) : ''}
+
+會話ID：${logEntry.session_id}
+
+請及時檢查系統狀態。
+    `;
+    
+    GmailApp.sendEmail(LOG_CONFIG.ADMIN_EMAIL, subject, body);
+    
+  } catch (error) {
+    Logger.log('發送錯誤警報失敗：' + error.toString());
+  }
+}
+
+/**
+ * 包裝函數執行，自動處理錯誤和日誌
+ * @param {string} module - 模組名稱
+ * @param {string} functionName - 函數名稱
+ * @param {Function} func - 要執行的函數
+ * @param {Array} args - 函數參數
+ * @param {Object} context - 額外上下文
+ * @returns {any} 函數執行結果
+ */
+function executeWithLogging(module, functionName, func, args = [], context = null) {
+  const startTime = new Date();
+  
+  try {
+    systemLog(ERROR_LEVELS.INFO, module, functionName, '函數開始執行', null, {
+      ...context,
+      args: args.length > 0 ? 'provided' : 'none'
+    });
+    
+    const result = func.apply(null, args);
+    
+    const executionTime = new Date() - startTime;
+    systemLog(ERROR_LEVELS.INFO, module, functionName, '函數執行完成', null, {
+      ...context,
+      executionTime: executionTime + 'ms'
+    });
+    
+    return result;
+    
+  } catch (error) {
+    const executionTime = new Date() - startTime;
+    systemLog(ERROR_LEVELS.ERROR, module, functionName, '函數執行失敗', error, {
+      ...context,
+      executionTime: executionTime + 'ms'
+    });
+    
+    // 重新拋出錯誤，讓上層處理
+    throw error;
+  }
+}
+
+/**
+ * 顯示系統日誌
+ */
+function showSystemLogs() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const mainFolder = getSystemMainFolder();
+    const logSheet = getOrCreateLogSheet(mainFolder);
+    
+    if (!logSheet) {
+      ui.alert('提醒', '系統日誌表不存在或無法建立', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const logSpreadsheet = logSheet.getParent();
+    ui.alert(
+      '系統日誌',
+      `系統日誌已準備就緒\n\n日誌檔案：${logSpreadsheet.getUrl()}\n\n點擊連結查看詳細的系統運行記錄。`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    systemLog(ERROR_LEVELS.ERROR, 'SystemUtils', 'showSystemLogs', '顯示系統日誌失敗', error);
+    SpreadsheetApp.getUi().alert('錯誤', '顯示系統日誌失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+/**
+ * 清除系統日誌
+ */
+function clearSystemLogs() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '確認清除日誌',
+      '確定要清除所有系統日誌嗎？此操作無法復原。',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) return;
+    
+    const mainFolder = getSystemMainFolder();
+    const logSheet = getOrCreateLogSheet(mainFolder);
+    
+    if (logSheet) {
+      const lastRow = logSheet.getLastRow();
+      if (lastRow > 1) {
+        logSheet.deleteRows(2, lastRow - 1);
+      }
+      
+      systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'clearSystemLogs', '系統日誌已清除');
+      ui.alert('完成', '系統日誌已清除', ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    systemLog(ERROR_LEVELS.ERROR, 'SystemUtils', 'clearSystemLogs', '清除系統日誌失敗', error);
+    SpreadsheetApp.getUi().alert('錯誤', '清除系統日誌失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
 } 
