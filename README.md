@@ -75,8 +75,33 @@ comm/
 ### For Development:
 1. Clone this repository
 2. Read CLAUDE.md for development rules
-3. Open in Google Apps Script editor
-4. Follow the compliance checklist before any changes
+3. Install clasp: `npm install -g @google/clasp`
+4. Authenticate: `clasp login`
+5. Push to Google Apps Script: `clasp push`
+6. Follow the compliance checklist before any changes
+
+### 📡 Clasp Deployment Commands
+
+```bash
+# Push local changes to Google Apps Script
+clasp push
+
+# Force push (overwrites remote changes)
+clasp push --force
+
+# Pull changes from Google Apps Script to local
+clasp pull
+
+# Open the project in Google Apps Script editor
+clasp open
+
+# View project info
+clasp status
+```
+
+**Important**: The project is connected to:
+- **Script ID**: `1Ze7TmI5L-BEWlSIDM__YqCCF4Qs06ufPjGkfpeAlFnrcaDW_26woSQEl`
+- **Drive Folder**: `1ksWywUMUfsmHtUq99HdRB34obcAXhKUX`
 
 ### For Users:
 See `系統使用手冊.md` for complete user documentation in Chinese.

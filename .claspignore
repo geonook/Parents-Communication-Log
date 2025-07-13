@@ -1,0 +1,36 @@
+# Ignore all files that are not .gs, .html, or appsscript.json
+**/**
+!**/*.gs
+!**/*.html
+!appsscript.json
+
+# Ignore git and development files
+.git/**
+.gitignore
+README.md
+CLAUDE.md
+系統使用手冊.md
+
+# Ignore clasp configuration
+.clasp.json
+.clasprc.json
+
+# Ignore node modules and dependencies
+node_modules/**
+package*.json
+yarn.lock
+
+# Ignore IDE files
+.vscode/**
+.idea/**
+*.swp
+*.swo
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore logs and temporary files
+*.log
+tmp/**
+temp/**
