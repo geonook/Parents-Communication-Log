@@ -221,38 +221,6 @@ function getTeacherDetailProgress(recordBook) {
   ]);
 }
 
-/**
- * 顯示進度摘要
- */
-function displayProgressSummary(progressResults) {
-  let summary = '電聯記錄進度檢查結果：\n\n';
-  
-  const normalCount = progressResults.filter(p => p.status === '正常').length;
-  const needImprovementCount = progressResults.filter(p => p.status === '待改善').length;
-  const needAttentionCount = progressResults.filter(p => p.status === '需要關注').length;
-  
-  summary += `📊 總體統計：\n`;
-  summary += `正常：${normalCount} 位老師\n`;
-  summary += `待改善：${needImprovementCount} 位老師\n`;
-  summary += `需要關注：${needAttentionCount} 位老師\n\n`;
-  
-  if (needAttentionCount > 0) {
-    summary += `⚠️ 需要關注的老師：\n`;
-    progressResults.filter(p => p.status === '需要關注').forEach(p => {
-      summary += `• ${p.teacherName}：${p.alertMessage}\n`;
-    });
-    summary += '\n';
-  }
-  
-  if (needImprovementCount > 0) {
-    summary += `📝 待改善的老師：\n`;
-    progressResults.filter(p => p.status === '待改善').forEach(p => {
-      summary += `• ${p.teacherName}：${p.alertMessage}\n`;
-    });
-  }
-  
-  SpreadsheetApp.getUi().alert('進度檢查結果', summary, SpreadsheetApp.getUi().ButtonSet.OK);
-}
 
 /**
  * 建立進度報告工作表
