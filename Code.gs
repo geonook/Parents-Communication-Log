@@ -47,9 +47,9 @@ const SYSTEM_CONFIG = {
 
   // 電聯類型設定
   CONTACT_TYPES: {
-    SEMESTER: '學期電聯',    // 納入進度檢查
-    REGULAR: '平時電聯',     // 不納入檢查  
-    SPECIAL: '特殊狀況電聯'   // 不納入檢查
+    SEMESTER: 'Academic Contact',    // 納入進度檢查
+    REGULAR: 'Regular Contact',      // 不納入檢查  
+    SPECIAL: 'Special Contact'       // 不納入檢查
   },
 
   // 聯繫方式選項（移除home visit和in person）
@@ -104,10 +104,6 @@ function onOpen() {
       .addSeparator()
       .addItem('📝 顯示系統日誌', 'showSystemLogs')
       .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🧪 測試工具')
-      .addItem('🚀 建立測試環境', 'setupTestEnvironment')
-      .addItem('🗑️ 清理測試環境', 'cleanupTestEnvironment'))
     .addSeparator()
     .addItem('📖 使用說明', 'showUserGuide')
     .addToUi();

@@ -3,12 +3,6 @@
  * 提供視覺化管理介面的後端支援
  */
 
-/**
- * 測試環境常數（從TestUtils.gs引用）
- */
-const TEST_CONFIG_DASHBOARD = {
-  TEST_FOLDER_NAME: 'Parents_Communication_Log_測試環境'
-};
 
 /**
  * 處理 GET 請求，返回 Dashboard HTML 頁面
@@ -36,18 +30,10 @@ function doPost(e) {
         return initializeSystemWeb();
       case 'getStats':
         return getSystemStatsWeb();
-      case 'setupTestEnvironment':
-        return setupTestEnvironmentWeb();
-      case 'cleanupTestEnvironment':
-        return cleanupTestEnvironmentWeb();
-      case 'getTestStatus':
-        return getTestEnvironmentStatusWeb();
       case 'getSystemStatus':
         return getSystemStatusWeb();
       case 'setupCompleteSystem':
         return setupCompleteSystemWeb();
-      case 'debugTestBooks':
-        return debugTestEnvironmentBooks();
       default:
         return { success: false, message: '未知的操作' };
     }
@@ -339,112 +325,20 @@ function calculateSystemStats() {
 }
 
 /**
- * 獲取所有老師的記錄簿（包括生產環境和測試環境）
+ * Dashboard專用：獲取所有老師記錄簿（僅生產環境）
  */
-function getAllTeacherBooksIncludingTest() {
-  const teacherBooks = [];
-  
+function getAllTeacherBooksForDashboard() {
   try {
     Logger.log('Dashboard: 搜尋生產環境老師記錄簿');
-    
-    // 首先嘗試獲取生產環境的老師記錄簿
-    const productionBooks = getAllTeacherBooks();
-    teacherBooks.push(...productionBooks);
-    
-    Logger.log(`Dashboard: 找到 ${productionBooks.length} 本生產環境記錄簿`);
-    
+    const teacherBooks = getAllTeacherBooks();
+    Logger.log(`Dashboard: 找到 ${teacherBooks.length} 本生產環境記錄簿`);
+    return teacherBooks;
   } catch (error) {
     Logger.log('Dashboard: 搜尋生產環境記錄簿失敗 - ' + error.toString());
+    return [];
   }
-  
-  try {
-    Logger.log('Dashboard: 搜尋測試環境老師記錄簿');
-    
-    // 然後嘗試獲取測試環境的老師記錄簿
-    const testBooks = getTestTeacherBooks();
-    teacherBooks.push(...testBooks);
-    
-    Logger.log(`Dashboard: 找到 ${testBooks.length} 本測試環境記錄簿`);
-    
-  } catch (error) {
-    Logger.log('Dashboard: 搜尋測試環境記錄簿失敗 - ' + error.toString());
-  }
-  
-  Logger.log(`Dashboard: 總共找到 ${teacherBooks.length} 本老師記錄簿`);
-  return teacherBooks;
 }
 
-/**
- * 獲取測試環境的老師記錄簿
- */
-function getTestTeacherBooks() {
-  const testBooks = [];
-  
-  try {
-    // 搜尋主資料夾內的測試環境
-    const mainFolder = getSystemMainFolder();
-    const testFolders = mainFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-    
-    if (testFolders.hasNext()) {
-      const testFolder = testFolders.next();
-      Logger.log('Dashboard: 在主資料夾內找到測試環境');
-      
-      const teachersFolder = testFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
-      if (teachersFolder.hasNext()) {
-        const testTeachersFolder = teachersFolder.next();
-        const teacherFolders = testTeachersFolder.getFolders();
-        
-        while (teacherFolders.hasNext()) {
-          const folder = teacherFolders.next();
-          const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
-          
-          while (files.hasNext()) {
-            const file = files.next();
-            if (file.getName().includes('電聯記錄簿') || file.getName().includes('測試')) {
-              testBooks.push(SpreadsheetApp.openById(file.getId()));
-            }
-          }
-        }
-      }
-    }
-    
-  } catch (mainFolderError) {
-    Logger.log('Dashboard: 無法在主資料夾搜尋測試環境 - ' + mainFolderError.toString());
-    
-    // 回退到根目錄搜尋（向後相容）
-    try {
-      const rootFolder = DriveApp.getRootFolder();
-      const testFolders = rootFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      if (testFolders.hasNext()) {
-        const testFolder = testFolders.next();
-        Logger.log('Dashboard: 在根目錄找到測試環境');
-        
-        const teachersFolder = testFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
-        if (teachersFolder.hasNext()) {
-          const testTeachersFolder = teachersFolder.next();
-          const teacherFolders = testTeachersFolder.getFolders();
-          
-          while (teacherFolders.hasNext()) {
-            const folder = teacherFolders.next();
-            const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
-            
-            while (files.hasNext()) {
-              const file = files.next();
-              if (file.getName().includes('電聯記錄簿') || file.getName().includes('測試')) {
-                testBooks.push(SpreadsheetApp.openById(file.getId()));
-              }
-            }
-          }
-        }
-      }
-    } catch (rootError) {
-      Logger.log('Dashboard: 根目錄搜尋也失敗 - ' + rootError.toString());
-    }
-  }
-  
-  return testBooks;
-}
 
 /**
  * Web 版本的檢查全體進度
@@ -453,12 +347,12 @@ function checkAllProgressWeb() {
   try {
     Logger.log('Dashboard: 開始檢查全體進度');
     
-    // 獲取所有老師的記錄簿（包括生產環境和測試環境）
-    const teacherBooks = getAllTeacherBooksIncludingTest();
+    // 獲取所有老師的記錄簿
+    const teacherBooks = getAllTeacherBooksForDashboard();
     if (teacherBooks.length === 0) {
       return {
         success: false,
-        message: '系統中沒有找到任何老師記錄簿。請先建立老師記錄簿或建立測試環境。'
+        message: '系統中沒有找到任何老師記錄簿。請先建立老師記錄簿。'
       };
     }
     
@@ -592,8 +486,8 @@ function generateProgressReportWeb() {
   try {
     Logger.log('Dashboard: 開始生成進度報告');
     
-    // 獲取所有老師的記錄簿（包括生產環境和測試環境）
-    const teacherBooks = getAllTeacherBooksIncludingTest();
+    // 獲取所有老師的記錄簿
+    const teacherBooks = getAllTeacherBooksForDashboard();
     if (teacherBooks.length === 0) {
       return {
         success: false,
@@ -744,258 +638,9 @@ function getSystemFolderUrl() {
   }
 }
 
-/**
- * Web 版本的建立測試環境
- */
-function setupTestEnvironmentWeb() {
-  try {
-    Logger.log('Dashboard: 開始建立測試環境');
-    
-    // 呼叫 TestUtils 中的測試環境建立函數
-    const testResults = executeTestSetup();
-    
-    if (testResults.success) {
-      Logger.log('Dashboard: 測試環境建立成功');
-      return {
-        success: true,
-        message: '測試環境建立成功！',
-        testResults: testResults,
-        testFolderUrl: testResults.testFolder ? testResults.testFolder.getUrl() : null,
-        healthReport: testResults.healthReport,
-        steps: testResults.steps
-      };
-    } else {
-      Logger.log('Dashboard: 測試環境建立失敗 - ' + testResults.errors.join(', '));
-      return {
-        success: false,
-        message: '測試環境建立失敗：' + testResults.errors.join(', ')
-      };
-    }
-    
-  } catch (error) {
-    Logger.log('Dashboard: 測試環境建立異常 - ' + error.toString());
-    return {
-      success: false,
-      message: '測試環境建立失敗：' + error.message
-    };
-  }
-}
 
-/**
- * Web 版本的清理測試環境
- */
-function cleanupTestEnvironmentWeb() {
-  try {
-    Logger.log('Dashboard: 開始清理測試環境');
-    
-    let deletedCount = 0;
-    
-    try {
-      // 優先在主資料夾內搜尋測試資料夾
-      const mainFolder = getSystemMainFolder();
-      const testFolders = mainFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      while (testFolders.hasNext()) {
-        const folder = testFolders.next();
-        folder.setTrashed(true);
-        deletedCount++;
-      }
-      
-      Logger.log(`Dashboard: 已在主資料夾內清理 ${deletedCount} 個測試環境`);
-      
-    } catch (error) {
-      // 如果主資料夾搜尋失敗，回退到根目錄搜尋（向後相容）
-      Logger.log('Dashboard: 無法在主資料夾搜尋測試環境，回退到根目錄 - ' + error.toString());
-      
-      const rootFolder = DriveApp.getRootFolder();
-      const testFolders = rootFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      while (testFolders.hasNext()) {
-        const folder = testFolders.next();
-        folder.setTrashed(true);
-        deletedCount++;
-      }
-      
-      Logger.log(`Dashboard: 已在根目錄清理 ${deletedCount} 個測試環境`);
-    }
-    
-    if (deletedCount > 0) {
-      return {
-        success: true,
-        message: `成功清理 ${deletedCount} 個測試環境`
-      };
-    } else {
-      return {
-        success: true,
-        message: '沒有找到需要清理的測試環境'
-      };
-    }
-    
-  } catch (error) {
-    Logger.log('Dashboard: 清理測試環境失敗 - ' + error.toString());
-    return {
-      success: false,
-      message: '清理測試環境失敗：' + error.message
-    };
-  }
-}
 
-/**
- * 調試：檢查測試環境記錄簿詳情
- */
-function debugTestEnvironmentBooks() {
-  try {
-    Logger.log('=== 調試：檢查測試環境記錄簿 ===');
-    
-    const result = {
-      found: false,
-      details: [],
-      errors: []
-    };
-    
-    // 檢查主資料夾內的測試環境
-    try {
-      const mainFolder = getSystemMainFolder();
-      const testFolders = mainFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      if (testFolders.hasNext()) {
-        const testFolder = testFolders.next();
-        result.details.push(`✅ 找到測試資料夾：${testFolder.getName()}`);
-        
-        const teachersFolder = testFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
-        if (teachersFolder.hasNext()) {
-          const testTeachersFolder = teachersFolder.next();
-          result.details.push(`✅ 找到老師資料夾：${testTeachersFolder.getName()}`);
-          
-          const teacherFolders = testTeachersFolder.getFolders();
-          let folderCount = 0;
-          let bookCount = 0;
-          
-          while (teacherFolders.hasNext()) {
-            const folder = teacherFolders.next();
-            folderCount++;
-            result.details.push(`📁 老師資料夾 ${folderCount}：${folder.getName()}`);
-            
-            const files = folder.getFilesByType(MimeType.GOOGLE_SHEETS);
-            let fileCountInFolder = 0;
-            
-            while (files.hasNext()) {
-              const file = files.next();
-              fileCountInFolder++;
-              bookCount++;
-              result.details.push(`  📄 檔案 ${fileCountInFolder}：${file.getName()}`);
-              
-              if (file.getName().includes('電聯記錄簿') || file.getName().includes('測試')) {
-                result.details.push(`    ✅ 符合記錄簿條件`);
-                result.found = true;
-              } else {
-                result.details.push(`    ❌ 不符合記錄簿條件`);
-              }
-            }
-          }
-          
-          result.details.push(`📊 總計：${folderCount} 個老師資料夾，${bookCount} 個檔案`);
-        } else {
-          result.details.push(`❌ 測試資料夾內沒有找到老師資料夾`);
-        }
-      } else {
-        result.details.push(`❌ 主資料夾內沒有找到測試環境資料夾`);
-      }
-    } catch (error) {
-      result.errors.push('搜尋主資料夾失敗：' + error.toString());
-    }
-    
-    Logger.log('調試結果：' + JSON.stringify(result, null, 2));
-    return result;
-    
-  } catch (error) {
-    Logger.log('調試失敗：' + error.toString());
-    return {
-      found: false,
-      details: [],
-      errors: ['調試失敗：' + error.message]
-    };
-  }
-}
 
-/**
- * 獲取測試環境狀態
- */
-function getTestEnvironmentStatusWeb() {
-  try {
-    let testFolder = null;
-    let location = '';
-    
-    try {
-      // 優先在主資料夾內搜尋測試資料夾
-      const mainFolder = getSystemMainFolder();
-      const testFolders = mainFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      if (testFolders.hasNext()) {
-        testFolder = testFolders.next();
-        location = '主資料夾內';
-      }
-      
-    } catch (error) {
-      // 如果主資料夾搜尋失敗，回退到根目錄搜尋（向後相容）
-      Logger.log('Dashboard: 無法在主資料夾搜尋測試環境，回退到根目錄 - ' + error.toString());
-    }
-    
-    // 如果主資料夾內沒找到，再搜尋根目錄
-    if (!testFolder) {
-      const rootFolder = DriveApp.getRootFolder();
-      const testFolders = rootFolder.getFoldersByName(TEST_CONFIG_DASHBOARD.TEST_FOLDER_NAME);
-      
-      if (testFolders.hasNext()) {
-        testFolder = testFolders.next();
-        location = '根目錄';
-      }
-    }
-    
-    if (testFolder) {
-      // 檢查測試資料夾內容
-      const subFolders = testFolder.getFolders();
-      const files = testFolder.getFiles();
-      
-      let folderCount = 0;
-      let fileCount = 0;
-      
-      while (subFolders.hasNext()) {
-        subFolders.next();
-        folderCount++;
-      }
-      
-      while (files.hasNext()) {
-        files.next();
-        fileCount++;
-      }
-      
-      return {
-        success: true,
-        exists: true,
-        testFolderUrl: testFolder.getUrl(),
-        subFolderCount: folderCount,
-        fileCount: fileCount,
-        createdDate: testFolder.getDateCreated(),
-        location: location,
-        message: `測試環境已存在 (位於${location})`
-      };
-    } else {
-      return {
-        success: true,
-        exists: false,
-        message: '測試環境不存在'
-      };
-    }
-    
-  } catch (error) {
-    Logger.log('Dashboard: 檢查測試環境狀態失敗 - ' + error.toString());
-    return {
-      success: false,
-      message: '檢查測試環境狀態失敗：' + error.message
-    };
-  }
-}
 
 /**
  * 獲取系統整體狀態
@@ -1011,10 +656,6 @@ function getSystemStatusWeb() {
         subFolders: false,
         adminConsole: false,
         templates: false
-      },
-      testEnvironment: {
-        exists: false,
-        location: ''
       },
       overallHealth: 0,
       recommendations: [],
@@ -1065,12 +706,7 @@ function getSystemStatusWeb() {
       systemStatus.productionEnvironment.mainFolder = false;
     }
     
-    // 檢查測試環境
-    const testStatus = getTestEnvironmentStatusWeb();
-    if (testStatus.success && testStatus.exists) {
-      systemStatus.testEnvironment.exists = true;
-      systemStatus.testEnvironment.location = testStatus.location || '未知';
-    }
+    // 移除測試環境檢查 - 現在使用純生產環境
     
     // 計算整體狀態
     const productionChecks = Object.values(systemStatus.productionEnvironment);
@@ -1085,13 +721,10 @@ function getSystemStatusWeb() {
       systemStatus.recommendations.push('系統尚未完整初始化');
       systemStatus.nextSteps.push('執行「一鍵完整設定」或「初始化系統」');
     } else {
-      systemStatus.recommendations.push('系統已就緒，可以進行測試');
-      systemStatus.nextSteps.push('建立測試環境並執行功能測試');
+      systemStatus.recommendations.push('系統已就緒，可以開始使用');
+      systemStatus.nextSteps.push('建立老師記錄簿並開始電聯記錄');
     }
     
-    if (!systemStatus.testEnvironment.exists) {
-      systemStatus.nextSteps.push('建立測試環境以進行功能測試');
-    }
     
     Logger.log(`Dashboard: 系統狀態檢查完成，健康度: ${systemStatus.overallHealth}%`);
     
@@ -1137,22 +770,8 @@ function setupCompleteSystemWeb() {
       setupResults.success = false;
     }
     
-    // 步驟 2: 建立測試環境
-    if (setupResults.success) {
-      try {
-        Logger.log('Dashboard: 建立測試環境');
-        const testResult = setupTestEnvironmentWeb();
-        
-        if (testResult.success) {
-          setupResults.steps.push('✅ 測試環境建立完成');
-        } else {
-          throw new Error(testResult.message);
-        }
-      } catch (error) {
-        setupResults.errors.push('測試環境建立失敗：' + error.message);
-        setupResults.success = false;
-      }
-    }
+    // 步驟 2: 已移除測試環境建立（現在使用純生產環境）
+    setupResults.steps.push('✅ 系統已配置為生產環境模式');
     
     // 步驟 3: 系統健康檢查
     if (setupResults.success) {

@@ -114,7 +114,7 @@ function setupTemplateSummarySheet(sheet) {
     ['學年度', '{學年度}', '', '', ''],
     ['', '', '', '', ''],
     ['電聯統計', '', '', '', ''],
-    ['班級', '學生人數', '本月電聯次數', '總電聯次數', '最後聯繫日期'],
+    ['班級', '學生人數', '學期電聯次數', '總電聯次數', '最後聯繫日期'],
     ['{班級1}', '0', '0', '0', ''],
     ['{班級2}', '0', '0', '0', ''],
     ['{班級3}', '0', '0', '0', '']
@@ -149,7 +149,7 @@ function setupTemplateContactSheet(sheet) {
       new Date().toLocaleDateString(),               // Date
       'Fall',                                        // Semester
       'Beginning',                                   // Term
-      '學期電聯',                                     // Contact Type
+      'Academic Contact',                             // Contact Type
       'Discussed Fall Beginning term progress. Student shows good improvement in English speaking skills.', // Teachers Content
       'Parents are pleased with progress and will continue supporting reading practice at home.', // Parents Responses
       'Phone Call'                                   // Contact Method
@@ -162,7 +162,7 @@ function setupTemplateContactSheet(sheet) {
       new Date(Date.now() - 86400000).toLocaleDateString(), // Date (yesterday)
       'Fall',                                        // Semester
       'Midterm',                                     // Term
-      '學期電聯',                                     // Contact Type
+      'Academic Contact',                             // Contact Type
       'Midterm assessment shows student needs extra support with vocabulary building.',  // Teachers Content
       'Parents will arrange additional reading time and practice sessions.', // Parents Responses
       'Line'                                         // Contact Method
@@ -175,7 +175,7 @@ function setupTemplateContactSheet(sheet) {
       new Date(Date.now() - 172800000).toLocaleDateString(), // Date (2 days ago)
       'Fall',                                        // Semester
       'Beginning',                                   // Term
-      '平時電聯',                                     // Contact Type
+      'Regular Contact',                              // Contact Type
       'Student was absent for several days. Checking on health status and catching up on missed work.',  // Teachers Content
       'Student had flu but is recovering well. Will make up missed assignments this week.', // Parents Responses
       'Email'                                        // Contact Method
@@ -334,19 +334,13 @@ function createAnalyticsSheet(sheet) {
     ['', '', ''],
     ['📈 趨勢分析', '', ''],
     ['', '', ''],
-    ['月份', '電聯次數', '參與老師數'],
-    ['1月', '0', '0'],
-    ['2月', '0', '0'],
-    ['3月', '0', '0'],
-    ['4月', '0', '0'],
-    ['5月', '0', '0'],
-    ['6月', '0', '0'],
-    ['7月', '0', '0'],
-    ['8月', '0', '0'],
-    ['9月', '0', '0'],
-    ['10月', '0', '0'],
-    ['11月', '0', '0'],
-    ['12月', '0', '0']
+    ['學期/Term', '電聯次數', '參與老師數'],
+    ['Fall Beginning', '0', '0'],
+    ['Fall Midterm', '0', '0'],
+    ['Fall Final', '0', '0'],
+    ['Spring Beginning', '0', '0'],
+    ['Spring Midterm', '0', '0'],
+    ['Spring Final', '0', '0']
   ];
   
   sheet.getRange(1, 1, analyticsContent.length, 3).setValues(analyticsContent);

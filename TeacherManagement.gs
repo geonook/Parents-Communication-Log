@@ -355,7 +355,7 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', '=SUMIF(電聯記錄.H:H,"學期電聯",電聯記錄.H:H)'],
+    ['學期電聯總次數', '=SUMIF(電聯記錄.H:H,"Academic Contact",電聯記錄.H:H)'],
     ['平均每學期完成率', '待計算']
   ];
   
