@@ -69,7 +69,7 @@ function setupInstructionSheet(sheet) {
     ['• 狀態：已完成、待追蹤、需關注、已結案'],
     [''],
     ['⚙️ 系統設定'],
-    ['• 每月最少電聯次數：預設為 2 次'],
+    ['• 學期電聯次數：依學期制規劃進行'],
     ['• 提醒天數：超過 7 天未記錄會發出提醒'],
     ['• 可在系統設定中調整這些參數'],
     [''],
@@ -237,7 +237,7 @@ function createAdminDashboard(sheet) {
     ['項目', '數量', '狀態'],
     ['註冊老師數', '=COUNTA(老師列表!A:A)-1', '=IF(B5>0,"正常","無資料")'],
     ['活躍記錄簿', '0', '正常'],
-    ['本月總電聯次數', '0', '正常'],
+    ['本學期總電聯次數', '0', '正常'],
     ['待關注老師數', '0', '=IF(B8>0,"需要注意","良好")'],
     ['', '', ''],
     ['🔧 快速操作', '', ''],
@@ -277,7 +277,7 @@ function createSystemSettingsSheet(sheet) {
     ['系統設定', '', ''],
     ['', '', ''],
     ['設定項目', '當前值', '說明'],
-    ['每月最少電聯次數', SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH, '老師每月應完成的最少電聯次數'],
+    ['學期電聯要求', SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH, '學期制電聯進度追蹤設定'],
     ['提醒天數', SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS, '超過此天數未記錄會發出提醒'],
     ['主資料夾名稱', SYSTEM_CONFIG.MAIN_FOLDER_NAME, '系統主資料夾的名稱'],
     ['老師資料夾名稱', SYSTEM_CONFIG.TEACHERS_FOLDER_NAME, '存放老師記錄簿的資料夾名稱'],
@@ -327,7 +327,7 @@ function createAnalyticsSheet(sheet) {
     ['', '', ''],
     ['統計項目', '數值', ''],
     ['總電聯次數', '0', ''],
-    ['平均每月電聯次數', '0', ''],
+    ['平均學期電聯次數', '0', ''],
     ['最活躍老師', '', ''],
     ['最常聯繫班級', '', ''],
     ['最常用聯繫方式', '', ''],
@@ -362,7 +362,7 @@ function showSystemSettings() {
   const ui = SpreadsheetApp.getUi();
   
   let settingsText = '目前系統設定：\n\n';
-  settingsText += `每月最少電聯次數：${SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH} 次\n`;
+  settingsText += `學期電聯要求：依學期制規劃進行\n`;
   settingsText += `提醒天數：${SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS} 天\n`;
   settingsText += `主資料夾：${SYSTEM_CONFIG.MAIN_FOLDER_NAME}\n\n`;
   settingsText += '要修改設定，請前往管理控制台的「系統設定」工作表。';
