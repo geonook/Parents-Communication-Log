@@ -11,7 +11,7 @@ function setupAutomationTriggers() {
     const ui = SpreadsheetApp.getUi();
     const response = ui.alert(
       '設定自動化觸發器',
-      '確定要設定系統自動化功能嗎？\n這將建立：\n• 每週進度檢查\n• 每月報告生成\n• 每日備份',
+      '確定要設定系統自動化功能嗎？\n這將建立：\n• 每週進度檢查\n• 每月學期進度報告\n• 每日備份',
       ui.ButtonSet.YES_NO
     );
     
@@ -28,8 +28,8 @@ function setupAutomationTriggers() {
       .atHour(8)
       .create();
     
-    // 設定每月報告生成觸發器（每月 1 號早上 9 點）
-    ScriptApp.newTrigger('autoMonthlyReport')
+    // 設定每月學期進度報告觸發器（每月 1 號早上 9 點）
+    ScriptApp.newTrigger('autoSemesterReport')
       .timeBased()
       .onMonthDay(1)
       .atHour(9)
@@ -52,7 +52,7 @@ function setupAutomationTriggers() {
     
     ui.alert(
       '觸發器設定完成！',
-      '自動化功能已啟用：\n• 每週一進度檢查\n• 每月報告生成\n• 每日系統備份\n• 每週系統維護',
+      '自動化功能已啟用：\n• 每週一進度檢查\n• 每月學期進度報告\n• 每日系統備份\n• 每週系統維護',
       ui.ButtonSet.OK
     );
     
@@ -70,18 +70,18 @@ function setupAutomationTriggers() {
 function clearExistingTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(trigger => {
-    if (['autoProgressCheck', 'autoMonthlyReport', 'autoBackup', 'autoSystemMaintenance'].includes(trigger.getHandlerFunction())) {
+    if (['autoProgressCheck', 'autoSemesterReport', 'autoBackup', 'autoSystemMaintenance'].includes(trigger.getHandlerFunction())) {
       ScriptApp.deleteTrigger(trigger);
     }
   });
 }
 
 /**
- * 自動月度報告生成
+ * 自動學期進度報告生成
  */
-function autoMonthlyReport() {
+function autoSemesterReport() {
   try {
-    Logger.log('開始自動生成月度報告');
+    Logger.log('開始自動生成學期進度報告');
     
     // 生成進度報告
     generateProgressReport();
@@ -89,13 +89,13 @@ function autoMonthlyReport() {
     // 更新老師列表
     updateTeachersList();
     
-    // 生成月度統計摘要
-    generateMonthlySummary();
+    // 生成學期統計摘要
+    generateSemesterSummary();
     
-    Logger.log('月度報告生成完成');
+    Logger.log('學期進度報告生成完成');
     
   } catch (error) {
-    Logger.log('自動月度報告失敗：' + error.toString());
+    Logger.log('自動學期進度報告失敗：' + error.toString());
   }
 }
 
@@ -155,9 +155,9 @@ function autoSystemMaintenance() {
 }
 
 /**
- * 生成月度統計摘要
+ * 生成學期統計摘要
  */
-function generateMonthlySummary() {
+function generateSemesterSummary() {
   try {
     const teacherBooks = getAllTeacherBooks();
     const now = new Date();
@@ -216,7 +216,7 @@ function generateMonthlySummary() {
     };
     
     // 儲存統計資料
-    saveMonthlySummary(summaryData);
+    saveSemesterSummary(summaryData);
     
     Logger.log('月度統計摘要生成完成');
     
@@ -226,9 +226,9 @@ function generateMonthlySummary() {
 }
 
 /**
- * 儲存月度統計摘要
+ * 儲存學期統計摘要
  */
-function saveMonthlySummary(summaryData) {
+function saveSemesterSummary(summaryData) {
   try {
     const mainFolder = getSystemMainFolder();
     const reportsFolder = mainFolder.getFoldersByName('進度報告').next();

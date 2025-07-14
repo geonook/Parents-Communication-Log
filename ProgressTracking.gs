@@ -280,7 +280,7 @@ function getTeacherDetailProgress(recordBook) {
   const teacherName = summarySheet.getRange('B3').getValue();
   const contactData = contactSheet.getDataRange().getValues();
   
-  // 轉換為詳細記錄格式 - 根據用戶的電聯記錄格式
+  // 轉換為詳細記錄格式 - 學期制11欄位格式
   return contactData.slice(1).map(row => [
     teacherName,
     row[0], // Student ID
@@ -288,9 +288,12 @@ function getTeacherDetailProgress(recordBook) {
     row[2], // English Name
     row[3], // English Class
     row[4], // Date
-    row[5], // Teachers Content
-    row[6], // Parents Responses
-    row[7]  // Contact
+    row[5], // Semester
+    row[6], // Term
+    row[7], // Contact Type
+    row[8], // Teachers Content
+    row[9], // Parents Responses
+    row[10] // Contact Method
   ]);
 }
 
@@ -331,7 +334,7 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
   
   // 建立詳細記錄工作表
   const detailSheet = reportSheet.insertSheet('詳細記錄');
-  const detailHeaders = [['Teacher Name', 'Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Teachers Content', 'Parents Responses', 'Contact']];
+  const detailHeaders = [['Teacher Name', 'Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method']];
   detailSheet.getRange(1, 1, 1, detailHeaders[0].length).setValues(detailHeaders);
   
   if (detailData.length > 0) {

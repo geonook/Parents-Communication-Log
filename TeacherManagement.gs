@@ -205,7 +205,7 @@ function createSummarySheet(recordBook, teacherInfo) {
   sheet.getRange('A10').setValue('電聯統計');
   sheet.getRange('A10').setFontSize(14).setFontWeight('bold');
   
-  const statsHeaders = [['班級', '學生人數', '本月電聯次數', '總電聯次數', '最後聯繫日期']];
+  const statsHeaders = [['班級', '學生人數', '學期電聯次數', '總電聯次數', '最後聯繫日期']];
   sheet.getRange(11, 1, 1, statsHeaders[0].length).setValues(statsHeaders);
   
   // 為每個班級創建統計行
