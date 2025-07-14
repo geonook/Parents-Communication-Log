@@ -426,17 +426,20 @@ function createContactFromStudentList() {
     const lastRow = currentSheet.getLastRow();
     const newRow = lastRow + 1;
     
-    // 填入學生基本資料
+    // 填入學生基本資料（學期制11欄位格式）
     currentSheet.getRange(newRow, 1).setValue(selectedStudent[0]); // Student ID
     currentSheet.getRange(newRow, 2).setValue(selectedStudent[4]); // Chinese Name
     currentSheet.getRange(newRow, 3).setValue(selectedStudent[5]); // English Name
-    currentSheet.getRange(newRow, 4).setValue(selectedStudent[2]); // HR
+    currentSheet.getRange(newRow, 4).setValue(selectedStudent[9]); // English Class (第10欄)
     currentSheet.getRange(newRow, 5).setValue(new Date());         // Date
+    // Semester (第6欄) - 用戶需手動選擇
+    // Term (第7欄) - 用戶需手動選擇  
+    // Contact Type (第8欄) - 用戶需手動選擇
     
-    // 聚焦到 Teachers Content 欄位
-    currentSheet.getRange(newRow, 6).activate();
+    // 聚焦到 Teachers Content 欄位（第9欄）
+    currentSheet.getRange(newRow, 9).activate();
     
-    ui.alert('完成', '學生基本資料已填入，請繼續填寫聯繫內容', ui.ButtonSet.OK);
+    ui.alert('完成', '學生基本資料已填入，請手動選擇Semester、Term、Contact Type後，繼續填寫聯繫內容', ui.ButtonSet.OK);
     
   } catch (error) {
     Logger.log('從學生清單建立電聯記錄失敗：' + error.toString());
