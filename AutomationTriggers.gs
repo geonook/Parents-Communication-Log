@@ -11,7 +11,7 @@ function setupAutomationTriggers() {
     const ui = SpreadsheetApp.getUi();
     const response = ui.alert(
       '設定自動化觸發器',
-      '確定要設定系統自動化功能嗎？\n這將建立：\n• 每週進度檢查\n• 每月學期進度報告\n• 每日備份',
+      '確定要設定系統自動化功能嗎？\n這將建立：\n• 每週進度檢查\n• 學期進度報告\n• 每日備份',
       ui.ButtonSet.YES_NO
     );
     
@@ -28,7 +28,7 @@ function setupAutomationTriggers() {
       .atHour(8)
       .create();
     
-    // 設定每月學期進度報告觸發器（每月 1 號早上 9 點）
+    // 設定學期進度報告觸發器（每月 1 號早上 9 點）
     ScriptApp.newTrigger('autoSemesterReport')
       .timeBased()
       .onMonthDay(1)
@@ -52,7 +52,7 @@ function setupAutomationTriggers() {
     
     ui.alert(
       '觸發器設定完成！',
-      '自動化功能已啟用：\n• 每週一進度檢查\n• 每月學期進度報告\n• 每日系統備份\n• 每週系統維護',
+      '自動化功能已啟用：\n• 每週一進度檢查\n• 學期進度報告\n• 每日系統備份\n• 每週系統維護',
       ui.ButtonSet.OK
     );
     
@@ -160,34 +160,43 @@ function autoSystemMaintenance() {
 function generateSemesterSummary() {
   try {
     const teacherBooks = getAllTeacherBooks();
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const currentSemester = SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER;
+    const currentTerm = SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM;
+    const currentYear = new Date().getFullYear();
     
     let totalContacts = 0;
+    let academicContacts = 0;
     let activeTeachers = 0;
     const classStats = {};
     const contactMethodStats = {};
+    const contactTypeStats = {};
     
     teacherBooks.forEach(book => {
       try {
         const contactSheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
         const contactData = contactSheet.getDataRange().getValues();
         
-        const monthlyContacts = contactData.slice(1).filter(row => {
-          if (!row[4]) return false; // 檢查日期欄位是否存在
-          const contactDate = new Date(row[4]); // Date 在第5欄 (index 4)
-          return contactDate.getMonth() === currentMonth && contactDate.getFullYear() === currentYear;
+        const semesterContacts = contactData.slice(1).filter(row => {
+          if (!row[5] || !row[6] || !row[7]) return false; // 檢查Semester、Term、Contact Type欄位
+          const semester = row[5]; // Semester 在第6欄 (index 5)
+          const term = row[6]; // Term 在第7欄 (index 6)
+          return semester === currentSemester && term === currentTerm;
         });
         
-        if (monthlyContacts.length > 0) {
+        if (semesterContacts.length > 0) {
           activeTeachers++;
-          totalContacts += monthlyContacts.length;
+          totalContacts += semesterContacts.length;
           
-          // 統計班級分布和聯絡方式分布
-          monthlyContacts.forEach(contact => {
+          // 統計班級分布、聯絡方式分布和電聯類型分布
+          semesterContacts.forEach(contact => {
             const englishClass = contact[3];  // English Class 在第4欄 (index 3)
-            const method = contact[10];   // Contact Method 在第11欄 (index 10) - 學期制版本
+            const contactType = contact[7];   // Contact Type 在第8欄 (index 7)
+            const method = contact[10];       // Contact Method 在第11欄 (index 10)
+            
+            // 只統計學期電聯作為主要進度指標
+            if (contactType === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER) {
+              academicContacts++;
+            }
             
             if (englishClass) {
               classStats[englishClass] = (classStats[englishClass] || 0) + 1;
@@ -195,33 +204,39 @@ function generateSemesterSummary() {
             if (method) {
               contactMethodStats[method] = (contactMethodStats[method] || 0) + 1;
             }
+            if (contactType) {
+              contactTypeStats[contactType] = (contactTypeStats[contactType] || 0) + 1;
+            }
           });
         }
         
       } catch (error) {
-        Logger.log(`處理 ${book.getName()} 月度統計失敗：` + error.toString());
+        Logger.log(`處理 ${book.getName()} 學期統計失敗：` + error.toString());
       }
     });
     
     // 建立統計報告
     const summaryData = {
-      month: `${currentYear}年${currentMonth + 1}月`,
+      period: `${currentYear}學年 ${currentSemester} ${currentTerm}`,
       totalTeachers: teacherBooks.length,
       activeTeachers: activeTeachers,
       totalContacts: totalContacts,
+      academicContacts: academicContacts,
       averageContacts: activeTeachers > 0 ? Math.round(totalContacts / activeTeachers * 100) / 100 : 0,
+      averageAcademicContacts: activeTeachers > 0 ? Math.round(academicContacts / activeTeachers * 100) / 100 : 0,
       classStats: classStats,
       contactMethodStats: contactMethodStats,
+      contactTypeStats: contactTypeStats,
       generatedDate: new Date().toLocaleString()
     };
     
     // 儲存統計資料
     saveSemesterSummary(summaryData);
     
-    Logger.log('月度統計摘要生成完成');
+    Logger.log('學期統計摘要生成完成');
     
   } catch (error) {
-    Logger.log('生成月度統計摘要失敗：' + error.toString());
+    Logger.log('生成學期統計摘要失敗：' + error.toString());
   }
 }
 
@@ -233,7 +248,7 @@ function saveSemesterSummary(summaryData) {
     const mainFolder = getSystemMainFolder();
     const reportsFolder = mainFolder.getFoldersByName('進度報告').next();
     
-    const summarySheet = SpreadsheetApp.create(`月度統計摘要_${summaryData.month}`);
+    const summarySheet = SpreadsheetApp.create(`學期統計摘要_${summaryData.period}`);
     const summaryFile = DriveApp.getFileById(summarySheet.getId());
     
     // 移動到報告資料夾
@@ -242,19 +257,21 @@ function saveSemesterSummary(summaryData) {
     
     // 寫入統計資料
     const sheet = summarySheet.getActiveSheet();
-    sheet.setName('月度統計');
+    sheet.setName('學期統計');
     
     const summaryContent = [
-      ['月度電聯統計摘要', ''],
+      ['學期電聯統計摘要', ''],
       ['', ''],
-      ['統計期間', summaryData.month],
+      ['統計期間', summaryData.period],
       ['生成時間', summaryData.generatedDate],
       ['', ''],
       ['基本統計', ''],
       ['總老師數', summaryData.totalTeachers],
       ['活躍老師數', summaryData.activeTeachers],
       ['總電聯次數', summaryData.totalContacts],
+      ['學期電聯次數', summaryData.academicContacts],
       ['平均每人電聯次數', summaryData.averageContacts],
+      ['平均每人學期電聯次數', summaryData.averageAcademicContacts],
       ['', ''],
       ['班級分布', '']
     ];
@@ -262,6 +279,14 @@ function saveSemesterSummary(summaryData) {
     // 加入班級統計
     Object.keys(summaryData.classStats).forEach(className => {
       summaryContent.push([className, summaryData.classStats[className]]);
+    });
+    
+    summaryContent.push(['', '']);
+    summaryContent.push(['電聯類型分布', '']);
+    
+    // 加入電聯類型統計
+    Object.keys(summaryData.contactTypeStats).forEach(type => {
+      summaryContent.push([type, summaryData.contactTypeStats[type]]);
     });
     
     summaryContent.push(['', '']);
@@ -277,13 +302,16 @@ function saveSemesterSummary(summaryData) {
     // 格式設定
     sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
     sheet.getRange('A6').setFontSize(14).setFontWeight('bold');
-    sheet.getRange('A12').setFontSize(14).setFontWeight('bold');
-    sheet.getRange(`A${12 + Object.keys(summaryData.classStats).length + 2}`).setFontSize(14).setFontWeight('bold');
+    sheet.getRange('A14').setFontSize(14).setFontWeight('bold');
+    const contactTypeStartRow = 14 + Object.keys(summaryData.classStats).length + 2;
+    sheet.getRange(`A${contactTypeStartRow}`).setFontSize(14).setFontWeight('bold');
+    const contactMethodStartRow = contactTypeStartRow + Object.keys(summaryData.contactTypeStats).length + 2;
+    sheet.getRange(`A${contactMethodStartRow}`).setFontSize(14).setFontWeight('bold');
     
     sheet.autoResizeColumns(1, 2);
     
   } catch (error) {
-    Logger.log('儲存月度統計摘要失敗：' + error.toString());
+    Logger.log('儲存學期統計摘要失敗：' + error.toString());
   }
 }
 
