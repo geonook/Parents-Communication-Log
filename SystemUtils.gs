@@ -277,7 +277,7 @@ function createSystemSettingsSheet(sheet) {
     ['系統設定', '', ''],
     ['', '', ''],
     ['設定項目', '當前值', '說明'],
-    ['學期電聯要求', SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH, '學期制電聯進度追蹤設定'],
+    ['學期電聯要求', SYSTEM_CONFIG.PROGRESS_CHECK.REQUIRED_CONTACT_PER_TERM, '學期制電聯進度追蹤設定'],
     ['提醒天數', SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS, '超過此天數未記錄會發出提醒'],
     ['主資料夾名稱', SYSTEM_CONFIG.MAIN_FOLDER_NAME, '系統主資料夾的名稱'],
     ['老師資料夾名稱', SYSTEM_CONFIG.TEACHERS_FOLDER_NAME, '存放老師記錄簿的資料夾名稱'],
