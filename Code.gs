@@ -24,10 +24,10 @@ const SYSTEM_CONFIG = {
     PROGRESS: '進度追蹤'
   },
   
-  // 電聯記錄欄位 - 根據用戶範本客製化
+  // 電聯記錄欄位 - 學期制版本
   CONTACT_FIELDS: [
     'Student ID', 'Name', 'English Name', 'English Class', 'Date', 
-    'Teachers Content', 'Parents Responses', 'Contact'
+    'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method'
   ],
   
   // 學生總表欄位
@@ -37,10 +37,28 @@ const SYSTEM_CONFIG = {
     'LT', 'Mother\'s Phone', 'Father\'s Phone'
   ],
   
-  // 進度檢查設定
+  // 學年學期設定
+  ACADEMIC_YEAR: {
+    SEMESTERS: ['Fall', 'Spring'],
+    TERMS: ['Beginning', 'Midterm', 'Final'],
+    CURRENT_SEMESTER: 'Fall', // 可在系統設定中調整
+    CURRENT_TERM: 'Beginning'  // 可在系統設定中調整
+  },
+
+  // 電聯類型設定
+  CONTACT_TYPES: {
+    SEMESTER: '學期電聯',    // 納入進度檢查
+    REGULAR: '平時電聯',     // 不納入檢查  
+    SPECIAL: '特殊狀況電聯'   // 不納入檢查
+  },
+
+  // 聯繫方式選項（移除home visit和in person）
+  CONTACT_METHODS: ['Phone Call', 'Line', 'Email'],
+
+  // 進度檢查設定 - 改為學期制
   PROGRESS_CHECK: {
-    MIN_CONTACTS_PER_MONTH: 2, // 每月最少電聯次數
-    ALERT_DAYS: 7 // 超過幾天未記錄發出提醒
+    REQUIRED_CONTACT_PER_TERM: 1, // 每個term每位學生至少1次學期電聯
+    ALERT_DAYS: 14 // 超過幾天未記錄發出提醒（學期制需要更長時間）
   },
   
   // 年級和英語班級設定
@@ -81,7 +99,15 @@ function onOpen() {
       .addItem('🔄 設定自動化', 'setupAutomationTriggers')
       .addItem('💾 手動備份', 'autoBackup')
       .addItem('🔍 檢查檔案完整性', 'checkFileIntegrity')
-      .addItem('📋 更新老師列表', 'updateTeachersList'))
+      .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
+      .addItem('📋 更新老師列表', 'updateTeachersList')
+      .addSeparator()
+      .addItem('📝 顯示系統日誌', 'showSystemLogs')
+      .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))
+    .addSeparator()
+    .addSubMenu(ui.createMenu('🧪 測試工具')
+      .addItem('🚀 建立測試環境', 'setupTestEnvironment')
+      .addItem('🗑️ 清理測試環境', 'cleanupTestEnvironment'))
     .addSeparator()
     .addItem('📖 使用說明', 'showUserGuide')
     .addToUi();

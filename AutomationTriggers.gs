@@ -187,7 +187,7 @@ function generateMonthlySummary() {
           // 統計班級分布和聯絡方式分布
           monthlyContacts.forEach(contact => {
             const englishClass = contact[3];  // English Class 在第4欄 (index 3)
-            const method = contact[7];    // Contact 在第8欄 (index 7)
+            const method = contact[10];   // Contact Method 在第11欄 (index 10) - 學期制版本
             
             if (englishClass) {
               classStats[englishClass] = (classStats[englishClass] || 0) + 1;

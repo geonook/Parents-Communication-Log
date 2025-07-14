@@ -69,7 +69,7 @@ function generateProgressReport() {
           progress.teacherName,
           progress.totalClasses,
           progress.totalContacts,
-          progress.thisMonthContacts,
+          progress.semesterContacts || 0,  // 使用學期電聯數量
           progress.lastContactDate,
           progress.status,
           progress.alertMessage || ''
@@ -127,13 +127,14 @@ function getAllTeacherBooks() {
 }
 
 /**
- * 檢查單一老師的電聯進度
+ * 檢查單一老師的電聯進度（學期制版本）
  */
 function checkTeacherProgress(recordBook) {
   const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
   const contactSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+  const studentSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
   
-  if (!summarySheet || !contactSheet) {
+  if (!summarySheet || !contactSheet || !studentSheet) {
     throw new Error('記錄簿格式不正確，缺少必要工作表');
   }
   
@@ -142,32 +143,51 @@ function checkTeacherProgress(recordBook) {
   const classesStr = summarySheet.getRange('B5').getValue();
   const classes = classesStr.split(',').map(c => c.trim());
   
+  // 獲取學生資料
+  const studentData = studentSheet.getDataRange().getValues();
+  const students = studentData.slice(1); // 跳過標題行
+  const totalStudents = students.length;
+  
   // 分析電聯記錄
   const contactData = contactSheet.getDataRange().getValues();
+  const contactHeaders = contactData[0];
   const contacts = contactData.slice(1); // 跳過標題行
   
-  // 計算統計數據
-  const now = new Date();
-  const thisMonth = now.getMonth();
-  const thisYear = now.getFullYear();
+  // 確定新欄位的索引（向後相容）
+  const dateIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('date')) || 4;
+  const semesterIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('semester'));
+  const termIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('term'));
+  const contactTypeIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('contact type'));
+  const studentIdIndex = 0; // Student ID 通常在第一欄
   
-  // Date 欄位在第5欄 (index 4)
-  const thisMonthContacts = contacts.filter(row => {
-    if (!row[4]) return false; // 檢查日期欄位是否存在
-    const contactDate = new Date(row[4]);
-    return contactDate.getMonth() === thisMonth && contactDate.getFullYear() === thisYear;
+  // 計算學期進度
+  const currentSemester = SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER;
+  const currentTerm = SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM;
+  
+  const semesterProgress = calculateSemesterProgress(contacts, students, {
+    dateIndex, semesterIndex, termIndex, contactTypeIndex, studentIdIndex
   });
   
-  // 找出最後聯繫日期
-  const lastContactDate = contacts.length > 0 ? 
-    Math.max(...contacts.map(row => row[4] ? new Date(row[4]).getTime() : 0)) : null;
+  // 找出最後聯繫日期（僅計算學期電聯）
+  const semesterContacts = contacts.filter(row => {
+    if (contactTypeIndex >= 0) {
+      return row[contactTypeIndex] === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER;
+    }
+    return true; // 如果沒有類型欄位，假設都是學期電聯（向後相容）
+  });
+  
+  const lastContactDate = semesterContacts.length > 0 ? 
+    Math.max(...semesterContacts.map(row => row[dateIndex] ? new Date(row[dateIndex]).getTime() : 0)) : null;
   
   // 檢查是否需要提醒
   const daysSinceLastContact = lastContactDate ? 
-    Math.floor((now.getTime() - lastContactDate) / (1000 * 60 * 60 * 24)) : 999;
+    Math.floor((new Date().getTime() - lastContactDate) / (1000 * 60 * 60 * 24)) : 999;
   
   const needsAlert = daysSinceLastContact > SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS;
-  const monthlyGoalMet = thisMonthContacts.length >= SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH;
+  
+  // 計算當前term的完成度
+  const currentTermProgress = semesterProgress[currentSemester]?.[currentTerm] || { completed: 0, total: totalStudents };
+  const currentTermCompleted = currentTermProgress.completed >= currentTermProgress.total;
   
   // 判斷狀態
   let status = '正常';
@@ -175,26 +195,79 @@ function checkTeacherProgress(recordBook) {
   
   if (needsAlert) {
     status = '需要關注';
-    alertMessage += `已超過 ${SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS} 天未記錄電聯。`;
+    alertMessage += `已超過 ${SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS} 天未記錄學期電聯。`;
   }
   
-  if (!monthlyGoalMet) {
-    status = status === '正常' ? '待改善' : '需要關注';
-    alertMessage += `本月電聯次數不足（${thisMonthContacts.length}/${SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH}）。`;
+  if (!currentTermCompleted) {
+    const remaining = currentTermProgress.total - currentTermProgress.completed;
+    if (remaining > currentTermProgress.total * 0.5) {
+      status = '需要關注';
+    } else if (status === '正常') {
+      status = '待改善';
+    }
+    alertMessage += `${currentSemester} ${currentTerm}：還有 ${remaining} 位學生未電聯。`;
   }
   
   return {
     teacherName: teacherName,
     totalClasses: classes.length,
+    totalStudents: totalStudents,
     totalContacts: contacts.length,
-    thisMonthContacts: thisMonthContacts.length,
+    semesterContacts: semesterContacts.length,
+    semesterProgress: semesterProgress,
+    currentTermProgress: currentTermProgress,
     lastContactDate: lastContactDate ? new Date(lastContactDate).toLocaleDateString() : '無記錄',
     daysSinceLastContact: daysSinceLastContact,
     status: status,
     alertMessage: alertMessage,
-    monthlyGoalMet: monthlyGoalMet,
+    currentTermCompleted: currentTermCompleted,
     needsAlert: needsAlert
   };
+}
+
+/**
+ * 計算學期進度
+ */
+function calculateSemesterProgress(contacts, students, fieldIndexes) {
+  const progress = {};
+  
+  // 初始化所有學期和term
+  SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.forEach(semester => {
+    progress[semester] = {};
+    SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.forEach(term => {
+      progress[semester][term] = {
+        completed: 0,
+        total: students.length,
+        contactedStudents: new Set()
+      };
+    });
+  });
+  
+  // 統計實際電聯記錄
+  contacts.forEach(contact => {
+    const semester = contact[fieldIndexes.semesterIndex] || SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER;
+    const term = contact[fieldIndexes.termIndex] || SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM;
+    const contactType = contact[fieldIndexes.contactTypeIndex];
+    const studentId = contact[fieldIndexes.studentIdIndex];
+    
+    // 只計算學期電聯
+    if (fieldIndexes.contactTypeIndex >= 0 && contactType !== SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER) {
+      return;
+    }
+    
+    if (progress[semester] && progress[semester][term] && studentId) {
+      progress[semester][term].contactedStudents.add(studentId.toString());
+    }
+  });
+  
+  // 計算完成數量
+  Object.keys(progress).forEach(semester => {
+    Object.keys(progress[semester]).forEach(term => {
+      progress[semester][term].completed = progress[semester][term].contactedStudents.size;
+    });
+  });
+  
+  return progress;
 }
 
 /**
@@ -249,7 +322,7 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
   summarySheet.setName('進度摘要');
   
   // 寫入摘要資料
-  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '本月電聯次數', '最後聯繫日期', '狀態', '提醒訊息']];
+  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '學期電聯次數', '最後聯繫日期', '狀態', '提醒訊息']];
   summarySheet.getRange(1, 1, 1, summaryHeaders[0].length).setValues(summaryHeaders);
   
   if (summaryData.length > 0) {
@@ -322,7 +395,7 @@ function autoProgressCheck() {
     teacherBooks.forEach(book => {
       try {
         const progress = checkTeacherProgress(book);
-        if (progress.needsAlert || !progress.monthlyGoalMet) {
+        if (progress.needsAlert || !progress.currentTermCompleted) {
           alertTeachers.push(progress);
         }
       } catch (error) {
@@ -360,14 +433,14 @@ function displayProgressSummary(progressResults) {
   const needImprovement = progressResults.filter(p => p.status === '待改善').length;
   const normal = progressResults.filter(p => p.status === '正常').length;
   const totalContacts = progressResults.reduce((sum, p) => sum + p.totalContacts, 0);
-  const totalThisMonth = progressResults.reduce((sum, p) => sum + p.thisMonthContacts, 0);
+  const totalSemesterContacts = progressResults.reduce((sum, p) => sum + (p.semesterContacts || 0), 0);
   
   // 建立摘要報告
   let summaryMessage = '🔍 全體老師電聯進度檢查結果\n\n';
   summaryMessage += `📊 總體統計：\n`;
   summaryMessage += `• 老師總數：${totalTeachers} 位\n`;
   summaryMessage += `• 累計電聯記錄：${totalContacts} 筆\n`;
-  summaryMessage += `• 本月電聯記錄：${totalThisMonth} 筆\n\n`;
+  summaryMessage += `• 學期電聯記錄：${totalSemesterContacts} 筆\n\n`;
   
   summaryMessage += `📈 狀態分布：\n`;
   summaryMessage += `• ✅ 正常：${normal} 位 (${Math.round(normal/totalTeachers*100)}%)\n`;
@@ -381,7 +454,7 @@ function displayProgressSummary(progressResults) {
       if (progress.status !== '正常') {
         summaryMessage += `\n• ${progress.teacherName} (${progress.status})\n`;
         summaryMessage += `  - 總電聯：${progress.totalContacts} 筆\n`;
-        summaryMessage += `  - 本月：${progress.thisMonthContacts} 筆\n`;
+        summaryMessage += `  - 學期電聯：${progress.semesterContacts || 0} 筆\n`;
         summaryMessage += `  - 最後聯繫：${progress.lastContactDate}\n`;
         if (progress.alertMessage) {
           summaryMessage += `  - 提醒：${progress.alertMessage}\n`;
@@ -419,8 +492,8 @@ function generateDetailedProgressReport(progressResults) {
     
     // 設定表頭
     const headers = [
-      '老師姓名', '授課班級數', '總電聯次數', '本月電聯次數', 
-      '最後聯繫日期', '距今天數', '狀態', '月度目標達成', '提醒訊息'
+      '老師姓名', '授課班級數', '總電聯次數', '學期電聯次數', 
+      '最後聯繫日期', '距今天數', '狀態', '當前Term完成', '提醒訊息'
     ];
     sheet.getRange(4, 1, 1, headers.length).setValues([headers]);
     sheet.getRange(4, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
@@ -430,11 +503,11 @@ function generateDetailedProgressReport(progressResults) {
       progress.teacherName,
       progress.totalClasses,
       progress.totalContacts,
-      progress.thisMonthContacts,
+      progress.semesterContacts || 0,
       progress.lastContactDate,
       progress.daysSinceLastContact === 999 ? '無記錄' : progress.daysSinceLastContact,
       progress.status,
-      progress.monthlyGoalMet ? '是' : '否',
+      progress.currentTermCompleted ? '是' : '否',
       progress.alertMessage || '無'
     ]);
     

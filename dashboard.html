@@ -263,8 +263,8 @@
                         <div class="stat-label">電聯記錄</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="monthlyProgress">0%</div>
-                        <div class="stat-label">本月進度</div>
+                        <div class="stat-number" id="semesterProgress">0%</div>
+                        <div class="stat-label" id="semesterProgressLabel">學期進度</div>
                     </div>
                 </div>
             </div>
@@ -304,6 +304,9 @@
                     <button class="action-button secondary" onclick="checkAllProgress()">
                         📊 檢查全體進度
                     </button>
+                    <button class="action-button secondary" onclick="generateProgressReport()">
+                        📈 生成進度報告
+                    </button>
                 </div>
             </div>
             
@@ -323,6 +326,114 @@
                     <button class="action-button secondary" onclick="showSystemSettings()">
                         ⚙️ 系統設定
                     </button>
+                </div>
+            </div>
+            
+            <!-- 測試工具 -->
+            <div class="section">
+                <h2>🧪 測試工具</h2>
+                
+                <!-- 系統狀態指示 -->
+                <div id="systemStatusIndicator" style="margin-bottom: 20px;">
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6c757d;">
+                        <h3 style="color: #495057; margin-bottom: 10px;">🔄 檢查系統狀態中...</h3>
+                        <p style="color: #6c757d; margin: 0;">正在檢查系統初始化狀態，請稍候...</p>
+                    </div>
+                </div>
+                
+                <!-- 環境說明 -->
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                    <h3 style="color: #1565c0; margin-bottom: 10px;">ℹ️ 環境說明</h3>
+                    <p style="color: #1565c0; margin: 0; line-height: 1.5;">
+                        <strong>生產環境：</strong>主資料夾中的實際工作資料，用於日常教學管理<br>
+                        <strong>測試環境：</strong>位於主資料夾內的獨立測試空間，包含模擬資料，不會影響生產環境
+                    </p>
+                </div>
+                
+                <!-- 快速設定區 -->
+                <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                        <h3 style="color: #856404; margin-bottom: 10px;">⚡ 快速設定</h3>
+                        <p style="color: #856404; margin-bottom: 15px;">系統尚未完整初始化，建議先執行完整設定：</p>
+                        <button class="action-button primary" onclick="setupCompleteSystem()" style="margin-right: 10px;">
+                            🚀 一鍵完整設定
+                        </button>
+                        <button class="action-button secondary" onclick="initializeSystem()">
+                            🏗️ 僅初始化生產環境
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 主要測試流程 -->
+                <div style="background: #e8f4fd; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                    <h3 style="color: #1565c0; margin-bottom: 15px;">🎯 主要測試流程</h3>
+                    <div class="button-grid" style="grid-template-columns: repeat(3, 1fr);">
+                        <button class="action-button primary" onclick="setupTestEnvironment()" id="setupTestBtn">
+                            1️⃣ 建立測試環境
+                        </button>
+                        <button class="action-button primary" onclick="executeCompleteTest()" id="executeTestBtn" disabled>
+                            2️⃣ 執行完整測試
+                        </button>
+                        <button class="action-button secondary" onclick="cleanupTestEnvironment()" id="cleanupTestBtn" disabled>
+                            3️⃣ 清理測試環境
+                        </button>
+                    </div>
+                    <div id="testProgress" style="margin-top: 15px; display: none;">
+                        <div style="background: white; padding: 10px; border-radius: 4px;">
+                            <strong>測試進度：</strong>
+                            <div id="progressBar" style="background: #f0f0f0; height: 8px; border-radius: 4px; margin: 5px 0;">
+                                <div id="progressFill" style="background: #4caf50; height: 100%; width: 0%; border-radius: 4px; transition: width 0.3s ease;"></div>
+                            </div>
+                            <div id="progressText" style="font-size: 0.9em; color: #666;">準備開始測試...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 輔助工具 -->
+                <div style="margin-bottom: 20px;">
+                    <h3 style="color: #495057; margin-bottom: 10px;">🔧 輔助工具</h3>
+                    <div class="button-grid">
+                        <button class="action-button secondary" onclick="checkSystemStatus()">
+                            📊 檢查系統狀態
+                        </button>
+                        <button class="action-button secondary" onclick="checkTestStatus()">
+                            📋 檢查測試狀態
+                        </button>
+                        <button class="action-button secondary" onclick="openTestGuide()">
+                            📖 測試執行指南
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 高級選項（預設隱藏） -->
+                <details style="margin-top: 15px;">
+                    <summary style="cursor: pointer; color: #666; font-size: 0.9em;">🔧 高級選項</summary>
+                    <div style="margin-top: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+                        <button class="action-button" onclick="debugTestBooks()" style="background: #ff9800; color: white; font-size: 0.9em;">
+                            🔧 調試測試環境
+                        </button>
+                    </div>
+                </details>
+                
+                <div class="instructions" style="margin-top: 20px;">
+                    <h3>📚 使用說明：</h3>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; line-height: 1.6;">
+                        <p><strong>🎯 主要測試流程：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>1️⃣ 建立測試環境：</strong>建立包含3位測試老師和15名學生資料的完整測試環境</li>
+                            <li><strong>2️⃣ 執行完整測試：</strong>自動執行4項核心系統功能測試，顯示即時進度</li>
+                            <li><strong>3️⃣ 清理測試環境：</strong>移除所有測試資料，不影響生產環境</li>
+                        </ul>
+                        <p><strong>🔧 輔助工具：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>檢查系統狀態：</strong>驗證系統初始化狀態和健康度</li>
+                            <li><strong>檢查測試狀態：</strong>查看測試環境詳細資訊</li>
+                            <li><strong>測試執行指南：</strong>快速參考和故障排除</li>
+                        </ul>
+                        <p style="color: #666; font-style: italic; margin-top: 10px;">
+                            💡 建議：首次使用或系統更新後執行完整測試驗證功能正常。
+                        </p>
+                    </div>
                 </div>
             </div>
             
@@ -397,6 +508,38 @@
                 </button>
                 <button class="action-button secondary" onclick="closeTeacherModal()">
                     取消
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 測試結果模態框 -->
+    <div id="testResultModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <span class="close">&times;</span>
+            <h2>🧪 測試結果</h2>
+            <div id="testResultContent">
+                <!-- 測試結果內容將由 JavaScript 動態填入 -->
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="action-button secondary" onclick="closeTestResultModal()">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 測試狀態模態框 -->
+    <div id="testStatusModal" class="modal">
+        <div class="modal-content" style="max-width: 700px;">
+            <span class="close">&times;</span>
+            <h2>📊 測試環境狀態</h2>
+            <div id="testStatusContent">
+                <!-- 測試狀態內容將由 JavaScript 動態填入 -->
+            </div>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="action-button secondary" onclick="closeTestStatusModal()">
+                    關閉
                 </button>
             </div>
         </div>
@@ -591,45 +734,170 @@
         }
 
         function checkAllProgress() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '檢查中...';
+            button.disabled = true;
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
                     if (result.success) {
-                        alert('進度檢查完成！');
+                        displayProgressResults(result);
                     } else {
                         alert('檢查失敗：' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
                     alert('檢查失敗：' + error.message);
                 })
                 .executeSystemFunction('checkAllProgress');
         }
+        
+        function displayProgressResults(result) {
+            if (!result.progressResults || result.progressResults.length === 0) {
+                alert('⚠️ ' + result.message);
+                return;
+            }
+            
+            const summary = result.summary;
+            let message = '📊 全體老師電聯進度檢查結果\\n\\n';
+            
+            // 總體統計
+            message += `📈 總體統計：\\n`;
+            message += `• 老師總數：${summary.totalTeachers} 位\\n`;
+            message += `• 學生總數：${summary.totalStudents} 位\\n`;
+            message += `• 累計電聯記錄：${summary.totalContacts} 筆\\n`;
+            message += `• 學期電聯記錄：${summary.totalSemesterContacts} 筆\\n\\n`;
+            
+            // 當前學期term進度
+            message += `🎯 ${summary.currentSemester} ${summary.currentTerm} 進度：\\n`;
+            message += `• 已完成：${summary.currentTermCompleted}/${summary.currentTermTotal} 位學生\\n`;
+            message += `• 完成率：${summary.currentTermCompletionRate}%\\n\\n`;
+            
+            // 狀態分布
+            message += `📊 狀態分布：\\n`;
+            message += `• ✅ 正常：${summary.normalCount} 位 (${summary.normalPercentage}%)\\n`;
+            message += `• ⚠️ 待改善：${summary.needImprovementCount} 位 (${summary.needImprovementPercentage}%)\\n`;
+            message += `• 🚨 需要關注：${summary.needAttentionCount} 位 (${summary.needAttentionPercentage}%)\\n\\n`;
+            
+            // 詳細列表
+            if (summary.needAttentionCount > 0 || summary.needImprovementCount > 0) {
+                message += `📋 需要關注的老師：\\n`;
+                result.progressResults.forEach(progress => {
+                    if (progress.status !== '正常') {
+                        message += `\\n• ${progress.teacherName} (${progress.status})\\n`;
+                        message += `  - 學生總數：${progress.totalStudents} 位\\n`;
+                        message += `  - 學期電聯：${progress.semesterContacts || 0} 筆\\n`;
+                        if (progress.currentTermProgress) {
+                            const remaining = progress.currentTermProgress.total - progress.currentTermProgress.completed;
+                            message += `  - 當前Term：${progress.currentTermProgress.completed}/${progress.currentTermProgress.total} 位學生已完成\\n`;
+                            if (remaining > 0) {
+                                message += `  - 待電聯：${remaining} 位學生\\n`;
+                            }
+                        }
+                        message += `  - 最後學期電聯：${progress.lastContactDate}\\n`;
+                        if (progress.alertMessage) {
+                            message += `  - 提醒：${progress.alertMessage}\\n`;
+                        }
+                    }
+                });
+            } else {
+                message += `🎉 所有老師的電聯記錄狀態都很良好！`;
+            }
+            
+            // 顯示錯誤（如果有）
+            if (result.errors && result.errors.length > 0) {
+                message += `\\n\\n⚠️ 檢查過程中的問題：\\n`;
+                result.errors.forEach(error => {
+                    message += `• ${error}\\n`;
+                });
+            }
+            
+            alert(message);
+        }
 
-        function setupAutomation() {
+        function generateProgressReport() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '生成中...';
+            button.disabled = true;
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
                     if (result.success) {
-                        alert('自動化設定完成！');
+                        let message = '📊 進度報告生成完成！\\n\\n';
+                        message += `• 檢查了 ${result.teacherCount} 位老師\\n`;
+                        message += `• 包含 ${result.dataCount} 筆電聯記錄\\n\\n`;
+                        message += '點擊「確定」後將開啟報告檔案。';
+                        
+                        if (confirm(message)) {
+                            window.open(result.reportUrl, '_blank');
+                        }
                     } else {
-                        alert('設定失敗：' + result.message);
+                        alert('❌ ' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('生成失敗：' + error.message);
+                })
+                .executeSystemFunction('generateProgressReport');
+        }
+
+        function setupAutomation() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '設定中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        alert('✅ ' + result.message);
+                    } else {
+                        alert('❌ 設定失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
                     alert('設定失敗：' + error.message);
                 })
                 .executeSystemFunction('setupAutomation');
         }
 
         function performBackup() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '備份中...';
+            button.disabled = true;
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
                     if (result.success) {
-                        alert('備份完成！');
+                        alert('✅ ' + result.message);
                     } else {
-                        alert('備份失敗：' + result.message);
+                        alert('❌ 備份失敗：' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
                     alert('備份失敗：' + error.message);
                 })
                 .executeSystemFunction('performBackup');
@@ -654,6 +922,601 @@
             alert('請在 Google Sheets 中使用「電聯記錄簿系統」選單 → 「系統管理」→ 「⚙️ 系統設定」功能');
         }
 
+        // ========== 系統狀態檢查和設定相關函數 ==========
+
+        function checkSystemStatus() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '檢查中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        updateSystemStatusDisplay(result.systemStatus);
+                        displaySystemStatusDetails(result.systemStatus);
+                    } else {
+                        alert('系統狀態檢查失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('系統狀態檢查失敗：' + error.message);
+                })
+                .getSystemStatusWeb();
+        }
+        
+        function setupCompleteSystem() {
+            if (confirm('確定要執行一鍵完整設定嗎？\n\n這將執行以下步驟：\n• 初始化生產環境（資料夾結構、範本檔案、管理控制台）\n• 建立測試環境（測試資料夾、測試資料）\n• 執行系統健康檢查\n\n整個過程需要幾分鐘時間。')) {
+                
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '設定中...';
+                button.disabled = true;
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        
+                        if (result.success) {
+                            displayCompleteSetupResults(result);
+                            checkSystemStatus(); // 重新檢查系統狀態
+                        } else {
+                            alert('一鍵設定失敗：' + result.message);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        alert('一鍵設定失敗：' + error.message);
+                    })
+                    .setupCompleteSystemWeb();
+            }
+        }
+        
+        function updateSystemStatusDisplay(systemStatus) {
+            const indicator = document.getElementById('systemStatusIndicator');
+            const quickSetupSection = document.getElementById('quickSetupSection');
+            
+            let statusColor, statusIcon, statusText, statusMessage;
+            
+            if (systemStatus.initialized) {
+                statusColor = '#d4edda';
+                statusIcon = '✅';
+                statusText = '系統已就緒';
+                statusMessage = `系統健康度：${systemStatus.overallHealth}% - 可以進行正常使用和測試`;
+                quickSetupSection.style.display = 'none';
+            } else {
+                statusColor = '#f8d7da';
+                statusIcon = '⚠️';
+                statusText = '系統需要初始化';
+                statusMessage = `系統健康度：${systemStatus.overallHealth}% - 建議執行完整設定或初始化`;
+                quickSetupSection.style.display = 'block';
+            }
+            
+            indicator.innerHTML = `
+                <div style="background: ${statusColor}; padding: 15px; border-radius: 8px; border-left: 4px solid ${statusColor === '#d4edda' ? '#28a745' : '#dc3545'};">
+                    <h3 style="color: ${statusColor === '#d4edda' ? '#155724' : '#721c24'}; margin-bottom: 10px;">${statusIcon} ${statusText}</h3>
+                    <p style="color: ${statusColor === '#d4edda' ? '#155724' : '#721c24'}; margin: 0;">${statusMessage}</p>
+                </div>
+            `;
+        }
+        
+        function displaySystemStatusDetails(systemStatus) {
+            let statusDetails = `🔍 系統狀態詳細報告\n\n`;
+            statusDetails += `📊 整體健康度：${systemStatus.overallHealth}%\n`;
+            statusDetails += `✅ 系統初始化：${systemStatus.initialized ? '已完成' : '未完成'}\n\n`;
+            
+            statusDetails += `🏭 生產環境狀態：\n`;
+            statusDetails += `• 主資料夾：${systemStatus.productionEnvironment.mainFolder ? '✅ 存在' : '❌ 不存在'}\n`;
+            statusDetails += `• 子資料夾：${systemStatus.productionEnvironment.subFolders ? '✅ 完整' : '❌ 不完整'}\n`;
+            statusDetails += `• 管理控制台：${systemStatus.productionEnvironment.adminConsole ? '✅ 已建立' : '❌ 未建立'}\n`;
+            statusDetails += `• 範本檔案：${systemStatus.productionEnvironment.templates ? '✅ 已建立' : '❌ 未建立'}\n\n`;
+            
+            statusDetails += `🧪 測試環境狀態：\n`;
+            statusDetails += `• 測試環境：${systemStatus.testEnvironment.exists ? '✅ 已建立' : '❌ 不存在'}\n`;
+            if (systemStatus.testEnvironment.exists) {
+                statusDetails += `• 位置：${systemStatus.testEnvironment.location}\n`;
+            }
+            
+            statusDetails += `\n💡 建議：\n`;
+            systemStatus.recommendations.forEach(rec => {
+                statusDetails += `• ${rec}\n`;
+            });
+            
+            statusDetails += `\n📋 下一步：\n`;
+            systemStatus.nextSteps.forEach(step => {
+                statusDetails += `• ${step}\n`;
+            });
+            
+            alert(statusDetails);
+        }
+        
+        function displayCompleteSetupResults(result) {
+            let message = '🚀 一鍵完整設定結果\n\n';
+            
+            if (result.success) {
+                message += '✅ 設定成功完成！\n\n';
+                message += '📋 執行步驟：\n';
+                result.setupResults.steps.forEach(step => {
+                    message += `${step}\n`;
+                });
+                
+                message += '\n🎯 系統現在已準備就緒，您可以：\n';
+                message += '• 開始建立老師記錄簿\n';
+                message += '• 使用測試環境進行功能測試\n';
+                message += '• 匯入實際學生資料\n';
+            } else {
+                message += '❌ 設定過程中遇到問題\n\n';
+                message += '錯誤訊息：\n';
+                result.setupResults.errors.forEach(error => {
+                    message += `• ${error}\n`;
+                });
+                
+                message += '\n已完成的步驟：\n';
+                result.setupResults.steps.forEach(step => {
+                    message += `${step}\n`;
+                });
+            }
+            
+            alert(message);
+        }
+        
+        // 頁面載入時自動檢查系統狀態
+        window.addEventListener('DOMContentLoaded', function() {
+            // 延遲執行以確保頁面完全載入
+            setTimeout(function() {
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        if (result.success) {
+                            updateSystemStatusDisplay(result.systemStatus);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        console.log('初始狀態檢查失敗：', error);
+                    })
+                    .getSystemStatusWeb();
+            }, 1000);
+        });
+
+        // ========== 測試流程管理 ==========
+        
+        let testSteps = [
+            { name: '檢查全體進度', function: 'checkAllProgress', weight: 25 },
+            { name: '生成進度報告', function: 'generateProgressReport', weight: 25 },
+            { name: '執行系統備份', function: 'performBackup', weight: 25 },
+            { name: '檢查檔案完整性', function: 'checkFileIntegrity', weight: 25 }
+        ];
+        
+        function updateTestProgress(stepIndex, stepName, isComplete = false) {
+            const progressBar = document.getElementById('testProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            if (progressBar) {
+                progressBar.style.display = 'block';
+                
+                let totalProgress = 0;
+                for (let i = 0; i < stepIndex; i++) {
+                    totalProgress += testSteps[i].weight;
+                }
+                
+                if (isComplete) {
+                    totalProgress += testSteps[stepIndex].weight;
+                }
+                
+                progressFill.style.width = totalProgress + '%';
+                
+                if (isComplete && stepIndex === testSteps.length - 1) {
+                    progressText.textContent = '✅ 所有測試已完成！';
+                    progressFill.style.background = '#4caf50';
+                } else if (isComplete) {
+                    progressText.textContent = `✅ ${stepName} 完成，進行下一項測試...`;
+                } else {
+                    progressText.textContent = `🔄 正在執行：${stepName}...`;
+                }
+            }
+        }
+        
+        function executeCompleteTest() {
+            const executeBtn = document.getElementById('executeTestBtn');
+            const cleanupBtn = document.getElementById('cleanupTestBtn');
+            
+            executeBtn.disabled = true;
+            executeBtn.textContent = '測試中...';
+            
+            let currentStep = 0;
+            let testResults = [];
+            
+            function runNextTest() {
+                if (currentStep >= testSteps.length) {
+                    // 所有測試完成
+                    executeBtn.textContent = '2️⃣ 執行完整測試';
+                    executeBtn.disabled = false;
+                    cleanupBtn.disabled = false;
+                    
+                    displayTestSummary(testResults);
+                    return;
+                }
+                
+                const step = testSteps[currentStep];
+                updateTestProgress(currentStep, step.name, false);
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        updateTestProgress(currentStep, step.name, true);
+                        testResults.push({
+                            name: step.name,
+                            success: result.success,
+                            message: result.message,
+                            data: result
+                        });
+                        
+                        currentStep++;
+                        setTimeout(runNextTest, 1000); // 短暫延遲讓用戶看到進度
+                    })
+                    .withFailureHandler(function(error) {
+                        testResults.push({
+                            name: step.name,
+                            success: false,
+                            message: error.message,
+                            data: null
+                        });
+                        
+                        updateTestProgress(currentStep, step.name, true);
+                        currentStep++;
+                        setTimeout(runNextTest, 1000);
+                    })
+                    .executeSystemFunction(step.function);
+            }
+            
+            runNextTest();
+        }
+        
+        function displayTestSummary(results) {
+            const successCount = results.filter(r => r.success).length;
+            const totalCount = results.length;
+            const successRate = Math.round((successCount / totalCount) * 100);
+            
+            let message = `🎯 完整測試結果摘要\\n\\n`;
+            message += `📊 總體表現：${successCount}/${totalCount} 項測試通過 (${successRate}%)\\n\\n`;
+            
+            message += `📋 詳細結果：\\n`;
+            results.forEach((result, index) => {
+                const icon = result.success ? '✅' : '❌';
+                message += `${icon} ${result.name}\\n`;
+                if (!result.success) {
+                    message += `   錯誤：${result.message}\\n`;
+                }
+            });
+            
+            if (successRate >= 75) {
+                message += `\\n🎉 測試表現優秀！系統運作正常。\\n`;
+                message += `建議：測試完成後可清理測試環境，然後開始正式使用系統。`;
+            } else if (successRate >= 50) {
+                message += `\\n⚠️ 測試部分通過，建議檢查失敗項目。\\n`;
+                message += `建議：檢查系統設定或重新執行初始化。`;
+            } else {
+                message += `\\n🚨 測試表現不佳，系統可能存在問題。\\n`;
+                message += `建議：執行「🚀 一鍵完整設定」重建系統。`;
+            }
+            
+            alert(message);
+        }
+        
+        // ========== 測試工具相關函數 ==========
+        
+        function debugTestBooks() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '調試中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    let message = '🔧 測試環境調試結果\\n\\n';
+                    
+                    if (result.found) {
+                        message += '✅ 找到測試記錄簿\\n\\n';
+                    } else {
+                        message += '❌ 沒有找到測試記錄簿\\n\\n';
+                    }
+                    
+                    message += '詳細資訊：\\n';
+                    result.details.forEach(detail => {
+                        message += `${detail}\\n`;
+                    });
+                    
+                    if (result.errors.length > 0) {
+                        message += '\\n錯誤：\\n';
+                        result.errors.forEach(error => {
+                            message += `${error}\\n`;
+                        });
+                    }
+                    
+                    alert(message);
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('調試失敗：' + error.message);
+                })
+                .executeSystemFunction('debugTestBooks');
+        }
+
+        function setupTestEnvironment() {
+            if (confirm('確定要建立測試環境嗎？\n\n這將建立完整的測試資料夾結構，包含：\n• 15 名測試學生資料\n• 3 位測試老師記錄簿\n• 模擬電聯記錄\n• 系統健康檢查')) {
+                
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '建立中...';
+                button.disabled = true;
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        
+                        if (result.success) {
+                            displayTestResults(result);
+                            // 啟用第二步按鈕
+                            document.getElementById('executeTestBtn').disabled = false;
+                        } else {
+                            alert('測試環境建立失敗：' + result.message);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        alert('測試環境建立失敗：' + error.message);
+                    })
+                    .setupTestEnvironmentWeb();
+            }
+        }
+
+        function cleanupTestEnvironment() {
+            if (confirm('確定要清理測試環境嗎？\n\n這將刪除所有測試資料和檔案，此操作無法復原。\n（不會影響生產環境的資料）')) {
+                
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '清理中...';
+                button.disabled = true;
+                
+                google.script.run
+                    .withSuccessHandler(function(result) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        
+                        if (result.success) {
+                            alert('✅ ' + result.message);
+                            // 重置按鈕狀態
+                            document.getElementById('executeTestBtn').disabled = true;
+                            document.getElementById('cleanupTestBtn').disabled = true;
+                            // 隱藏進度條
+                            const progressBar = document.getElementById('testProgress');
+                            if (progressBar) {
+                                progressBar.style.display = 'none';
+                            }
+                        } else {
+                            alert('❌ 清理失敗：' + result.message);
+                        }
+                    })
+                    .withFailureHandler(function(error) {
+                        button.textContent = originalText;
+                        button.disabled = false;
+                        alert('❌ 清理失敗：' + error.message);
+                    })
+                    .cleanupTestEnvironmentWeb();
+            }
+        }
+
+        function checkTestStatus() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '檢查中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        displayTestStatus(result);
+                    } else {
+                        alert('檢查失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('檢查失敗：' + error.message);
+                })
+                .getTestEnvironmentStatusWeb();
+        }
+
+        function openTestGuide() {
+            const guideContent = `
+📖 快速測試指南
+
+🎯 簡化測試流程：
+
+✅ 三步驟完成測試：
+1. 🚀 建立測試環境
+2. 📊 執行完整測試  
+3. 🗑️ 清理測試環境
+
+🔧 前置條件：
+• 確保系統狀態為「✅ 系統已就緒」
+• 如顯示「⚠️ 系統需要初始化」，請先執行「🚀 一鍵完整設定」
+
+📋 測試內容：
+執行完整測試將自動檢查：
+• 檢查全體進度（3位測試老師）
+• 生成進度報告（Excel檔案）
+• 執行系統備份
+• 檢查檔案完整性
+
+📊 成功標準：
+• 測試通過率 ≥ 75% = 優秀
+• 測試通過率 ≥ 50% = 良好
+• 測試通過率 < 50% = 需要修復
+
+🆘 遇到問題？
+1. 使用「🔧 高級選項」中的調試工具
+2. 重新執行「🚀 一鍵完整設定」
+3. 檢查網路連線和頁面重新整理
+
+💡 小提示：
+• 測試環境獨立運行，不影響正式資料
+• 完整測試約需2-3分鐘
+• 建議每次更新後都執行一次測試
+            `;
+            
+            alert(guideContent);
+        }
+
+        // 顯示測試結果
+        function displayTestResults(result) {
+            const content = document.getElementById('testResultContent');
+            
+            let html = '<div style="color: #28a745; margin-bottom: 20px;">';
+            html += '<h3>✅ 測試環境建立成功！</h3>';
+            html += '</div>';
+            
+            if (result.steps && result.steps.length > 0) {
+                html += '<div style="margin-bottom: 20px;">';
+                html += '<h4>📋 執行步驟：</h4>';
+                html += '<ul style="padding-left: 20px;">';
+                result.steps.forEach(step => {
+                    html += `<li style="margin-bottom: 5px;">${step}</li>`;
+                });
+                html += '</ul>';
+                html += '</div>';
+            }
+            
+            if (result.healthReport) {
+                html += '<div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">';
+                html += '<h4>📊 系統健康度：</h4>';
+                html += `<div style="font-size: 1.2em; color: #28a745;">`;
+                html += `${result.healthReport.overallHealth}% (${result.healthReport.systemStatus})`;
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            if (result.testFolderUrl) {
+                html += '<div style="margin-top: 20px;">';
+                html += '<h4>📁 測試資料夾：</h4>';
+                html += `<a href="${result.testFolderUrl}" target="_blank" style="color: #007bff; text-decoration: underline;">`;
+                html += '點擊開啟測試資料夾';
+                html += '</a>';
+                html += '</div>';
+            }
+            
+            html += '<div style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">';
+            html += '<h4>🎯 下一步：</h4>';
+            html += '<ol style="padding-left: 20px; line-height: 1.6;">';
+            html += '<li>檢查測試資料夾結構</li>';
+            html += '<li>驗證學生總表資料（15名學生）</li>';
+            html += '<li>測試老師記錄簿功能（3位老師）</li>';
+            html += '<li>執行進度檢查功能</li>';
+            html += '</ol>';
+            html += '</div>';
+            
+            content.innerHTML = html;
+            document.getElementById('testResultModal').style.display = 'block';
+        }
+
+        // 顯示測試狀態
+        function displayTestStatus(result) {
+            const content = document.getElementById('testStatusContent');
+            
+            let html = '';
+            
+            if (result.exists) {
+                html += '<div style="color: #28a745; margin-bottom: 20px;">';
+                html += '<h3>✅ 測試環境已存在</h3>';
+                html += '</div>';
+                
+                html += '<div style="margin-bottom: 20px;">';
+                html += '<h4>📊 環境資訊：</h4>';
+                html += '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">';
+                if (result.location) {
+                    html += `<p><strong>位置：</strong> ${result.location}</p>`;
+                }
+                html += `<p><strong>子資料夾數量：</strong> ${result.subFolderCount}</p>`;
+                html += `<p><strong>檔案數量：</strong> ${result.fileCount}</p>`;
+                html += `<p><strong>建立時間：</strong> ${new Date(result.createdDate).toLocaleString()}</p>`;
+                html += '</div>';
+                html += '</div>';
+                
+                // 根據位置顯示不同的提示
+                if (result.location === '根目錄') {
+                    html += '<div style="margin-bottom: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; border-left: 4px solid #ffc107;">';
+                    html += '<h4 style="color: #856404;">⚠️ 注意</h4>';
+                    html += '<p style="color: #856404; margin: 0;">測試環境位於根目錄中。建議清理後重新建立，新的測試環境將位於主資料夾內以便統一管理。</p>';
+                    html += '</div>';
+                }
+                
+                if (result.testFolderUrl) {
+                    html += '<div style="margin-bottom: 20px;">';
+                    html += '<h4>📁 測試資料夾：</h4>';
+                    html += `<a href="${result.testFolderUrl}" target="_blank" style="color: #007bff; text-decoration: underline;">`;
+                    html += '點擊開啟測試資料夾';
+                    html += '</a>';
+                    html += '</div>';
+                }
+                
+                html += '<div style="margin-top: 20px; padding: 15px; background: #e8f5e8; border-radius: 8px;">';
+                html += '<h4>💡 建議操作：</h4>';
+                html += '<ul style="padding-left: 20px; line-height: 1.6;">';
+                html += '<li>檢查測試資料完整性</li>';
+                html += '<li>執行功能測試</li>';
+                html += '<li>完成後清理測試環境</li>';
+                if (result.location === '根目錄') {
+                    html += '<li style="color: #d93025;"><strong>建議：清理舊測試環境，重新建立在主資料夾內</strong></li>';
+                }
+                html += '</ul>';
+                html += '</div>';
+                
+            } else {
+                html += '<div style="color: #6c757d; margin-bottom: 20px;">';
+                html += '<h3>ℹ️ 測試環境不存在</h3>';
+                html += '</div>';
+                
+                html += '<div style="margin-bottom: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px;">';
+                html += '<h4>🚀 建議操作：</h4>';
+                html += '<p>點擊「建立測試環境」來在主資料夾內建立完整的測試環境，包含：</p>';
+                html += '<ul style="padding-left: 20px; line-height: 1.6;">';
+                html += '<li>測試資料夾結構（位於主資料夾內）</li>';
+                html += '<li>15 名測試學生資料</li>';
+                html += '<li>3 位測試老師記錄簿</li>';
+                html += '<li>模擬電聯記錄</li>';
+                html += '</ul>';
+                html += '</div>';
+            }
+            
+            content.innerHTML = html;
+            document.getElementById('testStatusModal').style.display = 'block';
+        }
+
+        // 模態框控制函數
+        function closeTestResultModal() {
+            document.getElementById('testResultModal').style.display = 'none';
+        }
+
+        function closeTestStatusModal() {
+            document.getElementById('testStatusModal').style.display = 'none';
+        }
+
         // 更新統計資料
         function updateStats() {
             google.script.run
@@ -663,13 +1526,15 @@
                         document.getElementById('teacherCount').textContent = stats.teacherCount;
                         document.getElementById('studentCount').textContent = stats.studentCount;
                         document.getElementById('contactCount').textContent = stats.contactCount;
-                        document.getElementById('monthlyProgress').textContent = stats.monthlyProgress;
+                        document.getElementById('semesterProgress').textContent = stats.currentTermProgress + '%';
+                        document.getElementById('semesterProgressLabel').textContent = `${stats.currentSemester} ${stats.currentTerm}進度`;
                     } else {
                         // 使用預設值
                         document.getElementById('teacherCount').textContent = '0';
                         document.getElementById('studentCount').textContent = '0';
                         document.getElementById('contactCount').textContent = '0';
-                        document.getElementById('monthlyProgress').textContent = '0%';
+                        document.getElementById('semesterProgress').textContent = '0%';
+                        document.getElementById('semesterProgressLabel').textContent = '學期進度';
                     }
                 })
                 .withFailureHandler(function(error) {
@@ -677,7 +1542,8 @@
                     document.getElementById('teacherCount').textContent = '0';
                     document.getElementById('studentCount').textContent = '0';
                     document.getElementById('contactCount').textContent = '0';
-                    document.getElementById('monthlyProgress').textContent = '0%';
+                    document.getElementById('semesterProgress').textContent = '0%';
+                    document.getElementById('semesterProgressLabel').textContent = '學期進度';
                 })
                 .getSystemStatsWeb();
         }

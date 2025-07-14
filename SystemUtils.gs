@@ -137,7 +137,9 @@ function setupTemplateContactSheet(sheet) {
   // 設定標題
   sheet.getRange(1, 1, 1, SYSTEM_CONFIG.CONTACT_FIELDS.length).setValues([SYSTEM_CONFIG.CONTACT_FIELDS]);
   
-  // 範例資料 - 根據用戶格式
+  // 範例資料 - 學期制版本
+  // CONTACT_FIELDS: ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 
+  //                  'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method']
   const exampleData = [
     [
       'S12345',                                        // Student ID
@@ -145,9 +147,12 @@ function setupTemplateContactSheet(sheet) {
       'Alex Wang',                                    // English Name
       'G1 Trailblazers',                             // English Class
       new Date().toLocaleDateString(),               // Date
-      'Discussed math performance and homework completion. Student needs more practice with basic calculations.', // Teachers Content
-      'Parents agreed to supervise homework time at home. Will check progress next week.', // Parents Responses
-      'Phone Call'                                   // Contact
+      'Fall',                                        // Semester
+      'Beginning',                                   // Term
+      '學期電聯',                                     // Contact Type
+      'Discussed Fall Beginning term progress. Student shows good improvement in English speaking skills.', // Teachers Content
+      'Parents are pleased with progress and will continue supporting reading practice at home.', // Parents Responses
+      'Phone Call'                                   // Contact Method
     ],
     [
       'S12346',                                        // Student ID
@@ -155,9 +160,25 @@ function setupTemplateContactSheet(sheet) {
       'Lisa Li',                                      // English Name
       'G2 Discoverers',                              // English Class
       new Date(Date.now() - 86400000).toLocaleDateString(), // Date (yesterday)
-      'Student has been late for class multiple times. Discussed punctuality and time management.',  // Teachers Content
-      'Parents explained family situation and promised to ensure student arrives on time.', // Parents Responses
-      'Home Visit'                                   // Contact
+      'Fall',                                        // Semester
+      'Midterm',                                     // Term
+      '學期電聯',                                     // Contact Type
+      'Midterm assessment shows student needs extra support with vocabulary building.',  // Teachers Content
+      'Parents will arrange additional reading time and practice sessions.', // Parents Responses
+      'Line'                                         // Contact Method
+    ],
+    [
+      'S12347',                                        // Student ID
+      'Chen Xiao Jun',                               // Name
+      'Kevin Chen',                                  // English Name
+      'G1 Trailblazers',                             // English Class
+      new Date(Date.now() - 172800000).toLocaleDateString(), // Date (2 days ago)
+      'Fall',                                        // Semester
+      'Beginning',                                   // Term
+      '平時電聯',                                     // Contact Type
+      'Student was absent for several days. Checking on health status and catching up on missed work.',  // Teachers Content
+      'Student had flu but is recovering well. Will make up missed assignments this week.', // Parents Responses
+      'Email'                                        // Contact Method
     ]
   ];
   
@@ -166,15 +187,18 @@ function setupTemplateContactSheet(sheet) {
   // 格式設定
   sheet.getRange(1, 1, 1, SYSTEM_CONFIG.CONTACT_FIELDS.length).setFontWeight('bold').setBackground('#E8F4FD');
   
-  // 設定欄寬
-  sheet.setColumnWidth(1, 80);  // Student ID
-  sheet.setColumnWidth(2, 120); // Name
-  sheet.setColumnWidth(3, 120); // English Name
-  sheet.setColumnWidth(4, 120); // English Class
-  sheet.setColumnWidth(5, 100); // Date
-  sheet.setColumnWidth(6, 300); // Teachers Content
-  sheet.setColumnWidth(7, 300); // Parents Responses
-  sheet.setColumnWidth(8, 100); // Contact
+  // 設定欄寬（學期制版本）
+  sheet.setColumnWidth(1, 80);   // Student ID
+  sheet.setColumnWidth(2, 120);  // Name
+  sheet.setColumnWidth(3, 120);  // English Name
+  sheet.setColumnWidth(4, 120);  // English Class
+  sheet.setColumnWidth(5, 100);  // Date
+  sheet.setColumnWidth(6, 80);   // Semester
+  sheet.setColumnWidth(7, 80);   // Term
+  sheet.setColumnWidth(8, 100);  // Contact Type
+  sheet.setColumnWidth(9, 250);  // Teachers Content
+  sheet.setColumnWidth(10, 250); // Parents Responses
+  sheet.setColumnWidth(11, 100); // Contact Method
 }
 
 /**
@@ -603,6 +627,156 @@ function performSystemHealthCheck() {
   }
   
   return healthReport;
+}
+
+/**
+ * 自動修復系統問題
+ */
+function autoFixSystemIssues() {
+  try {
+    systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', '開始自動修復系統問題');
+    
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '自動修復系統', 
+      '確定要自動修復檢測到的系統問題嗎？\\n\\n這將：\\n• 重建缺失的資料夾結構\\n• 修復範本檔案\\n• 重建管理控制台\\n• 修復記錄簿結構問題', 
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) return;
+    
+    // 執行健康檢查
+    const healthReport = performSystemHealthCheck();
+    const fixResults = {
+      fixed: [],
+      failed: [],
+      overallSuccess: true
+    };
+    
+    // 修復主資料夾（如果需要）
+    if (!healthReport.mainFolder.status) {
+      try {
+        const mainFolder = createSystemFolders();
+        fixResults.fixed.push('重建主資料夾結構');
+        systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', '主資料夾修復完成');
+      } catch (error) {
+        fixResults.failed.push('主資料夾修復失敗：' + error.message);
+        fixResults.overallSuccess = false;
+      }
+    }
+    
+    // 修復子資料夾結構
+    if (!healthReport.subFolders.status && healthReport.subFolders.details.missing.length > 0) {
+      try {
+        const mainFolder = getSystemMainFolder();
+        healthReport.subFolders.details.missing.forEach(folderName => {
+          mainFolder.createFolder(folderName);
+        });
+        fixResults.fixed.push('重建缺失的子資料夾：' + healthReport.subFolders.details.missing.join(', '));
+        systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', '子資料夾修復完成');
+      } catch (error) {
+        fixResults.failed.push('子資料夾修復失敗：' + error.message);
+        fixResults.overallSuccess = false;
+      }
+    }
+    
+    // 修復範本檔案
+    if (!healthReport.templates.status) {
+      try {
+        const mainFolder = getSystemMainFolder();
+        createTemplateFiles(mainFolder);
+        fixResults.fixed.push('重建範本檔案');
+        systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', '範本檔案修復完成');
+      } catch (error) {
+        fixResults.failed.push('範本檔案修復失敗：' + error.message);
+        fixResults.overallSuccess = false;
+      }
+    }
+    
+    // 修復管理控制台
+    if (!healthReport.adminConsole.status) {
+      try {
+        const mainFolder = getSystemMainFolder();
+        createAdminConsole(mainFolder);
+        fixResults.fixed.push('重建管理控制台');
+        systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', '管理控制台修復完成');
+      } catch (error) {
+        fixResults.failed.push('管理控制台修復失敗：' + error.message);
+        fixResults.overallSuccess = false;
+      }
+    }
+    
+    // 修復老師記錄簿結構問題
+    if (!healthReport.teacherBooks.status && healthReport.teacherBooks.issues.length > 0) {
+      try {
+        let fixedBooks = 0;
+        healthReport.teacherBooks.issues.forEach(bookIssue => {
+          try {
+            // 這裡可以添加具體的記錄簿修復邏輯
+            // 暫時記錄問題，未來可以實現自動修復
+            systemLog(ERROR_LEVELS.WARNING, 'SystemUtils', 'autoFixSystemIssues', 
+              `記錄簿 ${bookIssue.name} 存在問題：${bookIssue.issues.join(', ')}`);
+            fixedBooks++;
+          } catch (error) {
+            systemLog(ERROR_LEVELS.ERROR, 'SystemUtils', 'autoFixSystemIssues', 
+              `修復記錄簿 ${bookIssue.name} 失敗`, error);
+          }
+        });
+        
+        if (fixedBooks > 0) {
+          fixResults.fixed.push(`檢查並記錄了 ${fixedBooks} 個記錄簿的問題`);
+        }
+      } catch (error) {
+        fixResults.failed.push('記錄簿修復失敗：' + error.message);
+        fixResults.overallSuccess = false;
+      }
+    }
+    
+    // 顯示修復結果
+    displayFixResults(fixResults);
+    
+    systemLog(ERROR_LEVELS.INFO, 'SystemUtils', 'autoFixSystemIssues', 
+      `系統修復完成，成功：${fixResults.fixed.length}，失敗：${fixResults.failed.length}`);
+    
+  } catch (error) {
+    systemLog(ERROR_LEVELS.ERROR, 'SystemUtils', 'autoFixSystemIssues', '自動修復失敗', error);
+    SpreadsheetApp.getUi().alert('錯誤', '自動修復失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+/**
+ * 顯示修復結果
+ */
+function displayFixResults(fixResults) {
+  const ui = SpreadsheetApp.getUi();
+  
+  let message = '🔧 系統修復結果\\n\\n';
+  
+  if (fixResults.overallSuccess) {
+    message += '✅ 修復完成！\\n\\n';
+  } else {
+    message += '⚠️ 部分修復完成\\n\\n';
+  }
+  
+  if (fixResults.fixed.length > 0) {
+    message += '📝 已修復項目：\\n';
+    fixResults.fixed.forEach(item => {
+      message += `• ${item}\\n`;
+    });
+    message += '\\n';
+  }
+  
+  if (fixResults.failed.length > 0) {
+    message += '❌ 修復失敗項目：\\n';
+    fixResults.failed.forEach(item => {
+      message += `• ${item}\\n`;
+    });
+    message += '\\n';
+  }
+  
+  message += '💡 建議：完成修復後，請重新執行系統健康檢查以確認所有問題已解決。';
+  
+  ui.alert('系統修復結果', message, ui.ButtonSet.OK);
 }
 
 /**

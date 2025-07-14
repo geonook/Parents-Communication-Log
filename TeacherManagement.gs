@@ -307,32 +307,123 @@ function createProgressSheet(recordBook, teacherInfo) {
   const sheet = recordBook.insertSheet(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
   
   // 設定標題
-  sheet.getRange('A1').setValue('電聯進度追蹤');
+  sheet.getRange('A1').setValue('電聯進度追蹤 (學期制)');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
   
-  // 月度統計表
-  const monthlyHeaders = ['月份', '目標電聯次數', '實際電聯次數', '達成率', '狀態'];
-  sheet.getRange(3, 1, 1, monthlyHeaders.length).setValues([monthlyHeaders]);
+  // 說明文字
+  sheet.getRange('A2').setValue('追蹤每個學期term的學期電聯完成情況');
+  sheet.getRange('A2').setFontStyle('italic').setFontColor('#666666');
   
-  // 建立12個月的統計
-  const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-  months.forEach((month, index) => {
-    const row = 4 + index;
-    sheet.getRange(row, 1).setValue(month);
-    sheet.getRange(row, 2).setValue(SYSTEM_CONFIG.PROGRESS_CHECK.MIN_CONTACTS_PER_MONTH);
-    // 實際次數和達成率將通過公式計算
+  // 學期制統計表
+  const semesterHeaders = ['學期', 'Term', '學生總數', '已完成電聯', '完成率', '狀態', '備註'];
+  sheet.getRange(4, 1, 1, semesterHeaders.length).setValues([semesterHeaders]);
+  
+  // 建立學期和term的組合
+  const semesterTerms = [];
+  SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.forEach(semester => {
+    SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.forEach(term => {
+      semesterTerms.push({ semester, term });
+    });
   });
   
+  // 填入學期term組合
+  semesterTerms.forEach((st, index) => {
+    const row = 5 + index;
+    sheet.getRange(row, 1).setValue(st.semester);
+    sheet.getRange(row, 2).setValue(st.term);
+    sheet.getRange(row, 3).setValue(teacherInfo.studentCount || 0); // 學生總數
+    sheet.getRange(row, 4).setValue(0); // 已完成電聯（將通過公式計算）
+    sheet.getRange(row, 5).setValue('0%'); // 完成率（將通過公式計算）
+    sheet.getRange(row, 6).setValue('待開始'); // 狀態
+    
+    // 如果是當前學期term，特別標示
+    if (st.semester === SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER && 
+        st.term === SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM) {
+      sheet.getRange(row, 7).setValue('← 當前Term');
+      sheet.getRange(row, 1, 1, 7).setBackground('#FFF3E0'); // 淺橙色背景
+    }
+  });
+  
+  // 新增學年總結區域
+  const summaryStartRow = 5 + semesterTerms.length + 2;
+  sheet.getRange(summaryStartRow, 1).setValue('學年總結');
+  sheet.getRange(summaryStartRow, 1).setFontSize(14).setFontWeight('bold');
+  
+  const summaryHeaders = ['項目', '數值'];
+  sheet.getRange(summaryStartRow + 1, 1, 1, summaryHeaders.length).setValues([summaryHeaders]);
+  
+  const summaryData = [
+    ['總學生數', teacherInfo.studentCount || 0],
+    ['授課班級', teacherInfo.classes.join(', ')],
+    ['學期電聯總次數', '=SUMIF(電聯記錄.H:H,"學期電聯",電聯記錄.H:H)'],
+    ['平均每學期完成率', '待計算']
+  ];
+  
+  sheet.getRange(summaryStartRow + 2, 1, summaryData.length, 2).setValues(summaryData);
+  
   // 格式設定
-  sheet.getRange(3, 1, 1, monthlyHeaders.length).setFontWeight('bold').setBackground('#E8F4FD');
-  sheet.autoResizeColumns(1, monthlyHeaders.length);
+  sheet.getRange(4, 1, 1, semesterHeaders.length).setFontWeight('bold').setBackground('#E8F4FD');
+  sheet.getRange(summaryStartRow + 1, 1, 1, summaryHeaders.length).setFontWeight('bold').setBackground('#E8F5E8');
+  sheet.autoResizeColumns(1, Math.max(semesterHeaders.length, summaryHeaders.length));
+  
+  // 設定條件式格式
+  setupProgressSheetConditionalFormatting(sheet, 5, 5 + semesterTerms.length - 1);
+}
+
+/**
+ * 設定進度追蹤工作表的條件式格式
+ */
+function setupProgressSheetConditionalFormatting(sheet, startRow, endRow) {
+  // 狀態欄位的條件式格式（第6欄）
+  const statusRange = sheet.getRange(startRow, 6, endRow - startRow + 1, 1);
+  
+  // 已完成 - 綠色
+  const completedRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('已完成')
+    .setBackground('#D4EDDA')
+    .setFontColor('#155724')
+    .setRanges([statusRange])
+    .build();
+  
+  // 進行中 - 黃色
+  const inProgressRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('進行中')
+    .setBackground('#FFF3CD')
+    .setFontColor('#856404')
+    .setRanges([statusRange])
+    .build();
+  
+  // 待開始 - 灰色
+  const pendingRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('待開始')
+    .setBackground('#E2E3E5')
+    .setFontColor('#6C757D')
+    .setRanges([statusRange])
+    .build();
+  
+  // 完成率欄位的條件式格式（第5欄）
+  const progressRange = sheet.getRange(startRow, 5, endRow - startRow + 1, 1);
+  
+  // 100% - 深綠色
+  const perfectRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('100%')
+    .setBackground('#28A745')
+    .setFontColor('white')
+    .setRanges([progressRange])
+    .build();
+  
+  sheet.setConditionalFormatRules([completedRule, inProgressRule, pendingRule, perfectRule]);
 }
 
 /**
  * 設定電聯記錄的資料驗證
  */
 function setupContactLogValidations(sheet, teacherInfo) {
-  // English Class 英語班級下拉選單 (第4欄) - 使用英語班級而非原班級
+  // 學期制版本 - 新的11欄位格式
+  // CONTACT_FIELDS: ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 
+  //                  'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method']
+  
+  // English Class 英語班級下拉選單 (第4欄)
   const englishClassRange = sheet.getRange('D2:D1000');
   const englishClassValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(teacherInfo.classes)
@@ -341,15 +432,6 @@ function setupContactLogValidations(sheet, teacherInfo) {
     .build();
   englishClassRange.setDataValidation(englishClassValidation);
   
-  // Contact 聯絡方式下拉選單 (第8欄)
-  const contactMethods = ['Phone Call', 'SMS', 'Line', 'Email', 'Home Visit', 'In Person', 'Other'];
-  const contactRange = sheet.getRange('H2:H1000');
-  const contactValidation = SpreadsheetApp.newDataValidation()
-    .requireValueInList(contactMethods)
-    .setAllowInvalid(false)
-    .build();
-  contactRange.setDataValidation(contactValidation);
-  
   // Date 日期格式驗證 (第5欄)
   const dateRange = sheet.getRange('E2:E1000');
   const dateValidation = SpreadsheetApp.newDataValidation()
@@ -357,6 +439,47 @@ function setupContactLogValidations(sheet, teacherInfo) {
     .setAllowInvalid(false)
     .build();
   dateRange.setDataValidation(dateValidation);
+  
+  // Semester 學期下拉選單 (第6欄)
+  const semesterRange = sheet.getRange('F2:F1000');
+  const semesterValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS)
+    .setAllowInvalid(false)
+    .setHelpText('請選擇學期 (Fall/Spring)')
+    .build();
+  semesterRange.setDataValidation(semesterValidation);
+  
+  // Term 學期階段下拉選單 (第7欄)
+  const termRange = sheet.getRange('G2:G1000');
+  const termValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS)
+    .setAllowInvalid(false)
+    .setHelpText('請選擇學期階段 (Beginning/Midterm/Final)')
+    .build();
+  termRange.setDataValidation(termValidation);
+  
+  // Contact Type 電聯類型下拉選單 (第8欄)
+  const contactTypeRange = sheet.getRange('H2:H1000');
+  const contactTypeOptions = [
+    SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,
+    SYSTEM_CONFIG.CONTACT_TYPES.REGULAR,
+    SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL
+  ];
+  const contactTypeValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(contactTypeOptions)
+    .setAllowInvalid(false)
+    .setHelpText('請選擇電聯類型')
+    .build();
+  contactTypeRange.setDataValidation(contactTypeValidation);
+  
+  // Contact Method 聯絡方式下拉選單 (第11欄) - 使用新的系統設定
+  const contactMethodRange = sheet.getRange('K2:K1000');
+  const contactMethodValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(SYSTEM_CONFIG.CONTACT_METHODS)
+    .setAllowInvalid(false)
+    .setHelpText('請選擇聯絡方式')
+    .build();
+  contactMethodRange.setDataValidation(contactMethodValidation);
   
   // Student ID 從學生清單自動填入 (可選功能)
   // Name 從學生清單自動填入 (可選功能)
@@ -367,38 +490,67 @@ function setupContactLogValidations(sheet, teacherInfo) {
  * 設定電聯記錄的條件式格式
  */
 function setupContactLogConditionalFormatting(sheet) {
-  // Contact 欄位的條件式格式 (第8欄)
-  const contactRange = sheet.getRange('H2:H1000');
+  // 學期制版本 - 更新條件式格式
   
-  // Phone Call - 藍色
+  // Contact Type 電聯類型的條件式格式 (第8欄)
+  const contactTypeRange = sheet.getRange('H2:H1000');
+  
+  // 學期電聯 - 綠色（重要）
+  const semesterContactRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo(SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER)
+    .setBackground('#D4EDDA')
+    .setRanges([contactTypeRange])
+    .build();
+  
+  // 平時電聯 - 藍色
+  const regularContactRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo(SYSTEM_CONFIG.CONTACT_TYPES.REGULAR)
+    .setBackground('#D1ECF1')
+    .setRanges([contactTypeRange])
+    .build();
+  
+  // 特殊狀況電聯 - 黃色
+  const specialContactRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo(SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL)
+    .setBackground('#FFF3CD')
+    .setRanges([contactTypeRange])
+    .build();
+  
+  // Contact Method 聯絡方式的條件式格式 (第11欄)
+  const contactMethodRange = sheet.getRange('K2:K1000');
+  
+  // Phone Call - 淺藍色
   const phoneRule = SpreadsheetApp.newConditionalFormatRule()
     .whenTextEqualTo('Phone Call')
-    .setBackground('#D1ECF1')
-    .setRanges([contactRange])
+    .setBackground('#E3F2FD')
+    .setRanges([contactMethodRange])
     .build();
   
-  // Home Visit - 綠色
-  const visitRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo('Home Visit')
-    .setBackground('#D4EDDA')
-    .setRanges([contactRange])
+  // Line - 淺綠色
+  const lineRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo('Line')
+    .setBackground('#E8F5E8')
+    .setRanges([contactMethodRange])
     .build();
   
-  // Email - 黃色
+  // Email - 淺橙色
   const emailRule = SpreadsheetApp.newConditionalFormatRule()
     .whenTextEqualTo('Email')
-    .setBackground('#FFF3CD')
-    .setRanges([contactRange])
+    .setBackground('#FFF3E0')
+    .setRanges([contactMethodRange])
     .build();
   
-  // 設定 Teachers Content 和 Parents Responses 欄位的文字換行
-  const teachersContentRange = sheet.getRange('F2:F1000');
-  const parentsResponseRange = sheet.getRange('G2:G1000');
+  // 設定 Teachers Content 和 Parents Responses 欄位的文字換行（第9、10欄）
+  const teachersContentRange = sheet.getRange('I2:I1000');
+  const parentsResponseRange = sheet.getRange('J2:J1000');
   
   teachersContentRange.setWrap(true);
   parentsResponseRange.setWrap(true);
   
-  sheet.setConditionalFormatRules([phoneRule, visitRule, emailRule]);
+  sheet.setConditionalFormatRules([
+    semesterContactRule, regularContactRule, specialContactRule,
+    phoneRule, lineRule, emailRule
+  ]);
 }
 
 /**
