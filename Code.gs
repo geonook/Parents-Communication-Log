@@ -87,6 +87,8 @@ function onOpen() {
     .addSubMenu(ui.createMenu('👥 學生資料管理')
       .addItem('📥 匯入學生資料', 'importStudentData')
       .addItem('📤 匯出學生資料', 'exportStudentData')
+      .addSeparator()
+      .addItem('🤖 預建學期電聯記錄', 'prebuildAcademicContactRecords')
       .addItem('➕ 快速新增電聯記錄', 'createContactFromStudentList'))
     .addSeparator()
     .addItem('📊 檢查全體進度', 'checkAllProgress')

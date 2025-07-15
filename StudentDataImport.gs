@@ -676,4 +676,20 @@ function importStudentsForTeacher(recordBook, teacherInfo, masterData) {
   
   // 重新設定資料驗證
   reapplyDataValidation(studentListSheet, recordBook);
+  
+  // 詢問是否預建Academic Contact記錄
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    '自動預建電聯記錄',
+    `已成功匯入 ${studentData.length} 位學生資料到 ${teacherInfo.name} 老師的記錄簿\n\n是否要自動為所有學生預建Academic Contact記錄？\n• 每位學生建立完整學年6筆記錄\n• 減少老師手動建立工作`,
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response === ui.Button.YES) {
+    // 執行預建
+    const allStudentData = studentListSheet.getDataRange().getValues();
+    const result = performPrebuildAcademicContacts(recordBook, allStudentData);
+    
+    Logger.log(`為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Academic Contact記錄`);
+  }
 } 

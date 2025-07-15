@@ -313,6 +313,9 @@ function createContactLogSheet(recordBook, teacherInfo) {
   
   // 設定條件式格式（狀態欄位）
   setupContactLogConditionalFormatting(sheet);
+  
+  // 新增說明註解
+  sheet.getRange('A2').setNote('💡 提示：學生資料匯入後，請使用「預建學期電聯記錄」功能自動為所有學生建立Academic Contact記錄');
 }
 
 /**
@@ -632,4 +635,135 @@ function getSystemMainFolder() {
   }
   
   throw new Error('系統資料夾不存在，請先執行系統初始化');
+}
+
+/**
+ * 為所有學生預建Academic Contact電聯記錄
+ * 此函數應在學生資料匯入後呼叫
+ */
+function prebuildAcademicContactRecords() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const currentSheet = SpreadsheetApp.getActiveSheet();
+    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 檢查是否在老師記錄簿中
+    const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      ui.alert('錯誤', '請在老師記錄簿中執行此功能', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取學生清單
+    const studentListSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    if (!studentListSheet) {
+      ui.alert('錯誤', '找不到學生清單工作表', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const studentData = studentListSheet.getDataRange().getValues();
+    if (studentData.length < 2) {
+      ui.alert('提醒', '學生清單中沒有資料，請先匯入學生資料', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 確認操作
+    const response = ui.alert(
+      '預建Academic Contact記錄',
+      `將為 ${studentData.length - 1} 位學生建立完整學年的Academic Contact記錄\n\n每位學生建立：\n• Fall Beginning/Midterm/Final\n• Spring Beginning/Midterm/Final\n共 ${(studentData.length - 1) * 6} 筆記錄\n\n確定要繼續嗎？`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) return;
+    
+    // 執行預建
+    const result = performPrebuildAcademicContacts(recordBook, studentData);
+    
+    ui.alert(
+      '預建完成！',
+      `成功為 ${result.studentCount} 位學生預建 ${result.recordCount} 筆Academic Contact記錄\n\n請在電聯記錄工作表中查看，並填寫Teachers Content、Parents Responses和Contact Method欄位`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    Logger.log('預建Academic Contact記錄失敗：' + error.toString());
+    SpreadsheetApp.getUi().alert('錯誤', '預建失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+  }
+}
+
+/**
+ * 執行Academic Contact記錄預建
+ */
+function performPrebuildAcademicContacts(recordBook, studentData) {
+  const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+  
+  if (!contactLogSheet) {
+    throw new Error('找不到電聯記錄工作表');
+  }
+  
+  // 跳過標題列，獲取學生資料
+  const students = studentData.slice(1);
+  const prebuiltRecords = [];
+  
+  // 為每位學生建立6筆Academic Contact記錄
+  students.forEach(student => {
+    const studentId = student[0];       // ID
+    const chineseName = student[4];     // Chinese Name  
+    const englishName = student[5];     // English Name
+    const englishClass = student[9];    // English Class (第10欄)
+    
+    // 檢查必要欄位
+    if (!studentId || !chineseName || !englishClass) {
+      Logger.log(`跳過不完整的學生資料：${chineseName || '未知'}`);
+      return;
+    }
+    
+    // 為每個學期和term建立記錄
+    SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.forEach(semester => {
+      SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.forEach(term => {
+        const record = [
+          studentId,                                    // Student ID
+          chineseName,                                  // Name
+          englishName || '',                           // English Name
+          englishClass,                                // English Class
+          '',                                          // Date (空白，由老師填寫)
+          semester,                                    // Semester
+          term,                                        // Term
+          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // Contact Type (Academic Contact)
+          '',                                          // Teachers Content (空白，由老師填寫)
+          '',                                          // Parents Responses (空白，由老師填寫)
+          ''                                           // Contact Method (空白，由老師填寫)
+        ];
+        prebuiltRecords.push(record);
+      });
+    });
+  });
+  
+  // 寫入預建記錄
+  if (prebuiltRecords.length > 0) {
+    const startRow = contactLogSheet.getLastRow() + 1;
+    contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length)
+      .setValues(prebuiltRecords);
+    
+    // 為預建記錄設定特殊格式
+    const prebuiltRange = contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length);
+    prebuiltRange.setBackground('#F8F9FA'); // 淺灰背景
+    prebuiltRange.setNote('🤖 系統預建的Academic Contact記錄 - 請填寫Date、Teachers Content、Parents Responses和Contact Method欄位');
+    
+    // 高亮需要填寫的欄位
+    const dateRange = contactLogSheet.getRange(startRow, 5, prebuiltRecords.length, 1); // Date欄
+    const teachersContentRange = contactLogSheet.getRange(startRow, 9, prebuiltRecords.length, 1); // Teachers Content欄
+    const parentsResponseRange = contactLogSheet.getRange(startRow, 10, prebuiltRecords.length, 1); // Parents Responses欄
+    const contactMethodRange = contactLogSheet.getRange(startRow, 11, prebuiltRecords.length, 1); // Contact Method欄
+    
+    dateRange.setBackground('#FFEBEE'); // 淺紅背景提醒待填寫
+    teachersContentRange.setBackground('#FFEBEE');
+    parentsResponseRange.setBackground('#FFEBEE');
+    contactMethodRange.setBackground('#FFEBEE');
+  }
+  
+  return {
+    studentCount: students.length,
+    recordCount: prebuiltRecords.length
+  };
 } 
