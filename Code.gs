@@ -98,6 +98,8 @@ function onOpen() {
       .addItem('⚙️ 系統設定', 'showSystemSettings')
       .addItem('📁 主資料夾資訊', 'showMainFolderInfo')
       .addSeparator()
+      .addItem('📅 學年管理', 'showAcademicYearManagement')
+      .addSeparator()
       .addItem('🔄 設定自動化', 'setupAutomationTriggers')
       .addItem('💾 手動備份', 'autoBackup')
       .addItem('🔍 檢查檔案完整性', 'checkFileIntegrity')
