@@ -507,6 +507,7 @@ function setupMasterListContent(masterListSheet) {
       const testData = generateTestStudentData();
       sheet.getRange(4, 1, testData.length, testData[0].length).setValues(testData);
       sheet.getRange(4, 1, testData.length, testData[0].length).setBackground('#FFFBEE').setNote('測試資料 - 可刪除');
+      Logger.log('使用者選擇生成測試資料：20筆');
     } else {
       // 只新增一筆範例資料
       const sampleData = [[
@@ -514,18 +515,19 @@ function setupMasterListContent(masterListSheet) {
       ]];
       sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
       sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
+      Logger.log('使用者選擇只添加範例資料：1筆');
     }
   } catch (uiError) {
-    // 如果UI調用失敗（如在Web環境中），記錄到日誌但不影響主要功能
-    Logger.log('UI不可用，跳過測試資料生成提示: ' + uiError.toString());
-    Logger.log('Web環境：自動添加範例資料');
+    // 如果UI調用失敗（如在Web環境中），自動生成完整測試資料
+    Logger.log('UI不可用，自動生成測試資料: ' + uiError.toString());
+    Logger.log('Web環境：自動生成完整測試資料集');
     
-    // 在Web環境下默認添加一筆範例資料
-    const sampleData = [[
-      '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
-    ]];
-    sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
-    sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
+    // 在Web環境下自動生成20筆測試資料
+    const testData = generateTestStudentData();
+    sheet.getRange(4, 1, testData.length, testData[0].length).setValues(testData);
+    sheet.getRange(4, 1, testData.length, testData[0].length).setBackground('#FFFBEE').setNote('測試資料 - 可刪除');
+    
+    Logger.log(`Web環境：成功生成 ${testData.length} 筆測試學生資料`);
   }
   
   // 新增說明工作表
