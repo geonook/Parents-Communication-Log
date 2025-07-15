@@ -8,7 +8,7 @@
 const SYSTEM_CONFIG = {
   // 主資料夾設定
   MAIN_FOLDER_NAME: '電聯記錄簿系統',
-  MAIN_FOLDER_ID: '1ksWywUMUfsmHtUq99HdRB34obcAXhKUX', // 指定的 Google Drive 資料夾 ID，如果為空則建立新資料夾
+  MAIN_FOLDER_ID: '', // 指定的 Google Drive 資料夾 ID，如果為空則建立新資料夾
   TEACHERS_FOLDER_NAME: '老師記錄簿',
   TEMPLATES_FOLDER_NAME: '範本檔案',
   
@@ -163,15 +163,17 @@ function createSystemFolders() {
   let mainFolder;
   
   // 檢查是否有指定的資料夾 ID
-  if (SYSTEM_CONFIG.MAIN_FOLDER_ID) {
+  if (SYSTEM_CONFIG.MAIN_FOLDER_ID && SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() !== '') {
     try {
       mainFolder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
       Logger.log(`使用指定的主資料夾：${mainFolder.getName()}`);
     } catch (error) {
-      Logger.log(`無法存取指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}，將建立新資料夾`);
+      Logger.log(`無法存取指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}，錯誤：${error.message}`);
+      Logger.log('將建立新的主資料夾...');
       mainFolder = createNewMainFolder();
     }
   } else {
+    Logger.log('未指定 MAIN_FOLDER_ID，建立新的主資料夾...');
     mainFolder = createNewMainFolder();
   }
   

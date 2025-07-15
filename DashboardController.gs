@@ -762,10 +762,13 @@ function setupCompleteSystemWeb() {
       
       if (initResult.success) {
         setupResults.steps.push('✅ 生產環境初始化完成');
+        Logger.log('Dashboard: 系統初始化成功');
       } else {
+        Logger.log('Dashboard: 系統初始化失敗 - ' + initResult.message);
         throw new Error(initResult.message);
       }
     } catch (error) {
+      Logger.log('Dashboard: 初始化步驟異常 - ' + error.toString());
       setupResults.errors.push('生產環境初始化失敗：' + error.message);
       setupResults.success = false;
     }
@@ -791,9 +794,19 @@ function setupCompleteSystemWeb() {
     
     Logger.log(`Dashboard: 一鍵設定完成，成功: ${setupResults.success}`);
     
+    let finalMessage = setupResults.success ? '完整系統設定成功！' : '部分設定失敗，請檢查錯誤訊息';
+    
+    if (setupResults.errors.length > 0) {
+      finalMessage += '\n\n錯誤詳情：\n' + setupResults.errors.join('\n');
+    }
+    
+    if (setupResults.steps.length > 0) {
+      finalMessage += '\n\n執行步驟：\n' + setupResults.steps.join('\n');
+    }
+    
     return {
       success: setupResults.success,
-      message: setupResults.success ? '完整系統設定成功！' : '部分設定失敗，請檢查錯誤訊息',
+      message: finalMessage,
       setupResults: setupResults
     };
     
