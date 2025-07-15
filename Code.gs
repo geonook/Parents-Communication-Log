@@ -323,12 +323,27 @@ function setupMasterListContent(masterListSheet) {
     sheet.setColumnWidth(index + 1, width);
   });
   
-  // 新增範例資料（第4列）
-  const sampleData = [[
-    '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
-  ]];
-  sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
-  sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
+  // 詢問是否要生成測試資料
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    '測試資料生成',
+    '是否要生成20筆測試學生資料？\n\n• 包含不同年級、班級、老師的組合\n• 便於測試系統功能\n• 可隨時手動刪除',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response === ui.Button.YES) {
+    // 生成20筆測試資料
+    const testData = generateTestStudentData();
+    sheet.getRange(4, 1, testData.length, testData[0].length).setValues(testData);
+    sheet.getRange(4, 1, testData.length, testData[0].length).setBackground('#FFFBEE').setNote('測試資料 - 可刪除');
+  } else {
+    // 只新增一筆範例資料
+    const sampleData = [[
+      '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
+    ]];
+    sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
+    sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
+  }
   
   // 新增說明工作表
   createMasterListInstructionSheet(masterListSheet);
@@ -450,4 +465,40 @@ function showMainFolderInfo() {
     const ui = SpreadsheetApp.getUi();
     ui.alert('錯誤', '無法獲取主資料夾資訊：' + error.message, ui.ButtonSet.OK);
   }
+}
+
+/**
+ * 生成20筆測試學生資料
+ * 包含多樣化的年級、班級、老師組合
+ */
+function generateTestStudentData() {
+  const testStudents = [
+    // 不同年級的學生資料
+    ['T001', 'G1', '701', '1', '測試學生1', 'Alice Chen', 'A1', 'A2', 'Mr. Smith', 'G1 Trailblazers', 'Ms. Chen', '0912-111-111', '0987-111-111'],
+    ['T002', 'G1', '701', '2', '測試學生2', 'Bob Wang', 'A2', 'A1', 'Ms. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-222-222', '0987-222-222'],
+    ['T003', 'G1', '702', '3', '測試學生3', 'Cathy Liu', 'A1', 'A2', 'Mr. Brown', 'G1 Discoverers', 'Mr. Davis', '0912-333-333', '0987-333-333'],
+    ['T004', 'G1', '702', '4', '測試學生4', 'David Zhang', 'A2', 'A1', 'Ms. Wilson', 'G1 Discoverers', 'Mr. Davis', '0912-444-444', '0987-444-444'],
+    
+    ['T005', 'G2', '801', '5', '測試學生5', 'Emily Lin', 'A1', 'A2', 'Mr. Garcia', 'G2 Adventurers', 'Ms. Anderson', '0912-555-555', '0987-555-555'],
+    ['T006', 'G2', '801', '6', '測試學生6', 'Frank Wu', 'A2', 'A1', 'Ms. Martinez', 'G2 Adventurers', 'Ms. Anderson', '0912-666-666', '0987-666-666'],
+    ['T007', 'G2', '802', '7', '測試學生7', 'Grace Huang', 'A1', 'A2', 'Mr. Thompson', 'G2 Innovators', 'Mr. Taylor', '0912-777-777', '0987-777-777'],
+    ['T008', 'G2', '802', '8', '測試學生8', 'Henry Lee', 'A2', 'A1', 'Ms. White', 'G2 Innovators', 'Mr. Taylor', '0912-888-888', '0987-888-888'],
+    
+    ['T009', 'G3', '901', '9', '測試學生9', 'Ivy Chen', 'A1', 'A2', 'Mr. Rodriguez', 'G3 Explorers', 'Ms. Moore', '0912-999-999', '0987-999-999'],
+    ['T010', 'G3', '901', '10', '測試學生10', 'Jack Yang', 'A2', 'A1', 'Ms. Lewis', 'G3 Explorers', 'Ms. Moore', '0912-100-100', '0987-100-100'],
+    ['T011', 'G3', '902', '11', '測試學生11', 'Kelly Tsai', 'A1', 'A2', 'Mr. Clark', 'G3 Navigators', 'Mr. Jackson', '0912-110-110', '0987-110-110'],
+    ['T012', 'G3', '902', '12', '測試學生12', 'Leo Chiu', 'A2', 'A1', 'Ms. Hall', 'G3 Navigators', 'Mr. Jackson', '0912-120-120', '0987-120-120'],
+    
+    ['T013', 'G4', '1001', '13', '測試學生13', 'Mia Wu', 'A1', 'A2', 'Mr. Allen', 'G4 Inventors', 'Ms. King', '0912-130-130', '0987-130-130'],
+    ['T014', 'G4', '1001', '14', '測試學生14', 'Noah Lin', 'A2', 'A1', 'Ms. Scott', 'G4 Inventors', 'Ms. King', '0912-140-140', '0987-140-140'],
+    ['T015', 'G4', '1002', '15', '測試學生15', 'Olivia Chang', 'A1', 'A2', 'Mr. Green', 'G4 Voyagers', 'Mr. Wright', '0912-150-150', '0987-150-150'],
+    ['T016', 'G4', '1002', '16', '測試學生16', 'Peter Hsu', 'A2', 'A1', 'Ms. Adams', 'G4 Voyagers', 'Mr. Wright', '0912-160-160', '0987-160-160'],
+    
+    ['T017', 'G5', '1101', '17', '測試學生17', 'Quinn Liu', 'A1', 'A2', 'Mr. Baker', 'G5 Pioneers', 'Ms. Nelson', '0912-170-170', '0987-170-170'],
+    ['T018', 'G5', '1101', '18', '測試學生18', 'Ruby Wang', 'A2', 'A1', 'Ms. Carter', 'G5 Pioneers', 'Ms. Nelson', '0912-180-180', '0987-180-180'],
+    ['T019', 'G6', '1201', '19', '測試學生19', 'Sam Chen', 'A1', 'A2', 'Mr. Mitchell', 'G6 Guardians', 'Mr. Roberts', '0912-190-190', '0987-190-190'],
+    ['T020', 'G6', '1201', '20', '測試學生20', 'Tina Yeh', 'A2', 'A1', 'Ms. Phillips', 'G6 Guardians', 'Mr. Roberts', '0912-200-200', '0987-200-200']
+  ];
+  
+  return testStudents;
 } 
