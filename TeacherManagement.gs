@@ -259,21 +259,36 @@ function createStudentListSheet(recordBook, teacherInfo) {
   sheet.getRange(1, 1, 1, SYSTEM_CONFIG.STUDENT_FIELDS.length).setFontWeight('bold').setBackground('#E8F4FD');
   sheet.autoResizeColumns(1, SYSTEM_CONFIG.STUDENT_FIELDS.length);
   
-  // English Class 英語班級下拉選單（第10欄）
-  const englishClassRange = sheet.getRange('J2:J1000'); // English Class 是第10欄
-  const englishClassValidation = SpreadsheetApp.newDataValidation()
-    .requireValueInList(teacherInfo.classes)
-    .setAllowInvalid(false)
-    .build();
-  englishClassRange.setDataValidation(englishClassValidation);
-  
-  // Grade 下拉選單（第2欄）
+  // Grade 年級下拉選單（第2欄）- 強化版
   const gradeRange = sheet.getRange('B2:B1000'); 
   const gradeValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.GRADE_LEVELS)  // 使用 G1-G6
     .setAllowInvalid(false)
+    .setHelpText('🎓 請選擇年級：G1-G6')
     .build();
   gradeRange.setDataValidation(gradeValidation);
+  gradeRange.setBackground('#F0F8FF'); // 淺藍背景
+  
+  // English Class 英語班級下拉選單（第10欄）- 強化版
+  const englishClassRange = sheet.getRange('J2:J1000'); // English Class 是第10欄
+  const englishClassValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(teacherInfo.classes)
+    .setAllowInvalid(false)
+    .setHelpText('🎯 重要：請選擇正確的英語授課班級')
+    .build();
+  englishClassRange.setDataValidation(englishClassValidation);
+  englishClassRange.setBackground('#E8F5E8'); // 淺綠背景標示重要性
+  
+  // LT (Language Teacher) 欄位提示（第11欄）
+  const ltRange = sheet.getRange('K2:K1000');
+  ltRange.setNote('👨‍🏫 語言老師姓名 - 用於系統識別授課老師');
+  ltRange.setBackground('#FFF3E0'); // 淺橙背景
+  
+  // 電話欄位格式提示
+  const motherPhoneRange = sheet.getRange('L2:L1000');
+  const fatherPhoneRange = sheet.getRange('M2:M1000');
+  motherPhoneRange.setNote('📞 母親電話，格式：0912-345-678');
+  fatherPhoneRange.setNote('📞 父親電話，格式：0912-345-678');
   
   // 設定保護範圍（標題行）
   const protection = sheet.getRange(1, 1, 1, SYSTEM_CONFIG.STUDENT_FIELDS.length).protect();
@@ -419,71 +434,114 @@ function setupProgressSheetConditionalFormatting(sheet, startRow, endRow) {
  * 設定電聯記錄的資料驗證
  */
 function setupContactLogValidations(sheet, teacherInfo) {
-  // 學期制版本 - 新的11欄位格式
+  // 學期制版本 - 強化的11欄位格式驗證
   // CONTACT_FIELDS: ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 
   //                  'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method']
   
-  // English Class 英語班級下拉選單 (第4欄)
+  // Student ID 學號格式提示 (第1欄)
+  const studentIdRange = sheet.getRange('A2:A1000');
+  studentIdRange.setNote('請輸入學生學號，建議從學生清單選擇以確保資料一致性');
+  
+  // Name 學生姓名提示 (第2欄)
+  const nameRange = sheet.getRange('B2:B1000');
+  nameRange.setNote('請輸入學生中文姓名，建議從學生清單選擇');
+  
+  // English Name 英文姓名提示 (第3欄)
+  const englishNameRange = sheet.getRange('C2:C1000');
+  englishNameRange.setNote('請輸入學生英文姓名，建議從學生清單選擇');
+  
+  // English Class 英語班級下拉選單 (第4欄) - 強化版
   const englishClassRange = sheet.getRange('D2:D1000');
   const englishClassValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(teacherInfo.classes)
     .setAllowInvalid(false)
-    .setHelpText('請選擇英語授課班級')
+    .setHelpText('🎯 必選：請選擇您授課的英語班級')
     .build();
   englishClassRange.setDataValidation(englishClassValidation);
+  englishClassRange.setBackground('#E8F5E8'); // 淺綠背景標示重要欄位
   
-  // Date 日期格式驗證 (第5欄)
+  // Date 日期格式驗證 (第5欄) - 強化版
   const dateRange = sheet.getRange('E2:E1000');
   const dateValidation = SpreadsheetApp.newDataValidation()
     .requireDate()
     .setAllowInvalid(false)
+    .setHelpText('📅 請選擇電聯日期 (點擊日曆圖示)')
     .build();
   dateRange.setDataValidation(dateValidation);
+  dateRange.setNumberFormat('yyyy/mm/dd'); // 統一日期格式
   
-  // Semester 學期下拉選單 (第6欄)
+  // Semester 學期下拉選單 (第6欄) - 強化版
   const semesterRange = sheet.getRange('F2:F1000');
   const semesterValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS)
     .setAllowInvalid(false)
-    .setHelpText('請選擇學期 (Fall/Spring)')
+    .setHelpText('🏫 請選擇學期：Fall (上學期) / Spring (下學期)')
     .build();
   semesterRange.setDataValidation(semesterValidation);
+  semesterRange.setBackground('#FFF3E0'); // 淺橙背景標示重要欄位
   
-  // Term 學期階段下拉選單 (第7欄)
+  // Term 學期階段下拉選單 (第7欄) - 強化版
   const termRange = sheet.getRange('G2:G1000');
   const termValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS)
     .setAllowInvalid(false)
-    .setHelpText('請選擇學期階段 (Beginning/Midterm/Final)')
+    .setHelpText('📊 請選擇時期：Beginning (期初) / Midterm (期中) / Final (期末)')
     .build();
   termRange.setDataValidation(termValidation);
+  termRange.setBackground('#FFF3E0'); // 淺橙背景標示重要欄位
   
-  // Contact Type 電聯類型下拉選單 (第8欄)
+  // Contact Type 電聯類型下拉選單 (第8欄) - 強化版
   const contactTypeRange = sheet.getRange('H2:H1000');
   const contactTypeOptions = [
-    SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,
-    SYSTEM_CONFIG.CONTACT_TYPES.REGULAR,
-    SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL
+    SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,    // Academic Contact
+    SYSTEM_CONFIG.CONTACT_TYPES.REGULAR,     // Regular Contact  
+    SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL      // Special Contact
   ];
   const contactTypeValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(contactTypeOptions)
     .setAllowInvalid(false)
-    .setHelpText('請選擇電聯類型')
+    .setHelpText('📞 電聯類型：Academic(學期電聯) / Regular(平時電聯) / Special(特殊電聯)')
     .build();
   contactTypeRange.setDataValidation(contactTypeValidation);
+  contactTypeRange.setBackground('#E3F2FD'); // 淺藍背景標示重要欄位
   
-  // Contact Method 聯絡方式下拉選單 (第11欄) - 使用新的系統設定
+  // Teachers Content 老師內容欄位設定 (第9欄)
+  const teachersContentRange = sheet.getRange('I2:I1000');
+  teachersContentRange.setWrap(true); // 自動換行
+  teachersContentRange.setVerticalAlignment('top'); // 頂端對齊
+  teachersContentRange.setNote('📝 請詳細記錄與家長的談話內容、學生狀況等重要資訊');
+  
+  // Parents Responses 家長回應欄位設定 (第10欄)
+  const parentsResponseRange = sheet.getRange('J2:J1000');
+  parentsResponseRange.setWrap(true); // 自動換行
+  parentsResponseRange.setVerticalAlignment('top'); // 頂端對齊
+  parentsResponseRange.setNote('💬 請記錄家長的回應、意見、後續配合事項等');
+  
+  // Contact Method 聯絡方式下拉選單 (第11欄) - 強化版
   const contactMethodRange = sheet.getRange('K2:K1000');
   const contactMethodValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.CONTACT_METHODS)
     .setAllowInvalid(false)
-    .setHelpText('請選擇聯絡方式')
+    .setHelpText('📱 聯絡方式：Phone Call (電話) / Line (Line通訊) / Email (電子郵件)')
     .build();
   contactMethodRange.setDataValidation(contactMethodValidation);
+  contactMethodRange.setBackground('#F3E5F5'); // 淺紫背景標示重要欄位
   
-  // Student ID 從學生清單自動填入 (可選功能)
-  // Name 從學生清單自動填入 (可選功能)
-  // English Name 從學生清單自動填入 (可選功能)
+  // 設定欄寬最佳化
+  sheet.setColumnWidth(1, 80);  // Student ID
+  sheet.setColumnWidth(2, 100); // Name
+  sheet.setColumnWidth(3, 120); // English Name
+  sheet.setColumnWidth(4, 140); // English Class
+  sheet.setColumnWidth(5, 100); // Date
+  sheet.setColumnWidth(6, 80);  // Semester
+  sheet.setColumnWidth(7, 90);  // Term
+  sheet.setColumnWidth(8, 120); // Contact Type
+  sheet.setColumnWidth(9, 250); // Teachers Content
+  sheet.setColumnWidth(10, 250);// Parents Responses
+  sheet.setColumnWidth(11, 120);// Contact Method
+  
+  // 凍結標題列
+  sheet.setFrozenRows(1);
 }
 
 /**
