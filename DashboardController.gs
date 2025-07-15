@@ -57,20 +57,35 @@ function createTeachersFromStudentMasterListWeb(masterListId) {
   try {
     Logger.log('Dashboard: 開始從學生總表建立老師記錄簿');
     
-    if (!masterListId || masterListId.trim() === '') {
-      return {
-        success: false,
-        message: '請提供學生總表的 Google Sheets ID'
-      };
-    }
+    let studentMasterData;
     
-    // 獲取學生總表資料
-    const studentMasterData = getStudentMasterListById(masterListId);
-    if (!studentMasterData) {
-      return {
-        success: false,
-        message: '無法獲取學生總表資料，請檢查 ID 是否正確'
-      };
+    // 優先嘗試使用系統學生總表
+    if (!masterListId || masterListId.trim() === '') {
+      Logger.log('Dashboard: 未提供 ID，嘗試使用系統學生總表');
+      const systemMasterList = getSystemMasterList();
+      if (systemMasterList) {
+        studentMasterData = {
+          data: systemMasterList.slice(3), // 跳過前3行（標題、說明、欄位名稱）
+          headers: systemMasterList[2],    // 第3行是標題
+          sheetId: 'system'
+        };
+        Logger.log('Dashboard: 成功使用系統學生總表');
+      } else {
+        return {
+          success: false,
+          message: '找不到系統學生總表，請提供學生總表的 Google Sheets ID 或先初始化系統'
+        };
+      }
+    } else {
+      // 使用用戶提供的 ID
+      Logger.log('Dashboard: 使用用戶提供的學生總表 ID');
+      studentMasterData = getStudentMasterListById(masterListId);
+      if (!studentMasterData) {
+        return {
+          success: false,
+          message: '無法獲取學生總表資料，請檢查 ID 是否正確'
+        };
+      }
     }
     
     // 從學生總表中提取老師資訊

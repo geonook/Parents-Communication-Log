@@ -400,18 +400,43 @@
         <div class="modal-content">
             <span class="close">&times;</span>
             <h2>📋 從學生總表建立老師記錄簿</h2>
+            
+            <!-- 選項選擇 -->
             <div class="form-group">
+                <label>請選擇學生總表來源：</label>
+                <div style="margin: 10px 0;">
+                    <label style="display: block; margin-bottom: 8px;">
+                        <input type="radio" name="masterListSource" value="system" checked style="margin-right: 8px;">
+                        🔥 使用系統學生總表（推薦）
+                    </label>
+                    <small style="color: #666; margin-left: 24px; display: block;">
+                        使用初始化時創建的學生總表，無需輸入 ID
+                    </small>
+                    
+                    <label style="display: block; margin-top: 12px;">
+                        <input type="radio" name="masterListSource" value="custom" style="margin-right: 8px;">
+                        📋 使用自訂學生總表
+                    </label>
+                    <small style="color: #666; margin-left: 24px; display: block;">
+                        使用其他 Google Sheets 檔案作為學生總表
+                    </small>
+                </div>
+            </div>
+            
+            <!-- 自訂 ID 輸入區域 -->
+            <div id="customIdSection" class="form-group" style="display: none;">
                 <label for="masterListId">學生總表 Google Sheets ID：</label>
                 <input type="text" id="masterListId" placeholder="請輸入 Google Sheets 的完整 ID">
                 <small style="color: #666; display: block; margin-top: 5px;">
                     範例：從 https://docs.google.com/spreadsheets/d/1ABC...XYZ/edit 中複製 1ABC...XYZ 部分
                 </small>
             </div>
+            
             <div class="form-group">
                 <label>系統要求：</label>
                 <ul style="padding-left: 20px; color: #666;">
                     <li>學生總表必須包含 LT (Language Teacher) 欄位</li>
-                    <li>包含 HR (Home Room) 欄位用於班級資訊</li>
+                    <li>包含 English Class 欄位用於班級資訊</li>
                     <li>包含學生基本資料欄位</li>
                 </ul>
             </div>
@@ -492,14 +517,31 @@
             }
         });
 
+        // 處理學生總表來源選擇
+        document.addEventListener('change', function(e) {
+            if (e.target.name === 'masterListSource') {
+                const customSection = document.getElementById('customIdSection');
+                if (e.target.value === 'custom') {
+                    customSection.style.display = 'block';
+                } else {
+                    customSection.style.display = 'none';
+                }
+            }
+        });
+
         // 主要功能函數
         function processMasterList() {
-            const sheetId = document.getElementById('masterListId').value.trim();
+            const sourceType = document.querySelector('input[name="masterListSource"]:checked').value;
+            let sheetId = '';
             
-            if (!sheetId) {
-                alert('請輸入學生總表的 Google Sheets ID');
-                return;
+            if (sourceType === 'custom') {
+                sheetId = document.getElementById('masterListId').value.trim();
+                if (!sheetId) {
+                    alert('請輸入學生總表的 Google Sheets ID');
+                    return;
+                }
             }
+            // 如果是 system，sheetId 保持空字串，後端會自動使用系統學生總表
             
             // 顯示處理中狀態
             const button = event.target;
