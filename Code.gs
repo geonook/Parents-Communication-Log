@@ -106,6 +106,8 @@ function onOpen() {
       .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
       .addItem('📋 更新老師列表', 'updateTeachersList')
       .addSeparator()
+      .addItem('✅ 系統驗證', 'runSystemValidation')
+      .addSeparator()
       .addItem('📝 顯示系統日誌', 'showSystemLogs')
       .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))
     .addSeparator()
