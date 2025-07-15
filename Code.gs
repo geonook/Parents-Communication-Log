@@ -363,7 +363,11 @@ function setupMasterListContent(masterListSheet) {
   // 設定標題
   sheet.getRange('A1').setValue('中師英文科學生總表');
   sheet.getRange('A1').setFontSize(18).setFontWeight('bold');
-  sheet.getRange('A1:M1').merge();
+  
+  // 動態計算合併範圍，基於實際欄位數量
+  const numColumns = SYSTEM_CONFIG.STUDENT_FIELDS.length;
+  const mergeRange = `A1:${String.fromCharCode(64 + numColumns)}1`; // A1 to column based on field count
+  sheet.getRange(mergeRange).merge();
   
   // 設定說明
   sheet.getRange('A2').setValue('請將學生資料貼到第4列開始的位置（重要：English Class 欄位決定老師的授課班級）');
