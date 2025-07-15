@@ -115,7 +115,7 @@ function getStudentDataFromSheet() {
   
   const response = ui.prompt(
     '學生總表匯入',
-    '請輸入包含學生資料的 Google Sheets ID：\n\n格式說明：\n第一列應為標題列，包含：ID, Grade, HR, Seat #, Chinese Name, English Name, 112 Level, 113 Level, English Class (Old), English Class, LT, Mother\'s Phone, Father\'s Phone',
+    '請輸入包含學生資料的 Google Sheets ID：\n\n格式說明：\n第一列應為標題列，包含：ID, Grade, HR, Seat #, Chinese Name, English Name, 112 Level, 113 Level, Previous Teacher, English Class, LT, Mother\'s Phone, Father\'s Phone',
     ui.ButtonSet.OK_CANCEL
   );
   
@@ -234,7 +234,7 @@ function getStudentDataEntry() {
     englishName.getResponseText().trim(),
     '', // 112 Level
     '', // 113 Level
-    '', // English Class (Old)
+    '', // Previous Teacher
     '', // English Class
     '', // LT
     motherPhone.getResponseText().trim(),

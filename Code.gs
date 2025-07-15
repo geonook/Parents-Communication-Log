@@ -33,7 +33,7 @@ const SYSTEM_CONFIG = {
   // 學生總表欄位
   STUDENT_FIELDS: [
     'ID', 'Grade', 'HR', 'Seat #', 'Chinese Name', 'English Name',
-    '112 Level', '113 Level', 'English Class (Old)', 'English Class', 
+    '112 Level', '113 Level', 'Previous Teacher', 'English Class', 
     'LT', 'Mother\'s Phone', 'Father\'s Phone'
   ],
   
@@ -325,7 +325,7 @@ function setupMasterListContent(masterListSheet) {
   
   // 新增範例資料（第4列）
   const sampleData = [[
-    '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'G1 Adv1', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
+    '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
   ]];
   sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
   sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
@@ -359,7 +359,7 @@ function createMasterListInstructionSheet(masterListSheet) {
     ['English Name', '英文姓名'],
     ['112 Level', '112學年度等級'],
     ['113 Level', '113學年度等級'],
-    ['English Class (Old)', '舊英語班級'],
+    ['Previous Teacher', '前一位授課老師'],
     ['English Class', '🔥 重要！英語授課班級 (如：G1 Trailblazers)'],
     ['LT', '🔥 重要！語言老師姓名（用於自動建立記錄簿）'],
     ['Mother\'s Phone', '母親電話'],
