@@ -128,36 +128,65 @@ function getTeachersDataFromSheet(sheetId) {
  * 創建老師的電聯記錄簿
  */
 function createTeacherSheet(teacherInfo) {
-  // 取得系統資料夾
-  const mainFolder = getSystemMainFolder();
-  const teachersFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME).next();
+  try {
+    Logger.log(`開始創建老師記錄簿：${teacherInfo.name}`);
+    
+    // 取得系統資料夾
+    const mainFolder = getSystemMainFolder();
+    if (!mainFolder) {
+      throw new Error('無法獲取系統主資料夾，請先初始化系統');
+    }
+    
+    // 安全獲取老師記錄簿資料夾
+    const teachersFolderIterator = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+    let teachersFolder;
+    
+    if (teachersFolderIterator.hasNext()) {
+      teachersFolder = teachersFolderIterator.next();
+      Logger.log(`找到老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+    } else {
+      // 如果老師記錄簿資料夾不存在，創建它
+      Logger.log(`創建缺少的老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+      teachersFolder = mainFolder.createFolder(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+    }
   
-  // 創建老師專屬資料夾
-  const teacherFolderName = `${teacherInfo.name}_${new Date().getFullYear()}學年`;
-  let teacherFolder;
-  const existingTeacherFolder = teachersFolder.getFoldersByName(teacherFolderName);
-  if (existingTeacherFolder.hasNext()) {
-    teacherFolder = existingTeacherFolder.next();
-  } else {
-    teacherFolder = teachersFolder.createFolder(teacherFolderName);
+    // 創建老師專屬資料夾
+    const teacherFolderName = `${teacherInfo.name}_${new Date().getFullYear()}學年`;
+    let teacherFolder;
+    const existingTeacherFolder = teachersFolder.getFoldersByName(teacherFolderName);
+    if (existingTeacherFolder.hasNext()) {
+      teacherFolder = existingTeacherFolder.next();
+      Logger.log(`使用現有老師資料夾：${teacherFolderName}`);
+    } else {
+      Logger.log(`創建新老師資料夾：${teacherFolderName}`);
+      teacherFolder = teachersFolder.createFolder(teacherFolderName);
+    }
+    
+    // 創建記錄簿檔案
+    const fileName = SYSTEM_CONFIG.TEACHER_SHEET_NAME_FORMAT
+      .replace('{teacherName}', teacherInfo.name)
+      .replace('{year}', new Date().getFullYear().toString());
+    
+    Logger.log(`創建記錄簿檔案：${fileName}`);
+    const recordBook = SpreadsheetApp.create(fileName);
+    const recordFile = DriveApp.getFileById(recordBook.getId());
+    
+    // 移動到老師資料夾
+    Logger.log(`移動記錄簿到老師資料夾`);
+    teacherFolder.addFile(recordFile);
+    DriveApp.getRootFolder().removeFile(recordFile);
+    
+    // 設定記錄簿內容
+    Logger.log(`設定記錄簿內容`);
+    setupTeacherRecordBook(recordBook, teacherInfo);
+    
+    Logger.log(`✅ 成功創建老師記錄簿：${teacherInfo.name}`);
+    return recordBook;
+    
+  } catch (error) {
+    Logger.log(`❌ 創建老師記錄簿失敗：${teacherInfo.name} - ${error.toString()}`);
+    throw new Error(`創建 ${teacherInfo.name} 老師記錄簿失敗：${error.message}`);
   }
-  
-  // 創建記錄簿檔案
-  const fileName = SYSTEM_CONFIG.TEACHER_SHEET_NAME_FORMAT
-    .replace('{teacherName}', teacherInfo.name)
-    .replace('{year}', new Date().getFullYear().toString());
-  
-  const recordBook = SpreadsheetApp.create(fileName);
-  const recordFile = DriveApp.getFileById(recordBook.getId());
-  
-  // 移動到老師資料夾
-  teacherFolder.addFile(recordFile);
-  DriveApp.getRootFolder().removeFile(recordFile);
-  
-  // 設定記錄簿內容
-  setupTeacherRecordBook(recordBook, teacherInfo);
-  
-  return recordBook;
 }
 
 /**
