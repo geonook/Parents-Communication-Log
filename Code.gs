@@ -8,7 +8,7 @@
 const SYSTEM_CONFIG = {
   // 主資料夾設定
   MAIN_FOLDER_NAME: '電聯記錄簿系統',
-  MAIN_FOLDER_ID: '', // 指定的 Google Drive 資料夾 ID，如果為空則建立新資料夾
+  MAIN_FOLDER_ID: '1ksWywUMUfsmHtUq99HdRB34obcAXhKUX', // 指定的 Google Drive 資料夾 ID，如果為空則建立新資料夾
   TEACHERS_FOLDER_NAME: '老師記錄簿',
   TEMPLATES_FOLDER_NAME: '範本檔案',
   
@@ -339,6 +339,55 @@ function setCustomMainFolderId(folderId) {
     
   } catch (error) {
     safeErrorHandler('設定主資料夾', error, '無法存取指定的資料夾 ID，請確認資料夾存在且您有存取權限');
+  }
+}
+
+/**
+ * 驗證系統主資料夾設定是否正確
+ * 這個函數會測試 MAIN_FOLDER_ID 的存取權限
+ */
+function verifySystemMainFolderAccess() {
+  try {
+    if (!SYSTEM_CONFIG.MAIN_FOLDER_ID || SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() === '') {
+      throw new Error('MAIN_FOLDER_ID 未設定，系統將在個人 Drive 中創建新資料夾');
+    }
+    
+    // 測試資料夾存取
+    const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+    Logger.log(`✅ 成功存取指定資料夾：${folder.getName()}`);
+    Logger.log(`📁 資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}`);
+    Logger.log(`🔗 資料夾 URL：${folder.getUrl()}`);
+    
+    // 測試寫入權限
+    try {
+      const testFolderName = '測試資料夾_' + Date.now();
+      const testFolder = folder.createFolder(testFolderName);
+      testFolder.setTrashed(true); // 立即刪除測試資料夾
+      Logger.log('✅ 確認具有資料夾寫入權限');
+    } catch (writeError) {
+      Logger.log('⚠️ 沒有資料夾寫入權限：' + writeError.message);
+      throw new Error('對指定資料夾沒有寫入權限，無法創建子資料夾');
+    }
+    
+    safeUIAlert(
+      '資料夾驗證成功', 
+      `✅ 系統主資料夾驗證通過！\n\n📁 資料夾：${folder.getName()}\n🆔 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}\n🔗 URL：${folder.getUrl()}\n\n系統現在會在此資料夾中創建所有檔案。`
+    );
+    
+    return {
+      success: true,
+      folderName: folder.getName(),
+      folderUrl: folder.getUrl()
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 資料夾驗證失敗：' + error.toString());
+    safeErrorHandler('資料夾驗證', error, '指定的資料夾無法存取，請檢查資料夾 ID 和權限設定');
+    
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
 
