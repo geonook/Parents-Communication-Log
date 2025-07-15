@@ -51,21 +51,88 @@ function include(filename) {
 }
 
 /**
- * Web 版本的從學生總表建立老師記錄簿
+ * Web 版本的從學生總表建立老師記錄簿（完整實現）
  */
-function createTeachersFromStudentMasterListWeb() {
+function createTeachersFromStudentMasterListWeb(masterListId) {
   try {
-    // 這裡需要從前端獲取學生總表 ID
-    // 暫時返回成功訊息，實際實作需要前端傳遞參數
+    Logger.log('Dashboard: 開始從學生總表建立老師記錄簿');
+    
+    if (!masterListId || masterListId.trim() === '') {
+      return {
+        success: false,
+        message: '請提供學生總表的 Google Sheets ID'
+      };
+    }
+    
+    // 獲取學生總表資料
+    const studentMasterData = getStudentMasterListById(masterListId);
+    if (!studentMasterData) {
+      return {
+        success: false,
+        message: '無法獲取學生總表資料，請檢查 ID 是否正確'
+      };
+    }
+    
+    // 從學生總表中提取老師資訊
+    const teachersInfo = extractTeachersFromMasterList(studentMasterData);
+    if (!teachersInfo || teachersInfo.length === 0) {
+      return {
+        success: false,
+        message: '未從學生總表中找到老師資訊（需要 LT 欄位）'
+      };
+    }
+    
+    Logger.log(`Dashboard: 找到 ${teachersInfo.length} 位老師`);
+    
+    // 批量創建老師記錄簿
+    const createResult = batchCreateTeachersFromMasterList(teachersInfo, studentMasterData);
+    
+    Logger.log(`Dashboard: 創建完成 - 成功：${createResult.successCount}，失敗：${createResult.errorCount}`);
+    
     return {
       success: true,
-      message: '請使用 Google Sheets 選單中的功能，或者修改前端代碼傳遞學生總表 ID'
+      message: `批量創建完成！\n成功創建：${createResult.successCount} 位老師的記錄簿\n失敗：${createResult.errorCount} 位\n\n每位老師的記錄簿已包含相關學生資料`,
+      results: createResult
     };
+    
   } catch (error) {
+    Logger.log('Dashboard: 從學生總表批量創建老師記錄簿失敗 - ' + error.toString());
     return {
       success: false,
-      message: error.message
+      message: '創建失敗：' + error.message
     };
+  }
+}
+
+/**
+ * 根據 ID 獲取學生總表資料（Web 版本）
+ */
+function getStudentMasterListById(sheetId) {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(sheetId);
+    const sheet = spreadsheet.getActiveSheet();
+    
+    // 檢查是否有資料
+    const dataRange = sheet.getDataRange();
+    if (dataRange.getNumRows() < 4) {
+      throw new Error('學生總表資料不足（至少需要標題和一筆學生資料）');
+    }
+    
+    // 獲取所有資料
+    const data = dataRange.getValues();
+    
+    // 檢查是否有必要的欄位
+    const headers = data[2]; // 第3行是標題
+    if (!headers.includes('LT') && !headers.includes('Language Teacher')) {
+      throw new Error('學生總表缺少必要的 LT (Language Teacher) 欄位');
+    }
+    
+    Logger.log(`成功獲取學生總表資料：${data.length - 3} 筆學生資料`);
+    return data;
+    
+  } catch (error) {
+    Logger.log('獲取學生總表資料失敗：' + error.toString());
+    return null;
   }
 }
 
@@ -490,9 +557,9 @@ function executeSystemFunction(functionName, parameters) {
   try {
     switch (functionName) {
       case 'importStudentData':
-        return { success: true, message: '請使用 Google Sheets 選單執行學生資料匯入功能' };
+        return importStudentDataWeb(parameters);
       case 'exportStudentData':
-        return { success: true, message: '請使用 Google Sheets 選單執行學生資料匯出功能' };
+        return exportStudentDataWeb(parameters);
       case 'checkAllProgress':
         return checkAllProgressWeb();
       case 'generateProgressReport':
@@ -508,6 +575,172 @@ function executeSystemFunction(functionName, parameters) {
     }
   } catch (error) {
     return { success: false, message: error.message };
+  }
+}
+
+/**
+ * Web 版本的學生資料匯入（完整實現）
+ */
+function importStudentDataWeb(parameters) {
+  try {
+    Logger.log('Dashboard: 開始學生資料匯入');
+    
+    // 獲取所有老師記錄簿
+    const teacherBooks = getAllTeacherBooksForDashboard();
+    if (teacherBooks.length === 0) {
+      return {
+        success: false,
+        message: '系統中沒有找到任何老師記錄簿。請先建立老師記錄簿。'
+      };
+    }
+    
+    // 獲取系統中的學生總表
+    const masterList = getSystemMasterList();
+    if (!masterList) {
+      return {
+        success: false,
+        message: '找不到系統學生總表。請先初始化系統或手動指定學生總表。'
+      };
+    }
+    
+    // 執行批量匯入
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    const results = [];
+    
+    teacherBooks.forEach(teacherBook => {
+      try {
+        const result = performStudentDataImport(teacherBook, masterList);
+        totalSuccess += result.successCount;
+        totalErrors += result.errorCount;
+        results.push({
+          teacherName: teacherBook.getName(),
+          success: result.successCount,
+          errors: result.errorCount
+        });
+      } catch (error) {
+        totalErrors++;
+        results.push({
+          teacherName: teacherBook.getName(),
+          success: 0,
+          errors: 1,
+          error: error.message
+        });
+      }
+    });
+    
+    Logger.log(`Dashboard: 學生資料匯入完成 - 成功：${totalSuccess}，失敗：${totalErrors}`);
+    
+    return {
+      success: true,
+      message: `學生資料匯入完成！\n成功匯入：${totalSuccess} 筆\n失敗：${totalErrors} 筆\n處理了 ${teacherBooks.length} 位老師的記錄簿`,
+      results: results
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 學生資料匯入失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '匯入失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * Web 版本的學生資料匯出（完整實現）
+ */
+function exportStudentDataWeb(parameters) {
+  try {
+    Logger.log('Dashboard: 開始學生資料匯出');
+    
+    // 獲取所有老師記錄簿
+    const teacherBooks = getAllTeacherBooksForDashboard();
+    if (teacherBooks.length === 0) {
+      return {
+        success: false,
+        message: '系統中沒有找到任何老師記錄簿。'
+      };
+    }
+    
+    // 創建匯出檔案
+    const exportSheet = SpreadsheetApp.create('學生資料匯出_' + new Date().toLocaleDateString('zh-TW'));
+    const mainFolder = getSystemMainFolder();
+    const exportFile = DriveApp.getFileById(exportSheet.getId());
+    mainFolder.addFile(exportFile);
+    DriveApp.getRootFolder().removeFile(exportFile);
+    
+    // 收集所有學生資料
+    const allStudentData = [];
+    const headers = SYSTEM_CONFIG.STUDENT_FIELDS;
+    
+    teacherBooks.forEach(teacherBook => {
+      try {
+        const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+        if (studentSheet) {
+          const data = studentSheet.getDataRange().getValues();
+          if (data.length > 1) {
+            // 跳過標題行，加入學生資料
+            data.slice(1).forEach(row => {
+              if (row[0]) { // 如果有學生ID
+                allStudentData.push(row);
+              }
+            });
+          }
+        }
+      } catch (error) {
+        Logger.log(`無法讀取 ${teacherBook.getName()} 的學生資料：${error.message}`);
+      }
+    });
+    
+    // 寫入匯出檔案
+    const sheet = exportSheet.getActiveSheet();
+    sheet.setName('學生資料匯出');
+    
+    // 設定標題
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
+    
+    // 寫入資料
+    if (allStudentData.length > 0) {
+      sheet.getRange(2, 1, allStudentData.length, allStudentData[0].length).setValues(allStudentData);
+    }
+    
+    Logger.log(`Dashboard: 學生資料匯出完成 - 匯出 ${allStudentData.length} 筆資料`);
+    
+    return {
+      success: true,
+      message: `學生資料匯出完成！\n匯出了 ${allStudentData.length} 筆學生資料\n匯出檔案已建立在系統資料夾中`,
+      exportUrl: exportSheet.getUrl(),
+      recordCount: allStudentData.length
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 學生資料匯出失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '匯出失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 獲取系統中的學生總表
+ */
+function getSystemMasterList() {
+  try {
+    const mainFolder = getSystemMainFolder();
+    const masterListFiles = mainFolder.getFilesByName('學生總表');
+    
+    if (masterListFiles.hasNext()) {
+      const masterListFile = masterListFiles.next();
+      const masterListSheet = SpreadsheetApp.openById(masterListFile.getId());
+      return masterListSheet.getActiveSheet().getDataRange().getValues();
+    }
+    
+    return null;
+  } catch (error) {
+    Logger.log('獲取系統學生總表失敗：' + error.toString());
+    return null;
   }
 }
 

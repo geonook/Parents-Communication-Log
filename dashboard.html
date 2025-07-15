@@ -507,12 +507,28 @@
             button.textContent = '處理中...';
             button.disabled = true;
             
-            // 目前需要在 Google Sheets 中執行此功能
-            alert('請在 Google Sheets 中使用「電聯記錄簿系統」選單 → 「📋 從學生總表建立老師記錄簿」功能\n\n學生總表 ID：' + sheetId);
-            
-            button.textContent = originalText;
-            button.disabled = false;
-            closeMasterListModal();
+            // 調用完整的 Web 版本功能
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    closeMasterListModal();
+                    
+                    if (result.success) {
+                        alert('✅ ' + result.message);
+                        if (result.results && result.results.successCount > 0) {
+                            updateStats(); // 更新統計資料
+                        }
+                    } else {
+                        alert('❌ ' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('❌ 處理失敗：' + error.message);
+                })
+                .createTeachersFromStudentMasterListWeb(sheetId);
         }
 
         function createSingleTeacher() {
@@ -616,11 +632,61 @@
         }
 
         function importStudentData() {
-            alert('請在 Google Sheets 中使用「電聯記錄簿系統」選單 → 「學生資料管理」→ 「📥 匯入學生資料」功能');
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '匯入中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        alert('✅ ' + result.message);
+                        updateStats();
+                    } else {
+                        alert('❌ ' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('❌ 匯入失敗：' + error.message);
+                })
+                .executeSystemFunction('importStudentData');
         }
 
         function exportStudentData() {
-            alert('請在 Google Sheets 中使用「電聯記錄簿系統」選單 → 「學生資料管理」→ 「📤 匯出學生資料」功能');
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '匯出中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        let message = '✅ ' + result.message;
+                        if (result.exportUrl) {
+                            if (confirm(message + '\n\n是否要開啟匯出檔案？')) {
+                                window.open(result.exportUrl, '_blank');
+                            }
+                        } else {
+                            alert(message);
+                        }
+                    } else {
+                        alert('❌ ' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('❌ 匯出失敗：' + error.message);
+                })
+                .executeSystemFunction('exportStudentData');
         }
 
         function updateTeachersList() {
