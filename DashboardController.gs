@@ -64,6 +64,12 @@ function createTeachersFromStudentMasterListWeb(masterListId) {
       Logger.log('Dashboard: 未提供 ID，嘗試使用系統學生總表');
       const systemMasterList = getSystemMasterList();
       if (systemMasterList) {
+        // 診斷資訊
+        Logger.log(`Dashboard: 系統學生總表資料行數：${systemMasterList.length}`);
+        if (systemMasterList.length > 2) {
+          Logger.log(`Dashboard: 第3行標題欄位：${JSON.stringify(systemMasterList[2])}`);
+        }
+        
         studentMasterData = {
           data: systemMasterList.slice(3), // 跳過前3行（標題、說明、欄位名稱）
           headers: systemMasterList[2],    // 第3行是標題

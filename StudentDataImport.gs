@@ -633,6 +633,11 @@ function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
       
     } catch (error) {
       Logger.log(`創建 ${teacherInfo.name} 記錄簿失敗：` + error.toString());
+      Logger.log(`錯誤詳細資訊：` + JSON.stringify({
+        teacherInfo: teacherInfo,
+        errorMessage: error.message,
+        errorStack: error.stack
+      }));
       results.push({
         success: false,
         teacher: teacherInfo.name,
