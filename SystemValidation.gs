@@ -8,6 +8,11 @@
  */
 function runSystemValidation() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：系統驗證功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     const response = ui.alert(
@@ -28,7 +33,7 @@ function runSystemValidation() {
     
   } catch (error) {
     Logger.log('系統驗證失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '系統驗證失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('系統驗證', error);
   }
 }
 

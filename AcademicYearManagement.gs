@@ -9,6 +9,11 @@
  */
 function showAcademicYearManagement() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：學年管理功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     // 獲取當前學年資訊
@@ -55,7 +60,7 @@ function showAcademicYearManagement() {
     
   } catch (error) {
     Logger.log('學年管理失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '學年管理失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('學年管理', error);
   }
 }
 
@@ -79,6 +84,11 @@ function getCurrentAcademicYearInfo() {
  */
 function switchAcademicYear() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：學年切換功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     const currentYear = new Date().getFullYear();
     
@@ -116,7 +126,7 @@ function switchAcademicYear() {
     
   } catch (error) {
     Logger.log('學年切換失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '學年切換失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('學年切換', error);
   }
 }
 

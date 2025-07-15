@@ -8,14 +8,18 @@
  */
 function setupAutomationTriggers() {
   try {
-    const ui = SpreadsheetApp.getUi();
-    const response = ui.alert(
+    // Web環境兼容性處理
+    const response = safeUIAlert(
       '設定自動化觸發器',
       '確定要設定系統自動化功能嗎？\n這將建立：\n• 每週進度檢查\n• 學期進度報告\n• 每日備份',
-      ui.ButtonSet.YES_NO
+      safeGetUI()?.ButtonSet.YES_NO
     );
     
-    if (response !== ui.Button.YES) return;
+    // 在Web環境中自動執行，在Sheets環境中檢查用戶選擇
+    if (!isWebEnvironment() && response?.selectedButton !== safeGetUI()?.Button.YES) {
+      Logger.log('用戶取消設定自動化觸發器');
+      return;
+    }
     
     // 清除現有觸發器
     clearExistingTriggers();
@@ -60,7 +64,7 @@ function setupAutomationTriggers() {
     
   } catch (error) {
     Logger.log('設定觸發器失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '設定觸發器失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('設定自動化觸發器', error);
   }
 }
 

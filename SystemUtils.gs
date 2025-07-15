@@ -4,6 +4,110 @@
  */
 
 /**
+ * Web環境安全的UI工具函數
+ * 提供Web環境兼容的UI操作
+ */
+
+/**
+ * 安全的UI獲取函數
+ * @returns {Object|null} UI對象或null（Web環境）
+ */
+function safeGetUI() {
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (error) {
+    Logger.log('Web環境：無法獲取UI對象 - ' + error.toString());
+    return null;
+  }
+}
+
+/**
+ * 安全的UI警告函數
+ * @param {string} title 標題
+ * @param {string} message 訊息
+ * @param {Object} buttonSet 按鈕集合（可選）
+ * @returns {Object} 返回結果或預設值
+ */
+function safeUIAlert(title, message, buttonSet = null) {
+  const ui = safeGetUI();
+  if (ui) {
+    try {
+      return ui.alert(title, message, buttonSet || ui.ButtonSet.OK);
+    } catch (error) {
+      Logger.log(`UI警告失敗 [${title}]: ${message} - ${error.toString()}`);
+      return ui.Button.OK; // 預設返回OK
+    }
+  } else {
+    // Web環境：記錄到日誌
+    Logger.log(`Web環境警告 [${title}]: ${message}`);
+    return { selectedButton: 'OK' }; // 模擬OK回應
+  }
+}
+
+/**
+ * 安全的UI提示函數
+ * @param {string} title 標題
+ * @param {string} message 訊息
+ * @param {Object} buttonSet 按鈕集合（可選）
+ * @returns {Object} 返回結果或預設值
+ */
+function safeUIPrompt(title, message, buttonSet = null) {
+  const ui = safeGetUI();
+  if (ui) {
+    try {
+      return ui.prompt(title, message, buttonSet || ui.ButtonSet.OK_CANCEL);
+    } catch (error) {
+      Logger.log(`UI提示失敗 [${title}]: ${message} - ${error.toString()}`);
+      return { 
+        selectedButton: ui.Button.CANCEL,
+        responseText: ''
+      };
+    }
+  } else {
+    // Web環境：記錄到日誌並返回取消
+    Logger.log(`Web環境提示 [${title}]: ${message}`);
+    return { 
+      selectedButton: 'CANCEL',
+      responseText: ''
+    };
+  }
+}
+
+/**
+ * 安全的錯誤處理函數
+ * 在Web環境中只記錄日誌，在Sheets環境中顯示UI警告
+ * @param {string} context 錯誤上下文
+ * @param {Error} error 錯誤對象
+ * @param {string} userMessage 用戶友好的錯誤訊息（可選）
+ */
+function safeErrorHandler(context, error, userMessage = null) {
+  const errorMessage = userMessage || error.message;
+  const fullMessage = `${context}失敗：${errorMessage}`;
+  
+  Logger.log(`錯誤處理 [${context}]: ${error.toString()}`);
+  Logger.log(`錯誤堆疊: ${error.stack}`);
+  
+  const ui = safeGetUI();
+  if (ui) {
+    try {
+      ui.alert('錯誤', fullMessage, ui.ButtonSet.OK);
+    } catch (uiError) {
+      Logger.log(`無法顯示錯誤警告: ${uiError.toString()}`);
+    }
+  } else {
+    Logger.log(`Web環境錯誤: ${fullMessage}`);
+  }
+}
+
+/**
+ * 檢查是否在Web環境中執行
+ * @returns {boolean} true表示Web環境，false表示Sheets環境
+ */
+function isWebEnvironment() {
+  return safeGetUI() === null;
+}
+
+/**
  * 設定範本檔案內容
  */
 function setupTemplateContent(templateSheet) {
@@ -469,14 +573,18 @@ function getAdminConsole(mainFolder) {
  */
 function checkFileIntegrity() {
   try {
-    const ui = SpreadsheetApp.getUi();
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：系統健康檢查功能需要在Google Sheets環境中執行');
+      return;
+    }
     const healthReport = performSystemHealthCheck();
     
     displayHealthCheckResults(healthReport);
     
   } catch (error) {
     Logger.log('系統健康檢查失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '系統健康檢查失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('系統健康檢查', error);
   }
 }
 

@@ -8,6 +8,11 @@
  */
 function checkAllProgress() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     // 獲取所有老師的記錄簿
@@ -34,7 +39,7 @@ function checkAllProgress() {
     
   } catch (error) {
     Logger.log('檢查全體進度失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '檢查進度失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('檢查全體進度', error);
   }
 }
 
@@ -43,6 +48,11 @@ function checkAllProgress() {
  */
 function generateProgressReport() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     // 獲取所有老師的記錄簿

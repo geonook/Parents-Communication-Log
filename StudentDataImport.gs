@@ -30,7 +30,7 @@ function importStudentData() {
     
   } catch (error) {
     Logger.log('學生資料匯入失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '匯入失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('學生資料匯入', error);
   }
 }
 
@@ -363,7 +363,7 @@ function exportStudentData() {
     
   } catch (error) {
     Logger.log('學生資料匯出失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '匯出失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('學生資料匯出', error);
   }
 }
 
@@ -443,7 +443,7 @@ function createContactFromStudentList() {
     
   } catch (error) {
     Logger.log('從學生清單建立電聯記錄失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '操作失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('從學生清單建立電聯記錄', error);
   }
 }
 
@@ -481,7 +481,7 @@ function createTeachersFromStudentMasterList() {
     
   } catch (error) {
     Logger.log('從學生總表批量創建老師記錄簿失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '創建失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('從學生總表批量創建老師記錄簿', error);
   }
 }
 

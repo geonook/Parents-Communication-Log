@@ -76,43 +76,48 @@ const SYSTEM_CONFIG = {
  * 建立系統主選單
  */
 function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu('電聯記錄簿系統')
-    .addItem('🏗️ 初始化系統', 'initializeSystem')
-    .addSeparator()
-    .addItem('👨‍🏫 新增老師記錄簿', 'createTeacherRecordBook')
-    .addItem('📝 批次建立老師記錄簿', 'batchCreateTeacherBooks')
-    .addItem('📋 從學生總表建立老師記錄簿', 'createTeachersFromStudentMasterList')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('👥 學生資料管理')
-      .addItem('📥 匯入學生資料', 'importStudentData')
-      .addItem('📤 匯出學生資料', 'exportStudentData')
+  try {
+    const ui = SpreadsheetApp.getUi();
+    ui.createMenu('電聯記錄簿系統')
+      .addItem('🏗️ 初始化系統', 'initializeSystem')
       .addSeparator()
-      .addItem('🤖 預建學期電聯記錄', 'prebuildAcademicContactRecords')
-      .addItem('➕ 快速新增電聯記錄', 'createContactFromStudentList'))
-    .addSeparator()
-    .addItem('📊 檢查全體進度', 'checkAllProgress')
-    .addItem('📈 生成進度報告', 'generateProgressReport')
-    .addSeparator()
-    .addSubMenu(ui.createMenu('🔧 系統管理')
-      .addItem('⚙️ 系統設定', 'showSystemSettings')
-      .addItem('📁 主資料夾資訊', 'showMainFolderInfo')
+      .addItem('👨‍🏫 新增老師記錄簿', 'createTeacherRecordBook')
+      .addItem('📝 批次建立老師記錄簿', 'batchCreateTeacherBooks')
+      .addItem('📋 從學生總表建立老師記錄簿', 'createTeachersFromStudentMasterList')
       .addSeparator()
-      .addItem('📅 學年管理', 'showAcademicYearManagement')
+      .addSubMenu(ui.createMenu('👥 學生資料管理')
+        .addItem('📥 匯入學生資料', 'importStudentData')
+        .addItem('📤 匯出學生資料', 'exportStudentData')
+        .addSeparator()
+        .addItem('🤖 預建學期電聯記錄', 'prebuildAcademicContactRecords')
+        .addItem('➕ 快速新增電聯記錄', 'createContactFromStudentList'))
       .addSeparator()
-      .addItem('🔄 設定自動化', 'setupAutomationTriggers')
-      .addItem('💾 手動備份', 'autoBackup')
-      .addItem('🔍 檢查檔案完整性', 'checkFileIntegrity')
-      .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
-      .addItem('📋 更新老師列表', 'updateTeachersList')
+      .addItem('📊 檢查全體進度', 'checkAllProgress')
+      .addItem('📈 生成進度報告', 'generateProgressReport')
       .addSeparator()
-      .addItem('✅ 系統驗證', 'runSystemValidation')
+      .addSubMenu(ui.createMenu('🔧 系統管理')
+        .addItem('⚙️ 系統設定', 'showSystemSettings')
+        .addItem('📁 主資料夾資訊', 'showMainFolderInfo')
+        .addSeparator()
+        .addItem('📅 學年管理', 'showAcademicYearManagement')
+        .addSeparator()
+        .addItem('🔄 設定自動化', 'setupAutomationTriggers')
+        .addItem('💾 手動備份', 'autoBackup')
+        .addItem('🔍 檢查檔案完整性', 'checkFileIntegrity')
+        .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
+        .addItem('📋 更新老師列表', 'updateTeachersList')
+        .addSeparator()
+        .addItem('✅ 系統驗證', 'runSystemValidation')
+        .addSeparator()
+        .addItem('📝 顯示系統日誌', 'showSystemLogs')
+        .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))
       .addSeparator()
-      .addItem('📝 顯示系統日誌', 'showSystemLogs')
-      .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))
-    .addSeparator()
-    .addItem('📖 使用說明', 'showUserGuide')
-    .addToUi();
+      .addItem('📖 使用說明', 'showUserGuide')
+      .addToUi();
+  } catch (uiError) {
+    // Web環境或無UI權限時，跳過選單創建
+    Logger.log('Web環境：跳過選單創建 - ' + uiError.toString());
+  }
 }
 
 /**
@@ -120,38 +125,44 @@ function onOpen() {
  */
 function initializeSystem() {
   try {
-    const ui = SpreadsheetApp.getUi();
-    const response = ui.alert(
+    const response = safeUIAlert(
       '系統初始化', 
       '確定要初始化電聯記錄簿系統嗎？\n這將建立必要的資料夾結構和範本檔案。', 
-      ui.ButtonSet.YES_NO
+      safeGetUI()?.ButtonSet.YES_NO
     );
     
-    if (response !== ui.Button.YES) return;
+    // 在Web環境中自動執行，在Sheets環境中檢查用戶選擇
+    if (!isWebEnvironment() && response?.selectedButton !== safeGetUI()?.Button.YES) {
+      Logger.log('用戶取消系統初始化');
+      return;
+    }
+    
+    Logger.log('開始系統初始化...');
     
     // 建立主資料夾結構
     const mainFolder = createSystemFolders();
+    Logger.log('✅ 主資料夾結構建立完成');
     
     // 建立範本檔案
     createTemplateFiles(mainFolder);
+    Logger.log('✅ 範本檔案建立完成');
     
     // 建立管理控制台
     const adminSheet = createAdminConsole(mainFolder);
+    Logger.log('✅ 管理控制台建立完成');
     
     // 建立學生總表範本
     const masterListSheet = createStudentMasterListTemplate(mainFolder);
+    Logger.log('✅ 學生總表範本建立完成');
     
-    ui.alert(
-      '初始化完成！', 
-      `系統已成功初始化！\n\n主資料夾：${mainFolder.getUrl()}\n管理控制台：${adminSheet.getUrl()}\n學生總表：${masterListSheet.getUrl()}\n\n請在學生總表中貼上您的學生資料，然後使用「從學生總表建立老師記錄簿」功能。`, 
-      ui.ButtonSet.OK
-    );
+    const successMessage = `系統已成功初始化！\n\n主資料夾：${mainFolder.getUrl()}\n管理控制台：${adminSheet.getUrl()}\n學生總表：${masterListSheet.getUrl()}\n\n請在學生總表中貼上您的學生資料，然後使用「從學生總表建立老師記錄簿」功能。`;
     
-    Logger.log('系統初始化完成');
+    safeUIAlert('初始化完成！', successMessage);
+    Logger.log('🎉 系統初始化完成');
     
   } catch (error) {
     Logger.log('系統初始化失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '系統初始化失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('系統初始化', error);
   }
 }
 
@@ -321,17 +332,13 @@ function setCustomMainFolderId(folderId) {
     Logger.log(`已設定自訂主資料夾：${folder.getName()}`);
     
     // 此函數僅用於測試，實際設定需要修改 SYSTEM_CONFIG.MAIN_FOLDER_ID
-    const ui = SpreadsheetApp.getUi();
-    ui.alert(
+    safeUIAlert(
       '設定主資料夾', 
-      `已驗證資料夾可以存取：${folder.getName()}\n\n要使用此資料夾，請在 Code.gs 的 SYSTEM_CONFIG.MAIN_FOLDER_ID 中設定：\n'${folderId}'`, 
-      ui.ButtonSet.OK
+      `已驗證資料夾可以存取：${folder.getName()}\n\n要使用此資料夾，請在 Code.gs 的 SYSTEM_CONFIG.MAIN_FOLDER_ID 中設定：\n'${folderId}'`
     );
     
   } catch (error) {
-    const ui = SpreadsheetApp.getUi();
-    ui.alert('錯誤', '無法存取指定的資料夾 ID，請確認資料夾存在且您有存取權限', ui.ButtonSet.OK);
-    Logger.log('設定主資料夾失敗：' + error.toString());
+    safeErrorHandler('設定主資料夾', error, '無法存取指定的資料夾 ID，請確認資料夾存在且您有存取權限');
   }
 }
 
@@ -535,12 +542,10 @@ function showMainFolderInfo() {
       message += `說明：系統將自動建立或搜尋同名資料夾`;
     }
     
-    const ui = SpreadsheetApp.getUi();
-    ui.alert('主資料夾資訊', message, ui.ButtonSet.OK);
+    safeUIAlert('主資料夾資訊', message);
     
   } catch (error) {
-    const ui = SpreadsheetApp.getUi();
-    ui.alert('錯誤', '無法獲取主資料夾資訊：' + error.message, ui.ButtonSet.OK);
+    safeErrorHandler('獲取主資料夾資訊', error);
   }
 }
 

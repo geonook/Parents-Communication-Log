@@ -8,6 +8,11 @@
  */
 function createTeacherRecordBook() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     // 獲取老師資訊
@@ -25,7 +30,7 @@ function createTeacherRecordBook() {
     
   } catch (error) {
     Logger.log('創建老師記錄簿失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '創建失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('創建老師記錄簿', error);
   }
 }
 
@@ -34,6 +39,11 @@ function createTeacherRecordBook() {
  */
 function batchCreateTeacherBooks() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     
     // 讓用戶選擇包含老師資料的檔案
@@ -72,7 +82,7 @@ function batchCreateTeacherBooks() {
     
   } catch (error) {
     Logger.log('批次創建失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '批次創建失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('批次創建老師記錄簿', error);
   }
 }
 
@@ -80,6 +90,10 @@ function batchCreateTeacherBooks() {
  * 從用戶輸入獲取老師資訊
  */
 function getTeacherInfoFromUser() {
+  if (isWebEnvironment()) {
+    Logger.log('Web環境：無法獲取用戶輸入');
+    return null;
+  }
   const ui = SpreadsheetApp.getUi();
   
   // 獲取老師姓名
@@ -715,6 +729,11 @@ function validateSystemFolderStructure(folder) {
  */
 function prebuildAcademicContactRecords() {
   try {
+    // Web環境兼容性檢查
+    if (isWebEnvironment()) {
+      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
+      return;
+    }
     const ui = SpreadsheetApp.getUi();
     const currentSheet = SpreadsheetApp.getActiveSheet();
     const recordBook = SpreadsheetApp.getActiveSpreadsheet();
@@ -759,7 +778,7 @@ function prebuildAcademicContactRecords() {
     
   } catch (error) {
     Logger.log('預建Academic Contact記錄失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '預建失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    safeErrorHandler('預建Academic Contact記錄', error);
   }
 }
 
