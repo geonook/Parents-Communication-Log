@@ -185,13 +185,49 @@ function createSystemFolders() {
     '進度報告'
   ];
   
+  Logger.log('開始創建子資料夾...');
+  const createdFolders = [];
+  const existingFolders = [];
+  
   subFolders.forEach(folderName => {
-    const existingSubFolder = mainFolder.getFoldersByName(folderName);
-    if (!existingSubFolder.hasNext()) {
-      mainFolder.createFolder(folderName);
+    try {
+      const existingSubFolder = mainFolder.getFoldersByName(folderName);
+      if (!existingSubFolder.hasNext()) {
+        const newFolder = mainFolder.createFolder(folderName);
+        createdFolders.push(folderName);
+        Logger.log(`✅ 創建子資料夾: ${folderName}`);
+        
+        // 驗證資料夾是否真的被創建
+        const verification = mainFolder.getFoldersByName(folderName);
+        if (!verification.hasNext()) {
+          throw new Error(`資料夾 ${folderName} 創建後無法找到`);
+        }
+      } else {
+        existingFolders.push(folderName);
+        Logger.log(`ℹ️ 使用現有子資料夾: ${folderName}`);
+      }
+    } catch (error) {
+      Logger.log(`❌ 創建子資料夾 ${folderName} 失敗: ${error.toString()}`);
+      throw new Error(`創建子資料夾 ${folderName} 失敗: ${error.message}`);
     }
   });
   
+  Logger.log(`子資料夾創建完成 - 新建: ${createdFolders.length}, 現有: ${existingFolders.length}`);
+  
+  // 最終驗證所有必要資料夾都存在
+  const missingFolders = [];
+  subFolders.forEach(folderName => {
+    const verification = mainFolder.getFoldersByName(folderName);
+    if (!verification.hasNext()) {
+      missingFolders.push(folderName);
+    }
+  });
+  
+  if (missingFolders.length > 0) {
+    throw new Error(`以下必要資料夾創建失敗: ${missingFolders.join(', ')}`);
+  }
+  
+  Logger.log('✅ 所有子資料夾驗證通過');
   return mainFolder;
 }
 
@@ -217,18 +253,33 @@ function createNewMainFolder() {
  * 建立範本檔案
  */
 function createTemplateFiles(mainFolder) {
-  const templatesFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME).next();
+  // 安全獲取範本資料夾，如果不存在則創建
+  let templatesFolder;
+  const existingTemplatesFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME);
+  
+  if (existingTemplatesFolder.hasNext()) {
+    templatesFolder = existingTemplatesFolder.next();
+    Logger.log('使用現有的範本資料夾');
+  } else {
+    Logger.log('範本資料夾不存在，正在創建...');
+    templatesFolder = mainFolder.createFolder(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME);
+    Logger.log('範本資料夾創建完成');
+  }
   
   // 建立電聯記錄範本
+  Logger.log('創建電聯記錄範本檔案...');
   const templateSheet = SpreadsheetApp.create('電聯記錄簿範本');
   const templateFile = DriveApp.getFileById(templateSheet.getId());
   
   // 移動到範本資料夾
   templatesFolder.addFile(templateFile);
   DriveApp.getRootFolder().removeFile(templateFile);
+  Logger.log('範本檔案已移動到範本資料夾');
   
   // 設定範本內容
+  Logger.log('設定範本內容...');
   setupTemplateContent(templateSheet);
+  Logger.log('範本內容設定完成');
   
   return templateSheet;
 }

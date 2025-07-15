@@ -109,30 +109,62 @@ function initializeSystemWeb() {
   try {
     Logger.log('Web 初始化開始');
     
+    // 步驟1: 創建系統資料夾
     Logger.log('步驟1: 創建系統資料夾');
-    const mainFolder = createSystemFolders();
+    let mainFolder;
+    try {
+      mainFolder = createSystemFolders();
+      Logger.log('✅ 步驟1完成: 系統資料夾創建成功');
+    } catch (error) {
+      Logger.log('❌ 步驟1失敗: 系統資料夾創建失敗 - ' + error.toString());
+      throw new Error('系統資料夾創建失敗：' + error.message);
+    }
     
+    // 步驟2: 創建範本檔案
     Logger.log('步驟2: 創建範本檔案');
-    createTemplateFiles(mainFolder);
+    let templateSheet;
+    try {
+      templateSheet = createTemplateFiles(mainFolder);
+      Logger.log('✅ 步驟2完成: 範本檔案創建成功');
+    } catch (error) {
+      Logger.log('❌ 步驟2失敗: 範本檔案創建失敗 - ' + error.toString());
+      throw new Error('範本檔案創建失敗：' + error.message);
+    }
     
+    // 步驟3: 創建管理控制台
     Logger.log('步驟3: 創建管理控制台');
-    const adminSheet = createAdminConsole(mainFolder);
+    let adminSheet;
+    try {
+      adminSheet = createAdminConsole(mainFolder);
+      Logger.log('✅ 步驟3完成: 管理控制台創建成功');
+    } catch (error) {
+      Logger.log('❌ 步驟3失敗: 管理控制台創建失敗 - ' + error.toString());
+      throw new Error('管理控制台創建失敗：' + error.message);
+    }
     
+    // 步驟4: 創建學生總表範本
     Logger.log('步驟4: 創建學生總表範本');
-    const masterListSheet = createStudentMasterListTemplate(mainFolder);
+    let masterListSheet;
+    try {
+      masterListSheet = createStudentMasterListTemplate(mainFolder);
+      Logger.log('✅ 步驟4完成: 學生總表範本創建成功');
+    } catch (error) {
+      Logger.log('❌ 步驟4失敗: 學生總表範本創建失敗 - ' + error.toString());
+      throw new Error('學生總表範本創建失敗：' + error.message);
+    }
     
-    Logger.log('Web 初始化完成');
+    Logger.log('🎉 Web 初始化完成');
     
     return {
       success: true,
-      message: '系統初始化完成！',
+      message: '系統初始化完成！所有組件都已成功創建。',
       mainFolderUrl: mainFolder.getUrl(),
       adminSheetUrl: adminSheet.getUrl(),
       masterListUrl: masterListSheet.getUrl()
     };
     
   } catch (error) {
-    Logger.log('Web 初始化失敗: ' + error.toString());
+    Logger.log('💥 Web 初始化失敗: ' + error.toString());
     Logger.log('錯誤堆疊: ' + error.stack);
     return {
       success: false,
@@ -784,15 +816,42 @@ function setupCompleteSystemWeb() {
         
         if (statusResult.success && statusResult.systemStatus.overallHealth >= 75) {
           setupResults.steps.push('✅ 系統健康檢查通過');
+          Logger.log(`Dashboard: 系統健康度: ${statusResult.systemStatus.overallHealth}%`);
         } else {
-          setupResults.steps.push('⚠️ 系統健康檢查未完全通過，但基本功能可用');
+          const healthScore = statusResult.success ? statusResult.systemStatus.overallHealth : 0;
+          setupResults.steps.push(`⚠️ 系統健康檢查未完全通過 (${healthScore}%)，但基本功能可用`);
+          Logger.log(`Dashboard: 系統健康度偏低: ${healthScore}%`);
+          
+          if (statusResult.success && statusResult.systemStatus.nextSteps) {
+            Logger.log('Dashboard: 建議下一步: ' + statusResult.systemStatus.nextSteps.join(', '));
+          }
         }
       } catch (error) {
         setupResults.steps.push('⚠️ 健康檢查執行失敗，但系統可能仍可使用');
+        Logger.log('Dashboard: 健康檢查異常 - ' + error.toString());
       }
+    } else {
+      Logger.log('Dashboard: 由於初始化失敗，跳過健康檢查');
+      setupResults.steps.push('❌ 初始化失敗，未執行健康檢查');
     }
     
     Logger.log(`Dashboard: 一鍵設定完成，成功: ${setupResults.success}`);
+    Logger.log(`Dashboard: 總步驟數: ${setupResults.steps.length}, 錯誤數: ${setupResults.errors.length}`);
+    
+    // 記錄詳細的設定結果
+    if (setupResults.steps.length > 0) {
+      Logger.log('Dashboard: 執行步驟列表:');
+      setupResults.steps.forEach((step, index) => {
+        Logger.log(`  ${index + 1}. ${step}`);
+      });
+    }
+    
+    if (setupResults.errors.length > 0) {
+      Logger.log('Dashboard: 錯誤列表:');
+      setupResults.errors.forEach((error, index) => {
+        Logger.log(`  ${index + 1}. ${error}`);
+      });
+    }
     
     let finalMessage = setupResults.success ? '完整系統設定成功！' : '部分設定失敗，請檢查錯誤訊息';
     
