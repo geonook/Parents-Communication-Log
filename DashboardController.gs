@@ -128,7 +128,11 @@ function getStudentMasterListById(sheetId) {
     }
     
     Logger.log(`成功獲取學生總表資料：${data.length - 3} 筆學生資料`);
-    return data;
+    return {
+      data: data.slice(3), // 實際學生資料（跳過前3行）
+      headers: headers,   // 標題行
+      sheetId: sheetId
+    };
     
   } catch (error) {
     Logger.log('獲取學生總表資料失敗：' + error.toString());
