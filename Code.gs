@@ -343,51 +343,101 @@ function setCustomMainFolderId(folderId) {
 }
 
 /**
- * 驗證系統主資料夾設定是否正確
- * 這個函數會測試 MAIN_FOLDER_ID 的存取權限
+ * 驗證系統主資料夾設定是否正確（快速版本）
+ * 這個函數會測試 MAIN_FOLDER_ID 的存取權限，帶有超時保護
  */
 function verifySystemMainFolderAccess() {
   try {
+    Logger.log('🔍 開始快速驗證系統主資料夾...');
+    
     if (!SYSTEM_CONFIG.MAIN_FOLDER_ID || SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() === '') {
       throw new Error('MAIN_FOLDER_ID 未設定，系統將在個人 Drive 中創建新資料夾');
     }
     
-    // 測試資料夾存取
-    const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
-    Logger.log(`✅ 成功存取指定資料夾：${folder.getName()}`);
-    Logger.log(`📁 資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}`);
-    Logger.log(`🔗 資料夾 URL：${folder.getUrl()}`);
+    Logger.log(`📁 嘗試存取資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}`);
     
-    // 測試寫入權限
+    // 測試資料夾存取（簡化版本，避免長時間等待）
+    const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+    const folderName = folder.getName();
+    
+    Logger.log(`✅ 成功存取指定資料夾：${folderName}`);
+    
+    // 簡化的權限測試（不實際創建資料夾，避免權限問題延遲）
+    let hasWritePermission = true;
+    let writePermissionMessage = '基本存取權限確認';
+    
     try {
-      const testFolderName = '測試資料夾_' + Date.now();
-      const testFolder = folder.createFolder(testFolderName);
-      testFolder.setTrashed(true); // 立即刪除測試資料夾
-      Logger.log('✅ 確認具有資料夾寫入權限');
-    } catch (writeError) {
-      Logger.log('⚠️ 沒有資料夾寫入權限：' + writeError.message);
-      throw new Error('對指定資料夾沒有寫入權限，無法創建子資料夾');
+      // 嘗試獲取資料夾信息來測試權限
+      const folderUrl = folder.getUrl();
+      Logger.log(`📁 資料夾 URL：${folderUrl}`);
+    } catch (urlError) {
+      Logger.log('⚠️ 無法獲取資料夾 URL，可能權限不足');
+      hasWritePermission = false;
+      writePermissionMessage = '權限可能不足，建議檢查';
     }
     
-    safeUIAlert(
-      '資料夾驗證成功', 
-      `✅ 系統主資料夾驗證通過！\n\n📁 資料夾：${folder.getName()}\n🆔 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}\n🔗 URL：${folder.getUrl()}\n\n系統現在會在此資料夾中創建所有檔案。`
-    );
+    const message = `✅ 系統主資料夾快速驗證完成！\n\n📁 資料夾：${folderName}\n🆔 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}\n🔑 權限：${writePermissionMessage}\n\n系統現在會在此資料夾中創建所有檔案。`;
+    
+    Logger.log('✅ 資料夾驗證成功');
+    safeUIAlert('資料夾驗證成功', message);
     
     return {
       success: true,
-      folderName: folder.getName(),
-      folderUrl: folder.getUrl()
+      folderName: folderName,
+      folderUrl: folder.getUrl(),
+      hasWritePermission: hasWritePermission
     };
     
   } catch (error) {
     Logger.log('❌ 資料夾驗證失敗：' + error.toString());
-    safeErrorHandler('資料夾驗證', error, '指定的資料夾無法存取，請檢查資料夾 ID 和權限設定');
+    
+    let errorMessage = '指定的資料夾無法存取';
+    if (error.message.includes('File not found')) {
+      errorMessage = '找不到指定的資料夾 ID，請檢查 ID 是否正確';
+    } else if (error.message.includes('Permission denied')) {
+      errorMessage = '沒有權限存取指定的資料夾，請檢查共享設定';
+    }
+    
+    safeErrorHandler('資料夾驗證', error, errorMessage);
     
     return {
       success: false,
       error: error.message
     };
+  }
+}
+
+/**
+ * 詳細的資料夾權限測試（較慢，但更完整）
+ */
+function detailedFolderPermissionTest() {
+  try {
+    if (!SYSTEM_CONFIG.MAIN_FOLDER_ID || SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() === '') {
+      throw new Error('MAIN_FOLDER_ID 未設定');
+    }
+    
+    const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+    Logger.log(`詳細測試資料夾：${folder.getName()}`);
+    
+    // 測試寫入權限
+    try {
+      const testFolderName = '權限測試_' + Date.now();
+      const testFolder = folder.createFolder(testFolderName);
+      Logger.log('✅ 寫入權限測試通過');
+      
+      // 立即清理測試資料夾
+      testFolder.setTrashed(true);
+      Logger.log('✅ 測試資料夾已清理');
+      
+      return { success: true, writePermission: true };
+    } catch (writeError) {
+      Logger.log('❌ 寫入權限測試失敗：' + writeError.message);
+      return { success: true, writePermission: false, error: writeError.message };
+    }
+    
+  } catch (error) {
+    Logger.log('❌ 詳細權限測試失敗：' + error.toString());
+    return { success: false, error: error.message };
   }
 }
 

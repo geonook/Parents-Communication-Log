@@ -694,49 +694,23 @@ function getSystemStatusWeb() {
       nextSteps: []
     };
     
-    // 檢查主資料夾 - 使用嚴格模式驗證
+    // 檢查主資料夾 - 使用增強的實時驗證
     try {
-      Logger.log('Dashboard: 開始檢查系統主資料夾...');
+      Logger.log('Dashboard: 開始檢查系統主資料夾（實時驗證）...');
       
-      // 嘗試嚴格驗證（檢查內容完整性）
-      try {
-        const validatedFolder = getSystemMainFolder(true); // 嚴格模式驗證
-        Logger.log('Dashboard: 嚴格驗證通過 - 系統完整');
-        systemStatus.productionEnvironment.mainFolder = true;
-        systemStatus.productionEnvironment.subFolders = true;
-        systemStatus.productionEnvironment.adminConsole = true;
-        systemStatus.productionEnvironment.templates = true;
-        systemStatus.validationDetails = '所有組件完整';
-      } catch (strictError) {
-        Logger.log('Dashboard: 嚴格驗證失敗 - ' + strictError.message);
-        
-        // 嘗試寬鬆模式檢查資料夾是否存在
-        try {
-          const mainFolder = getSystemMainFolder(false);
-          Logger.log('Dashboard: 主資料夾存在但內容不完整');
-          systemStatus.productionEnvironment.mainFolder = true;
-          
-          // 根據錯誤訊息分析具體缺失項目
-          const errorMessage = strictError.message;
-          systemStatus.productionEnvironment.subFolders = !errorMessage.includes('缺少子資料夾');
-          systemStatus.productionEnvironment.adminConsole = !errorMessage.includes('缺少管理控制台檔案');
-          systemStatus.productionEnvironment.templates = !errorMessage.includes('無範本檔案') && !errorMessage.includes('空資料夾');
-          
-          // 記錄詳細的缺失信息
-          systemStatus.validationDetails = errorMessage;
-        } catch (folderError) {
-          // 連主資料夾都不存在
-          Logger.log('Dashboard: 主資料夾不存在');
-          systemStatus.productionEnvironment.mainFolder = false;
-          systemStatus.productionEnvironment.subFolders = false;
-          systemStatus.productionEnvironment.adminConsole = false;
-          systemStatus.productionEnvironment.templates = false;
-          systemStatus.validationDetails = '主資料夾不存在：' + folderError.message;
-        }
-      }
+      // 執行即時的詳細檢查，避免快取問題
+      const realTimeValidation = performRealTimeSystemValidation();
+      
+      systemStatus.productionEnvironment.mainFolder = realTimeValidation.mainFolderExists;
+      systemStatus.productionEnvironment.subFolders = realTimeValidation.subFoldersComplete;
+      systemStatus.productionEnvironment.adminConsole = realTimeValidation.adminConsoleExists;
+      systemStatus.productionEnvironment.templates = realTimeValidation.templatesExist;
+      systemStatus.validationDetails = realTimeValidation.details;
+      
+      Logger.log(`Dashboard: 實時驗證結果 - 主資料夾: ${realTimeValidation.mainFolderExists}, 子資料夾: ${realTimeValidation.subFoldersComplete}, 管理控制台: ${realTimeValidation.adminConsoleExists}, 範本: ${realTimeValidation.templatesExist}`);
       
     } catch (error) {
-      Logger.log('Dashboard: 系統檢查異常 - ' + error.message);
+      Logger.log('Dashboard: 實時驗證異常 - ' + error.message);
       systemStatus.productionEnvironment.mainFolder = false;
       systemStatus.productionEnvironment.subFolders = false;
       systemStatus.productionEnvironment.adminConsole = false;
@@ -927,6 +901,138 @@ function generateDetailedSystemDiagnosticWeb() {
     return {
       success: false,
       message: '生成診斷報告失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 執行即時系統驗證，避免快取問題
+ */
+function performRealTimeSystemValidation() {
+  try {
+    Logger.log('Dashboard: 開始即時系統驗證...');
+    
+    const validation = {
+      mainFolderExists: false,
+      subFoldersComplete: false,
+      adminConsoleExists: false,
+      templatesExist: false,
+      details: '',
+      issues: []
+    };
+    
+    // 1. 檢查主資料夾
+    let mainFolder;
+    try {
+      if (SYSTEM_CONFIG.MAIN_FOLDER_ID && SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() !== '') {
+        mainFolder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+        validation.mainFolderExists = true;
+        Logger.log('Dashboard: 主資料夾存在 - ' + mainFolder.getName());
+      } else {
+        const folders = DriveApp.getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
+        if (folders.hasNext()) {
+          mainFolder = folders.next();
+          validation.mainFolderExists = true;
+          Logger.log('Dashboard: 按名稱找到主資料夾 - ' + mainFolder.getName());
+        } else {
+          validation.issues.push('主資料夾不存在');
+        }
+      }
+    } catch (folderError) {
+      validation.issues.push('主資料夾存取失敗：' + folderError.message);
+    }
+    
+    if (!validation.mainFolderExists) {
+      validation.details = '主資料夾不存在或無法存取';
+      return validation;
+    }
+    
+    // 2. 檢查子資料夾
+    const requiredSubfolders = [
+      SYSTEM_CONFIG.TEACHERS_FOLDER_NAME,
+      SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME,
+      '系統備份',
+      '進度報告'
+    ];
+    
+    let foundSubfolders = 0;
+    const missingSubfolders = [];
+    
+    requiredSubfolders.forEach(folderName => {
+      try {
+        const subfolders = mainFolder.getFoldersByName(folderName);
+        if (subfolders.hasNext()) {
+          foundSubfolders++;
+          Logger.log(`Dashboard: 找到子資料夾 - ${folderName}`);
+        } else {
+          missingSubfolders.push(folderName);
+          Logger.log(`Dashboard: 缺少子資料夾 - ${folderName}`);
+        }
+      } catch (subfolderError) {
+        missingSubfolders.push(folderName);
+        Logger.log(`Dashboard: 檢查子資料夾失敗 - ${folderName}: ${subfolderError.message}`);
+      }
+    });
+    
+    validation.subFoldersComplete = (foundSubfolders === requiredSubfolders.length);
+    if (!validation.subFoldersComplete) {
+      validation.issues.push(`缺少子資料夾：${missingSubfolders.join(', ')}`);
+    }
+    
+    // 3. 檢查管理控制台檔案
+    try {
+      const adminFiles = mainFolder.getFilesByName('電聯記錄簿管理控制台');
+      validation.adminConsoleExists = adminFiles.hasNext();
+      if (validation.adminConsoleExists) {
+        Logger.log('Dashboard: 找到管理控制台檔案');
+      } else {
+        validation.issues.push('缺少管理控制台檔案');
+        Logger.log('Dashboard: 缺少管理控制台檔案');
+      }
+    } catch (adminError) {
+      validation.issues.push('檢查管理控制台檔案失敗：' + adminError.message);
+    }
+    
+    // 4. 檢查範本檔案
+    try {
+      const templatesFolders = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME);
+      if (templatesFolders.hasNext()) {
+        const templatesFolder = templatesFolders.next();
+        const templateFiles = templatesFolder.getFiles();
+        validation.templatesExist = templateFiles.hasNext();
+        if (validation.templatesExist) {
+          Logger.log('Dashboard: 找到範本檔案');
+        } else {
+          validation.issues.push('範本資料夾為空');
+          Logger.log('Dashboard: 範本資料夾為空');
+        }
+      } else {
+        validation.issues.push('範本資料夾不存在');
+        Logger.log('Dashboard: 範本資料夾不存在');
+      }
+    } catch (templateError) {
+      validation.issues.push('檢查範本檔案失敗：' + templateError.message);
+    }
+    
+    // 5. 生成詳細說明
+    if (validation.issues.length === 0) {
+      validation.details = '所有組件完整';
+    } else {
+      validation.details = validation.issues.join('；');
+    }
+    
+    Logger.log(`Dashboard: 即時驗證完成 - 問題數量: ${validation.issues.length}`);
+    return validation;
+    
+  } catch (error) {
+    Logger.log('Dashboard: 即時驗證異常 - ' + error.toString());
+    return {
+      mainFolderExists: false,
+      subFoldersComplete: false,
+      adminConsoleExists: false,
+      templatesExist: false,
+      details: '驗證過程異常：' + error.message,
+      issues: ['驗證過程異常']
     };
   }
 }
