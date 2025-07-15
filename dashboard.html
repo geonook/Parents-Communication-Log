@@ -891,7 +891,124 @@
         }
 
         function showSystemSettings() {
-            alert('請在 Google Sheets 中使用「電聯記錄簿系統」選單 → 「系統管理」→ 「⚙️ 系統設定」功能');
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '載入中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        displaySystemSettings(result.settings);
+                    } else {
+                        alert('❌ 載入系統設定失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('❌ 載入系統設定失敗：' + error.message);
+                })
+                .executeSystemFunction('showSystemSettings');
+        }
+
+        function displaySystemSettings(settings) {
+            let settingsHTML = '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 20px; background: #f9f9f9; border-radius: 8px;">';
+            
+            settingsHTML += '<h2 style="color: #333; margin-bottom: 20px;">📋 系統設定資訊</h2>';
+            
+            // 系統狀態
+            if (settings.systemStatus) {
+                settingsHTML += '<div style="margin-bottom: 20px; padding: 15px; background: #e8f4fd; border-radius: 5px;">';
+                settingsHTML += '<h3 style="color: #2c5282; margin-bottom: 10px;">🏥 系統狀態</h3>';
+                settingsHTML += `<p><strong>健康度：</strong> ${settings.systemStatus.overallHealth}%</p>`;
+                settingsHTML += `<p><strong>狀態：</strong> ${settings.systemStatus.initialized ? '已初始化' : '未初始化'}</p>`;
+                settingsHTML += `<p><strong>描述：</strong> ${settings.systemStatus.statusDescription}</p>`;
+                settingsHTML += '</div>';
+            }
+            
+            // 系統資料夾資訊
+            settingsHTML += '<div style="margin-bottom: 20px; padding: 15px; background: #f0fff4; border-radius: 5px;">';
+            settingsHTML += '<h3 style="color: #2f855a; margin-bottom: 10px;">📁 資料夾設定</h3>';
+            settingsHTML += `<p><strong>主資料夾：</strong> ${settings.systemInfo.mainFolderName}</p>`;
+            settingsHTML += `<p><strong>主資料夾ID：</strong> ${settings.systemInfo.mainFolderId}</p>`;
+            settingsHTML += `<p><strong>老師資料夾：</strong> ${settings.systemInfo.teachersFolderName}</p>`;
+            settingsHTML += `<p><strong>範本資料夾：</strong> ${settings.systemInfo.templatesFolderName}</p>`;
+            if (settings.mainFolderUrl) {
+                settingsHTML += `<p><a href="${settings.mainFolderUrl}" target="_blank" style="color: #3182ce; text-decoration: none;">🔗 開啟主資料夾</a></p>`;
+            }
+            settingsHTML += '</div>';
+            
+            // 學年設定
+            settingsHTML += '<div style="margin-bottom: 20px; padding: 15px; background: #fffbf0; border-radius: 5px;">';
+            settingsHTML += '<h3 style="color: #c05621; margin-bottom: 10px;">📅 學年設定</h3>';
+            settingsHTML += `<p><strong>學期：</strong> ${settings.academicYear.semesters.join(', ')}</p>`;
+            settingsHTML += `<p><strong>期別：</strong> ${settings.academicYear.terms.join(', ')}</p>`;
+            settingsHTML += `<p><strong>當前學期：</strong> ${settings.academicYear.currentSemester}</p>`;
+            settingsHTML += `<p><strong>當前期別：</strong> ${settings.academicYear.currentTerm}</p>`;
+            settingsHTML += '</div>';
+            
+            // 聯繫設定
+            settingsHTML += '<div style="margin-bottom: 20px; padding: 15px; background: #f7fafc; border-radius: 5px;">';
+            settingsHTML += '<h3 style="color: #4a5568; margin-bottom: 10px;">📞 聯繫設定</h3>';
+            settingsHTML += `<p><strong>聯繫類型：</strong> ${Object.values(settings.contactSettings.contactTypes).join(', ')}</p>`;
+            settingsHTML += `<p><strong>聯繫方式：</strong> ${settings.contactSettings.contactMethods.join(', ')}</p>`;
+            settingsHTML += `<p><strong>每期必須聯繫次數：</strong> ${settings.contactSettings.requiredContactPerTerm}</p>`;
+            settingsHTML += `<p><strong>提醒天數：</strong> ${settings.contactSettings.alertDays}</p>`;
+            settingsHTML += '</div>';
+            
+            // 年級設定
+            settingsHTML += '<div style="margin-bottom: 20px; padding: 15px; background: #fef5e7; border-radius: 5px;">';
+            settingsHTML += '<h3 style="color: #b7791f; margin-bottom: 10px;">🎓 年級設定</h3>';
+            settingsHTML += `<p><strong>年級：</strong> ${settings.gradeSettings.gradeLevels.join(', ')}</p>`;
+            settingsHTML += `<p><strong>英語班級名稱：</strong> ${settings.gradeSettings.englishClassNames.slice(0, 5).join(', ')} ... (共 ${settings.gradeSettings.englishClassNames.length} 個)</p>`;
+            settingsHTML += '</div>';
+            
+            settingsHTML += '<div style="text-align: center; margin-top: 20px;">';
+            settingsHTML += '<button onclick="closeSystemSettingsModal()" style="background: #4299e1; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer;">關閉</button>';
+            settingsHTML += '</div>';
+            
+            settingsHTML += '</div>';
+            
+            // 創建模態框
+            const modal = document.createElement('div');
+            modal.id = 'systemSettingsModal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            const modalContent = document.createElement('div');
+            modalContent.style.cssText = `
+                background: white;
+                border-radius: 10px;
+                max-width: 90%;
+                max-height: 90%;
+                overflow-y: auto;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            `;
+            
+            modalContent.innerHTML = settingsHTML;
+            modal.appendChild(modalContent);
+            document.body.appendChild(modal);
+        }
+
+        function closeSystemSettingsModal() {
+            const modal = document.getElementById('systemSettingsModal');
+            if (modal) {
+                modal.remove();
+            }
         }
 
         // ========== 系統狀態檢查和設定相關函數 ==========

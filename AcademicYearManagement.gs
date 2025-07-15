@@ -9,11 +9,7 @@
  */
 function showAcademicYearManagement() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：學年管理功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
     // 獲取當前學年資訊
@@ -84,11 +80,7 @@ function getCurrentAcademicYearInfo() {
  */
 function switchAcademicYear() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：學年切換功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     const currentYear = new Date().getFullYear();
     

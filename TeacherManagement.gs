@@ -8,11 +8,7 @@
  */
 function createTeacherRecordBook() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
     // 獲取老師資訊
@@ -39,11 +35,7 @@ function createTeacherRecordBook() {
  */
 function batchCreateTeacherBooks() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
     // 讓用戶選擇包含老師資料的檔案
@@ -90,10 +82,7 @@ function batchCreateTeacherBooks() {
  * 從用戶輸入獲取老師資訊
  */
 function getTeacherInfoFromUser() {
-  if (isWebEnvironment()) {
-    Logger.log('Web環境：無法獲取用戶輸入');
-    return null;
-  }
+  // 統一 Web 環境架構 - 移除環境檢查
   const ui = SpreadsheetApp.getUi();
   
   // 獲取老師姓名
@@ -729,11 +718,7 @@ function validateSystemFolderStructure(folder) {
  */
 function prebuildAcademicContactRecords() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     const currentSheet = SpreadsheetApp.getActiveSheet();
     const recordBook = SpreadsheetApp.getActiveSpreadsheet();

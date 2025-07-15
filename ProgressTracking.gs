@@ -8,11 +8,7 @@
  */
 function checkAllProgress() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
     // 獲取所有老師的記錄簿
@@ -48,11 +44,7 @@ function checkAllProgress() {
  */
 function generateProgressReport() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：此功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
     // 獲取所有老師的記錄簿

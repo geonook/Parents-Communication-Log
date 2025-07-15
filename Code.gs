@@ -131,11 +131,8 @@ function initializeSystem() {
       safeGetUI()?.ButtonSet.YES_NO
     );
     
-    // 在Web環境中自動執行，在Sheets環境中檢查用戶選擇
-    if (!isWebEnvironment() && response?.selectedButton !== safeGetUI()?.Button.YES) {
-      Logger.log('用戶取消系統初始化');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
+    // 自動執行初始化程序
     
     Logger.log('開始系統初始化...');
     

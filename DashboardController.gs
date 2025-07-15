@@ -570,6 +570,8 @@ function executeSystemFunction(functionName, parameters) {
         return performBackupWeb();
       case 'checkFileIntegrity':
         return checkFileIntegrityWeb();
+      case 'showSystemSettings':
+        return showSystemSettingsWeb();
       default:
         return { success: false, message: '未知的功能：' + functionName };
     }
@@ -1370,6 +1372,81 @@ function setupCompleteSystemWeb() {
     return {
       success: false,
       message: '一鍵完整設定失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * Web 版本的系統設定顯示
+ */
+function showSystemSettingsWeb() {
+  try {
+    Logger.log('Dashboard: 開始顯示系統設定');
+    
+    const settings = {
+      systemInfo: {
+        mainFolderName: SYSTEM_CONFIG.MAIN_FOLDER_NAME,
+        mainFolderId: SYSTEM_CONFIG.MAIN_FOLDER_ID,
+        teachersFolderName: SYSTEM_CONFIG.TEACHERS_FOLDER_NAME,
+        templatesFolderName: SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME
+      },
+      academicYear: {
+        semesters: SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS,
+        terms: SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS,
+        currentSemester: SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER,
+        currentTerm: SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM
+      },
+      contactSettings: {
+        contactTypes: SYSTEM_CONFIG.CONTACT_TYPES,
+        contactMethods: SYSTEM_CONFIG.CONTACT_METHODS,
+        requiredContactPerTerm: SYSTEM_CONFIG.PROGRESS_CHECK.REQUIRED_CONTACT_PER_TERM,
+        alertDays: SYSTEM_CONFIG.PROGRESS_CHECK.ALERT_DAYS
+      },
+      gradeSettings: {
+        gradeLevels: SYSTEM_CONFIG.GRADE_LEVELS,
+        englishClassNames: SYSTEM_CONFIG.ENGLISH_CLASS_NAMES
+      },
+      fieldSettings: {
+        contactFields: SYSTEM_CONFIG.CONTACT_FIELDS,
+        studentFields: SYSTEM_CONFIG.STUDENT_FIELDS
+      }
+    };
+    
+    // 獲取系統狀態資訊
+    try {
+      const statusResult = getSystemStatusWeb();
+      if (statusResult.success) {
+        settings.systemStatus = {
+          overallHealth: statusResult.systemStatus.overallHealth,
+          initialized: statusResult.systemStatus.initialized,
+          statusDescription: statusResult.systemStatus.statusDescription
+        };
+      }
+    } catch (error) {
+      Logger.log('Dashboard: 獲取系統狀態失敗 - ' + error.toString());
+    }
+    
+    // 取得主資料夾URL
+    try {
+      const mainFolder = getSystemMainFolder();
+      settings.mainFolderUrl = mainFolder.getUrl();
+    } catch (error) {
+      Logger.log('Dashboard: 無法取得主資料夾URL - ' + error.toString());
+    }
+    
+    Logger.log('Dashboard: 系統設定資訊準備完成');
+    
+    return {
+      success: true,
+      settings: settings,
+      message: '系統設定資訊已準備完成'
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 顯示系統設定失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '顯示系統設定失敗：' + error.message
     };
   }
 }

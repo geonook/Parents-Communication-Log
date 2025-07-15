@@ -99,13 +99,7 @@ function safeErrorHandler(context, error, userMessage = null) {
   }
 }
 
-/**
- * 檢查是否在Web環境中執行
- * @returns {boolean} true表示Web環境，false表示Sheets環境
- */
-function isWebEnvironment() {
-  return safeGetUI() === null;
-}
+// 移除 isWebEnvironment 函數 - 系統已統一為 Web 環境架構
 
 /**
  * 設定範本檔案內容
@@ -573,11 +567,7 @@ function getAdminConsole(mainFolder) {
  */
 function checkFileIntegrity() {
   try {
-    // Web環境兼容性檢查
-    if (isWebEnvironment()) {
-      Logger.log('Web環境：系統健康檢查功能需要在Google Sheets環境中執行');
-      return;
-    }
+    // 統一 Web 環境架構 - 移除環境檢查
     const healthReport = performSystemHealthCheck();
     
     displayHealthCheckResults(healthReport);
