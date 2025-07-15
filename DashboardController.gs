@@ -696,40 +696,52 @@ function getSystemStatusWeb() {
     
     // 檢查主資料夾 - 使用嚴格模式驗證
     try {
-      // 首先檢查資料夾是否存在（寬鬆模式）
-      const mainFolder = getSystemMainFolder(false);
-      Logger.log('Dashboard: 找到主資料夾，開始嚴格驗證...');
+      Logger.log('Dashboard: 開始檢查系統主資料夾...');
       
       // 嘗試嚴格驗證（檢查內容完整性）
       try {
-        getSystemMainFolder(true); // 嚴格模式驗證
+        const validatedFolder = getSystemMainFolder(true); // 嚴格模式驗證
         Logger.log('Dashboard: 嚴格驗證通過 - 系統完整');
         systemStatus.productionEnvironment.mainFolder = true;
         systemStatus.productionEnvironment.subFolders = true;
         systemStatus.productionEnvironment.adminConsole = true;
         systemStatus.productionEnvironment.templates = true;
+        systemStatus.validationDetails = '所有組件完整';
       } catch (strictError) {
         Logger.log('Dashboard: 嚴格驗證失敗 - ' + strictError.message);
-        // 資料夾存在但內容不完整
-        systemStatus.productionEnvironment.mainFolder = true;
         
-        // 檢查具體缺失項目
-        const errorMessage = strictError.message;
-        systemStatus.productionEnvironment.subFolders = !errorMessage.includes('缺少子資料夾');
-        systemStatus.productionEnvironment.adminConsole = !errorMessage.includes('缺少管理控制台檔案');
-        systemStatus.productionEnvironment.templates = !errorMessage.includes('無範本檔案');
-        
-        // 記錄詳細的缺失信息
-        systemStatus.validationDetails = errorMessage;
+        // 嘗試寬鬆模式檢查資料夾是否存在
+        try {
+          const mainFolder = getSystemMainFolder(false);
+          Logger.log('Dashboard: 主資料夾存在但內容不完整');
+          systemStatus.productionEnvironment.mainFolder = true;
+          
+          // 根據錯誤訊息分析具體缺失項目
+          const errorMessage = strictError.message;
+          systemStatus.productionEnvironment.subFolders = !errorMessage.includes('缺少子資料夾');
+          systemStatus.productionEnvironment.adminConsole = !errorMessage.includes('缺少管理控制台檔案');
+          systemStatus.productionEnvironment.templates = !errorMessage.includes('無範本檔案') && !errorMessage.includes('空資料夾');
+          
+          // 記錄詳細的缺失信息
+          systemStatus.validationDetails = errorMessage;
+        } catch (folderError) {
+          // 連主資料夾都不存在
+          Logger.log('Dashboard: 主資料夾不存在');
+          systemStatus.productionEnvironment.mainFolder = false;
+          systemStatus.productionEnvironment.subFolders = false;
+          systemStatus.productionEnvironment.adminConsole = false;
+          systemStatus.productionEnvironment.templates = false;
+          systemStatus.validationDetails = '主資料夾不存在：' + folderError.message;
+        }
       }
       
     } catch (error) {
-      Logger.log('Dashboard: 主資料夾不存在 - ' + error.message);
+      Logger.log('Dashboard: 系統檢查異常 - ' + error.message);
       systemStatus.productionEnvironment.mainFolder = false;
       systemStatus.productionEnvironment.subFolders = false;
       systemStatus.productionEnvironment.adminConsole = false;
       systemStatus.productionEnvironment.templates = false;
-      systemStatus.validationDetails = error.message;
+      systemStatus.validationDetails = '檢查異常：' + error.message;
     }
     
     // 移除測試環境檢查 - 現在使用純生產環境
@@ -805,6 +817,116 @@ function getSystemStatusWeb() {
     return {
       success: false,
       message: '檢查系統狀態失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 詳細的系統診斷報告
+ */
+function generateDetailedSystemDiagnosticWeb() {
+  try {
+    Logger.log('Dashboard: 開始生成詳細系統診斷報告');
+    
+    const diagnostic = {
+      timestamp: new Date().toLocaleString('zh-TW'),
+      driveAccess: { status: 'unknown', details: '' },
+      folderStructure: { status: 'unknown', details: '' },
+      fileIntegrity: { status: 'unknown', details: '' },
+      configurations: { status: 'unknown', details: '' },
+      permissions: { status: 'unknown', details: '' },
+      recommendations: []
+    };
+    
+    // 1. 檢查 Google Drive 存取權限
+    try {
+      const folders = DriveApp.getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
+      if (folders.hasNext()) {
+        diagnostic.driveAccess.status = 'success';
+        diagnostic.driveAccess.details = '可以存取 Google Drive，找到同名資料夾';
+      } else {
+        diagnostic.driveAccess.status = 'warning';
+        diagnostic.driveAccess.details = '可以存取 Google Drive，但未找到系統資料夾';
+      }
+    } catch (error) {
+      diagnostic.driveAccess.status = 'error';
+      diagnostic.driveAccess.details = '無法存取 Google Drive：' + error.message;
+    }
+    
+    // 2. 檢查資料夾結構
+    try {
+      const mainFolder = getSystemMainFolder(true);
+      diagnostic.folderStructure.status = 'success';
+      diagnostic.folderStructure.details = '系統資料夾結構完整';
+    } catch (error) {
+      try {
+        const mainFolder = getSystemMainFolder(false);
+        diagnostic.folderStructure.status = 'warning';
+        diagnostic.folderStructure.details = '主資料夾存在但結構不完整：' + error.message;
+      } catch (folderError) {
+        diagnostic.folderStructure.status = 'error';
+        diagnostic.folderStructure.details = '主資料夾不存在：' + folderError.message;
+      }
+    }
+    
+    // 3. 檢查系統配置
+    try {
+      const requiredConfigs = ['MAIN_FOLDER_NAME', 'TEACHERS_FOLDER_NAME', 'TEMPLATES_FOLDER_NAME'];
+      const missingConfigs = requiredConfigs.filter(config => !SYSTEM_CONFIG[config]);
+      
+      if (missingConfigs.length === 0) {
+        diagnostic.configurations.status = 'success';
+        diagnostic.configurations.details = '系統配置完整';
+      } else {
+        diagnostic.configurations.status = 'warning';
+        diagnostic.configurations.details = '缺少配置：' + missingConfigs.join(', ');
+      }
+    } catch (error) {
+      diagnostic.configurations.status = 'error';
+      diagnostic.configurations.details = '配置檢查失敗：' + error.message;
+    }
+    
+    // 4. 檢查檔案創建權限
+    try {
+      const testSheet = SpreadsheetApp.create('診斷測試檔案_' + Date.now());
+      const testFile = DriveApp.getFileById(testSheet.getId());
+      testFile.setTrashed(true);
+      
+      diagnostic.permissions.status = 'success';
+      diagnostic.permissions.details = '具有檔案創建和刪除權限';
+    } catch (error) {
+      diagnostic.permissions.status = 'error';
+      diagnostic.permissions.details = '缺少檔案操作權限：' + error.message;
+    }
+    
+    // 5. 生成建議
+    if (diagnostic.driveAccess.status === 'error') {
+      diagnostic.recommendations.push('請檢查 Google Apps Script 的 Google Drive 權限設定');
+    }
+    if (diagnostic.folderStructure.status === 'error') {
+      diagnostic.recommendations.push('執行「一鍵完整設定」創建系統資料夾');
+    } else if (diagnostic.folderStructure.status === 'warning') {
+      diagnostic.recommendations.push('執行「一鍵完整設定」補充缺失的系統組件');
+    }
+    if (diagnostic.permissions.status === 'error') {
+      diagnostic.recommendations.push('請確認 Google Apps Script 具有必要的檔案操作權限');
+    }
+    if (diagnostic.recommendations.length === 0) {
+      diagnostic.recommendations.push('系統狀態良好，可以正常使用');
+    }
+    
+    Logger.log('Dashboard: 系統診斷報告生成完成');
+    
+    return {
+      success: true,
+      diagnostic: diagnostic
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 生成系統診斷報告失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '生成診斷報告失敗：' + error.message
     };
   }
 }

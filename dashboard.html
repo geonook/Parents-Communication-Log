@@ -341,18 +341,9 @@
                     </div>
                 </div>
                 
-                <!-- 快速設定區 -->
+                <!-- 快速設定區 - 動態生成 -->
                 <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
-                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
-                        <h3 style="color: #856404; margin-bottom: 10px;">⚡ 快速設定</h3>
-                        <p style="color: #856404; margin-bottom: 15px;">系統尚未完整初始化，建議先執行完整設定：</p>
-                        <button class="action-button primary" onclick="setupCompleteSystem()" style="margin-right: 10px;">
-                            🚀 一鍵完整設定
-                        </button>
-                        <button class="action-button secondary" onclick="initializeSystem()">
-                            🏗️ 初始化系統
-                        </button>
-                    </div>
+                    <!-- 內容由 JavaScript 動態生成 -->
                 </div>
                 
                 <!-- 系統監控工具 -->
@@ -923,10 +914,36 @@
                 statusMessage = `健康度：${systemStatus.overallHealth}% - ${systemStatus.statusDescription || '可以正常使用'}`;
             }
             
-            // 根據健康度決定是否顯示快速設定區域
+            // 調整快速設定區域顯示邏輯
             if (systemStatus.overallHealth >= 95) {
-                quickSetupSection.style.display = 'none';
+                // 系統就緒時顯示維護選項
+                quickSetupSection.innerHTML = `
+                    <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745;">
+                        <h3 style="color: #155724; margin-bottom: 10px;">🛠️ 系統維護</h3>
+                        <p style="color: #155724; margin-bottom: 15px;">系統運作正常。如需重新設定或維護，可使用以下選項：</p>
+                        <button class="action-button secondary" onclick="setupCompleteSystem()" style="margin-right: 10px;">
+                            🔄 強制重新初始化
+                        </button>
+                        <button class="action-button secondary" onclick="showDetailedDiagnostic()">
+                            🔍 詳細診斷報告
+                        </button>
+                    </div>
+                `;
+                quickSetupSection.style.display = 'block';
             } else {
+                // 系統未就緒時顯示設定選項
+                quickSetupSection.innerHTML = `
+                    <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
+                        <h3 style="color: #856404; margin-bottom: 10px;">⚡ 快速設定</h3>
+                        <p style="color: #856404; margin-bottom: 15px;">系統尚未完整初始化，建議先執行完整設定：</p>
+                        <button class="action-button primary" onclick="setupCompleteSystem()" style="margin-right: 10px;">
+                            🚀 一鍵完整設定
+                        </button>
+                        <button class="action-button secondary" onclick="initializeSystem()">
+                            🏗️ 初始化系統
+                        </button>
+                    </div>
+                `;
                 quickSetupSection.style.display = 'block';
             }
             
@@ -1027,6 +1044,61 @@
                     .getSystemStatusWeb();
             }, 1000);
         });
+
+        // ========== 詳細系統診斷 ==========
+        
+        function showDetailedDiagnostic() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '診斷中...';
+            button.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    if (result.success) {
+                        displayDetailedDiagnostic(result.diagnostic);
+                    } else {
+                        alert('詳細診斷失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('詳細診斷失敗：' + error.message);
+                })
+                .generateDetailedSystemDiagnosticWeb();
+        }
+        
+        function displayDetailedDiagnostic(diagnostic) {
+            let message = `🏥 詳細系統診斷報告\\n`;
+            message += `📅 檢查時間：${diagnostic.timestamp}\\n\\n`;
+            
+            // 檢查項目狀態
+            const checks = [
+                { name: '🌐 Google Drive 存取', item: diagnostic.driveAccess },
+                { name: '📁 資料夾結構', item: diagnostic.folderStructure },
+                { name: '⚙️ 系統配置', item: diagnostic.configurations },
+                { name: '🔑 操作權限', item: diagnostic.permissions }
+            ];
+            
+            checks.forEach(check => {
+                const statusIcon = check.item.status === 'success' ? '✅' : 
+                                 check.item.status === 'warning' ? '⚠️' : '❌';
+                message += `${statusIcon} ${check.name}\\n`;
+                message += `   ${check.item.details}\\n\\n`;
+            });
+            
+            // 建議事項
+            message += `💡 建議事項：\\n`;
+            diagnostic.recommendations.forEach(rec => {
+                message += `• ${rec}\\n`;
+            });
+            
+            alert(message);
+        }
 
         // ========== 系統測試 ==========
         
