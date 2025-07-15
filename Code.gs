@@ -386,21 +386,35 @@ function setupMasterListContent(masterListSheet) {
     sheet.setColumnWidth(index + 1, width);
   });
   
-  // 詢問是否要生成測試資料
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    '測試資料生成',
-    '是否要生成20筆測試學生資料？\n\n• 包含不同年級、班級、老師的組合\n• 便於測試系統功能\n• 可隨時手動刪除',
-    ui.ButtonSet.YES_NO
-  );
-  
-  if (response === ui.Button.YES) {
-    // 生成20筆測試資料
-    const testData = generateTestStudentData();
-    sheet.getRange(4, 1, testData.length, testData[0].length).setValues(testData);
-    sheet.getRange(4, 1, testData.length, testData[0].length).setBackground('#FFFBEE').setNote('測試資料 - 可刪除');
-  } else {
-    // 只新增一筆範例資料
+  // 檢查是否在Web環境中執行（避免UI調用錯誤）
+  try {
+    // 詢問是否要生成測試資料（僅在非Web環境）
+    const ui = SpreadsheetApp.getUi();
+    const response = ui.alert(
+      '測試資料生成',
+      '是否要生成20筆測試學生資料？\n\n• 包含不同年級、班級、老師的組合\n• 便於測試系統功能\n• 可隨時手動刪除',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response === ui.Button.YES) {
+      // 生成20筆測試資料
+      const testData = generateTestStudentData();
+      sheet.getRange(4, 1, testData.length, testData[0].length).setValues(testData);
+      sheet.getRange(4, 1, testData.length, testData[0].length).setBackground('#FFFBEE').setNote('測試資料 - 可刪除');
+    } else {
+      // 只新增一筆範例資料
+      const sampleData = [[
+        '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
+      ]];
+      sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
+      sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
+    }
+  } catch (uiError) {
+    // 如果UI調用失敗（如在Web環境中），記錄到日誌但不影響主要功能
+    Logger.log('UI不可用，跳過測試資料生成提示: ' + uiError.toString());
+    Logger.log('Web環境：自動添加範例資料');
+    
+    // 在Web環境下默認添加一筆範例資料
     const sampleData = [[
       '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
     ]];
