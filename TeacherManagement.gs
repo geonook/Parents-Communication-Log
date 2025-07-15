@@ -618,11 +618,15 @@ function setupContactLogConditionalFormatting(sheet) {
  * 取得系統主資料夾
  * 如果有指定 MAIN_FOLDER_ID，優先使用該資料夾，否則按名稱搜尋
  */
-function getSystemMainFolder() {
+function getSystemMainFolder(strictMode = false) {
   // 如果有指定資料夾 ID，優先使用
-  if (SYSTEM_CONFIG.MAIN_FOLDER_ID) {
+  if (SYSTEM_CONFIG.MAIN_FOLDER_ID && SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() !== '') {
     try {
-      return DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+      const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+      if (strictMode) {
+        return validateSystemFolderStructure(folder);
+      }
+      return folder;
     } catch (error) {
       Logger.log(`無法存取指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}，嘗試按名稱搜尋`);
     }
@@ -631,10 +635,78 @@ function getSystemMainFolder() {
   // 按名稱搜尋資料夾
   const folders = DriveApp.getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
   if (folders.hasNext()) {
-    return folders.next();
+    const folder = folders.next();
+    if (strictMode) {
+      return validateSystemFolderStructure(folder);
+    }
+    return folder;
   }
   
   throw new Error('系統資料夾不存在，請先執行系統初始化');
+}
+
+/**
+ * 驗證系統資料夾結構完整性
+ * @param {Folder} folder - 要驗證的資料夾
+ * @returns {Folder} - 如果驗證通過返回資料夾，否則拋出錯誤
+ */
+function validateSystemFolderStructure(folder) {
+  const requiredSubfolders = [
+    SYSTEM_CONFIG.TEACHERS_FOLDER_NAME,
+    SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME,
+    '系統備份',
+    '進度報告'
+  ];
+  
+  const missingFolders = [];
+  const emptyFolders = [];
+  
+  // 檢查所有必要的子資料夾
+  requiredSubfolders.forEach(folderName => {
+    const subfolders = folder.getFoldersByName(folderName);
+    if (!subfolders.hasNext()) {
+      missingFolders.push(folderName);
+    } else {
+      const subfolder = subfolders.next();
+      // 檢查特定資料夾是否包含預期內容
+      if (folderName === SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME) {
+        const templateFiles = subfolder.getFilesByType(MimeType.GOOGLE_SHEETS);
+        if (!templateFiles.hasNext()) {
+          emptyFolders.push(folderName + ' (無範本檔案)');
+        }
+      }
+    }
+  });
+  
+  // 檢查管理控制台
+  const adminFiles = folder.getFilesByName('電聯記錄簿管理控制台');
+  const hasAdminConsole = adminFiles.hasNext();
+  
+  // 檢查學生總表
+  const masterListFiles = folder.getFilesByName('學生總表');
+  const hasMasterList = masterListFiles.hasNext();
+  
+  // 如果有任何缺失，拋出詳細錯誤
+  const issues = [];
+  if (missingFolders.length > 0) {
+    issues.push(`缺少子資料夾：${missingFolders.join(', ')}`);
+  }
+  if (emptyFolders.length > 0) {
+    issues.push(`空資料夾：${emptyFolders.join(', ')}`);
+  }
+  if (!hasAdminConsole) {
+    issues.push('缺少管理控制台檔案');
+  }
+  if (!hasMasterList) {
+    issues.push('缺少學生總表檔案');
+  }
+  
+  if (issues.length > 0) {
+    throw new Error(`系統資料夾不完整：${issues.join('；')}`);
+  }
+  
+  Logger.log('✅ 系統資料夾結構驗證通過');
+  return folder;
 }
 
 /**

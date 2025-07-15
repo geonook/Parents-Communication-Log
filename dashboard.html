@@ -900,24 +900,59 @@
             
             let statusColor, statusIcon, statusText, statusMessage;
             
-            if (systemStatus.initialized) {
+            // 根據健康度和初始化狀態設定顏色和訊息
+            if (systemStatus.overallHealth === 0) {
+                statusColor = '#f8d7da';
+                statusIcon = '❌';
+                statusText = '系統尚未初始化';
+                statusMessage = '沒有找到系統資料夾 - 需要執行完整初始化';
+            } else if (systemStatus.overallHealth < 50) {
+                statusColor = '#fff3cd';
+                statusIcon = '⚠️';
+                statusText = '系統部分初始化';
+                statusMessage = `健康度：${systemStatus.overallHealth}% - ${systemStatus.statusDescription || '缺少關鍵組件'}`;
+            } else if (systemStatus.overallHealth < 95) {
+                statusColor = '#cce7ff';
+                statusIcon = '🔧';
+                statusText = '系統基本就緒';
+                statusMessage = `健康度：${systemStatus.overallHealth}% - ${systemStatus.statusDescription || '仍需完善部分組件'}`;
+            } else {
                 statusColor = '#d4edda';
                 statusIcon = '✅';
-                statusText = '系統已就緒';
-                statusMessage = `系統健康度：${systemStatus.overallHealth}% - 可以進行正常使用和測試`;
+                statusText = '系統完全就緒';
+                statusMessage = `健康度：${systemStatus.overallHealth}% - ${systemStatus.statusDescription || '可以正常使用'}`;
+            }
+            
+            // 根據健康度決定是否顯示快速設定區域
+            if (systemStatus.overallHealth >= 95) {
                 quickSetupSection.style.display = 'none';
             } else {
-                statusColor = '#f8d7da';
-                statusIcon = '⚠️';
-                statusText = '系統需要初始化';
-                statusMessage = `系統健康度：${systemStatus.overallHealth}% - 建議執行完整設定或初始化`;
                 quickSetupSection.style.display = 'block';
             }
             
+            // 添加詳細的建議信息
+            let recommendations = '';
+            if (systemStatus.recommendations && systemStatus.recommendations.length > 0) {
+                recommendations = `<br><small style="opacity: 0.8;">建議：${systemStatus.recommendations[0]}</small>`;
+            }
+            
+            // 添加驗證詳情（如果有）
+            let validationDetails = '';
+            if (systemStatus.validationDetails && systemStatus.overallHealth < 95) {
+                validationDetails = `<br><small style="opacity: 0.7; font-style: italic;">詳情：${systemStatus.validationDetails}</small>`;
+            }
+            
+            const borderColor = statusColor === '#d4edda' ? '#28a745' : 
+                               statusColor === '#cce7ff' ? '#007bff' :
+                               statusColor === '#fff3cd' ? '#ffc107' : '#dc3545';
+            const textColor = statusColor === '#d4edda' ? '#155724' : 
+                             statusColor === '#cce7ff' ? '#004085' :
+                             statusColor === '#fff3cd' ? '#856404' : '#721c24';
+            
             indicator.innerHTML = `
-                <div style="background: ${statusColor}; padding: 15px; border-radius: 8px; border-left: 4px solid ${statusColor === '#d4edda' ? '#28a745' : '#dc3545'};">
-                    <h3 style="color: ${statusColor === '#d4edda' ? '#155724' : '#721c24'}; margin-bottom: 10px;">${statusIcon} ${statusText}</h3>
-                    <p style="color: ${statusColor === '#d4edda' ? '#155724' : '#721c24'}; margin: 0;">${statusMessage}</p>
+                <div style="background: ${statusColor}; padding: 15px; border-radius: 8px; border-left: 4px solid ${borderColor};">
+                    <h3 style="color: ${textColor}; margin-bottom: 10px;">${statusIcon} ${statusText}</h3>
+                    <p style="color: ${textColor}; margin: 0;">${statusMessage}${recommendations}${validationDetails}</p>
                 </div>
             `;
         }

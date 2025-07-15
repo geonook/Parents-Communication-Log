@@ -694,67 +694,102 @@ function getSystemStatusWeb() {
       nextSteps: []
     };
     
-    // 檢查主資料夾
+    // 檢查主資料夾 - 使用嚴格模式驗證
     try {
-      const mainFolder = getSystemMainFolder();
-      systemStatus.productionEnvironment.mainFolder = true;
+      // 首先檢查資料夾是否存在（寬鬆模式）
+      const mainFolder = getSystemMainFolder(false);
+      Logger.log('Dashboard: 找到主資料夾，開始嚴格驗證...');
       
-      // 檢查子資料夾
-      const requiredFolders = [
-        SYSTEM_CONFIG.TEACHERS_FOLDER_NAME,
-        SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME,
-        '系統備份',
-        '進度報告'
-      ];
-      
-      let existingFolders = 0;
-      requiredFolders.forEach(folderName => {
-        const folders = mainFolder.getFoldersByName(folderName);
-        if (folders.hasNext()) {
-          existingFolders++;
-        }
-      });
-      
-      systemStatus.productionEnvironment.subFolders = (existingFolders === requiredFolders.length);
-      
-      // 檢查管理控制台
+      // 嘗試嚴格驗證（檢查內容完整性）
       try {
-        const adminConsole = getAdminConsole(mainFolder);
+        getSystemMainFolder(true); // 嚴格模式驗證
+        Logger.log('Dashboard: 嚴格驗證通過 - 系統完整');
+        systemStatus.productionEnvironment.mainFolder = true;
+        systemStatus.productionEnvironment.subFolders = true;
         systemStatus.productionEnvironment.adminConsole = true;
-      } catch (error) {
-        systemStatus.productionEnvironment.adminConsole = false;
-      }
-      
-      // 檢查範本檔案
-      try {
-        const templatesFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEMPLATES_FOLDER_NAME).next();
-        const templateFiles = templatesFolder.getFilesByType(MimeType.GOOGLE_SHEETS);
-        systemStatus.productionEnvironment.templates = templateFiles.hasNext();
-      } catch (error) {
-        systemStatus.productionEnvironment.templates = false;
+        systemStatus.productionEnvironment.templates = true;
+      } catch (strictError) {
+        Logger.log('Dashboard: 嚴格驗證失敗 - ' + strictError.message);
+        // 資料夾存在但內容不完整
+        systemStatus.productionEnvironment.mainFolder = true;
+        
+        // 檢查具體缺失項目
+        const errorMessage = strictError.message;
+        systemStatus.productionEnvironment.subFolders = !errorMessage.includes('缺少子資料夾');
+        systemStatus.productionEnvironment.adminConsole = !errorMessage.includes('缺少管理控制台檔案');
+        systemStatus.productionEnvironment.templates = !errorMessage.includes('無範本檔案');
+        
+        // 記錄詳細的缺失信息
+        systemStatus.validationDetails = errorMessage;
       }
       
     } catch (error) {
+      Logger.log('Dashboard: 主資料夾不存在 - ' + error.message);
       systemStatus.productionEnvironment.mainFolder = false;
+      systemStatus.productionEnvironment.subFolders = false;
+      systemStatus.productionEnvironment.adminConsole = false;
+      systemStatus.productionEnvironment.templates = false;
+      systemStatus.validationDetails = error.message;
     }
     
     // 移除測試環境檢查 - 現在使用純生產環境
     
-    // 計算整體狀態
-    const productionChecks = Object.values(systemStatus.productionEnvironment);
-    const passedChecks = productionChecks.filter(check => check).length;
-    systemStatus.overallHealth = Math.round((passedChecks / productionChecks.length) * 100);
+    // 計算整體狀態 - 使用加權評分
+    const productionChecks = systemStatus.productionEnvironment;
+    const weights = {
+      mainFolder: 20,      // 主資料夾存在 - 20%
+      subFolders: 30,      // 子資料夾完整 - 30%
+      adminConsole: 25,    // 管理控制台 - 25%
+      templates: 25        // 範本檔案 - 25%
+    };
     
-    // 判斷是否已初始化
-    systemStatus.initialized = systemStatus.overallHealth >= 75;
+    let totalScore = 0;
+    let maxScore = 0;
     
-    // 生成建議和下一步
-    if (!systemStatus.initialized) {
-      systemStatus.recommendations.push('系統尚未完整初始化');
-      systemStatus.nextSteps.push('執行「一鍵完整設定」或「初始化系統」');
+    Object.keys(weights).forEach(key => {
+      maxScore += weights[key];
+      if (productionChecks[key]) {
+        totalScore += weights[key];
+      }
+    });
+    
+    systemStatus.overallHealth = Math.round((totalScore / maxScore) * 100);
+    
+    // 判斷是否已初始化 - 提高門檻到95%
+    systemStatus.initialized = systemStatus.overallHealth >= 95;
+    
+    // 生成詳細的建議和下一步
+    if (systemStatus.overallHealth === 0) {
+      systemStatus.recommendations.push('系統尚未初始化');
+      systemStatus.nextSteps.push('執行「一鍵完整設定」創建完整系統');
+    } else if (systemStatus.overallHealth < 50) {
+      systemStatus.recommendations.push('系統部分初始化，但缺少關鍵組件');
+      systemStatus.nextSteps.push('執行「一鍵完整設定」補充缺失組件');
+      if (systemStatus.validationDetails) {
+        systemStatus.nextSteps.push(`缺失項目：${systemStatus.validationDetails}`);
+      }
+    } else if (systemStatus.overallHealth < 95) {
+      systemStatus.recommendations.push('系統基本就緒，但仍有組件需要完善');
+      systemStatus.nextSteps.push('執行「一鍵完整設定」完成最後設定');
+      if (systemStatus.validationDetails) {
+        systemStatus.nextSteps.push(`待完善：${systemStatus.validationDetails}`);
+      }
     } else {
-      systemStatus.recommendations.push('系統已就緒，可以開始使用');
+      systemStatus.recommendations.push('系統完全就緒，可以開始使用');
       systemStatus.nextSteps.push('建立老師記錄簿並開始電聯記錄');
+    }
+    
+    // 添加具體的狀態描述
+    const missingComponents = [];
+    if (!productionChecks.mainFolder) missingComponents.push('主資料夾');
+    if (!productionChecks.subFolders) missingComponents.push('子資料夾結構');
+    if (!productionChecks.adminConsole) missingComponents.push('管理控制台');
+    if (!productionChecks.templates) missingComponents.push('範本檔案');
+    
+    if (missingComponents.length > 0) {
+      systemStatus.statusDescription = `缺少：${missingComponents.join('、')}`;
+    } else {
+      systemStatus.statusDescription = '所有組件完整';
     }
     
     
