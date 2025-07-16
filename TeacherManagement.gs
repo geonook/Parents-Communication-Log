@@ -573,9 +573,9 @@ function createProgressSheet(recordBook, teacherInfo) {
     sheet.getRange(row, 3).setValue(teacherInfo.studentCount || 0); // 學生總數
     
     // 已完成電聯（即時計算公式）
-    // 計算特定學期+Term+Contact Type="Academic Contact"且所有必要欄位都已填寫的記錄數
-    // 必要欄位：Date(E), Teachers Content(I), Parents Responses(J), Contact Method(K)
-    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!I:I,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!J:J,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!K:K,"<>"),0)`;
+    // 計算特定學期+Term+Contact Type="Academic Contact"且所有欄位都已填寫完整的記錄數
+    // 必要欄位：ALL fields (A-K) - Student ID, Name, English Name, English Class, Date, Semester, Term, Contact Type, Teachers Content, Parents Responses, Contact Method
+    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!A:A,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!B:B,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!C:C,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!I:I,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!J:J,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!K:K,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
     // 完成率（即時計算公式）
