@@ -322,12 +322,25 @@ function createSummarySheet(recordBook, teacherInfo) {
   const statsHeaders = [['班級', '學生人數', '學期電聯次數', '總電聯次數', '最後聯繫日期']];
   sheet.getRange(11, 1, 1, statsHeaders[0].length).setValues(statsHeaders);
   
-  // 為每個班級創建統計行
+  // 為每個班級創建統計行和實時統計公式
   teacherInfo.classes.forEach((className, index) => {
     const row = 12 + index;
     sheet.getRange(row, 1).setValue(className);
-    // 這些數值將由其他函數動態更新
-    sheet.getRange(row, 2).setFormula(`=COUNTA(INDIRECT("學生清單!A:A"))-1`);
+    
+    // 學生人數（從學生清單計算）
+    sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'.J:J,"${className}"),0)`);
+    
+    // 學期電聯次數（Academic Contact 類型且有填寫日期）
+    const academicContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
+    sheet.getRange(row, 3).setFormula(academicContactsFormula);
+    
+    // 總電聯次數（該班級所有記錄且有填寫日期）
+    const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
+    sheet.getRange(row, 4).setFormula(totalContactsFormula);
+    
+    // 最後聯繫日期（該班級最新的電聯日期）
+    const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
+    sheet.getRange(row, 5).setFormula(lastContactFormula);
   });
   
   // 格式設定
