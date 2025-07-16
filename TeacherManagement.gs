@@ -176,7 +176,7 @@ function createTeacherSheet(teacherInfo) {
     
     // 步驟3: 創建老師專屬資料夾 (非致命錯誤)
     Logger.log('步驟3: 獲取或創建老師專屬資料夾...');
-    const teacherFolderName = `${teacherInfo.name}_${new Date().getFullYear()}學年`;
+    const teacherFolderName = `${teacherInfo.name}_${calculateSchoolYear()}`;
     let teacherFolder = null;
     
     try {
@@ -199,7 +199,7 @@ function createTeacherSheet(teacherInfo) {
     Logger.log('步驟4: 創建記錄簿檔案...');
     const fileName = SYSTEM_CONFIG.TEACHER_SHEET_NAME_FORMAT
       .replace('{teacherName}', teacherInfo.name)
-      .replace('{year}', new Date().getFullYear().toString());
+      .replace('{schoolYear}', calculateSchoolYear());
     
     Logger.log(`📊 準備創建記錄簿檔案：${fileName}`);
     let recordFile;
@@ -310,7 +310,7 @@ function createSummarySheet(recordBook, teacherInfo) {
     ['任教科目', teacherInfo.subject],
     ['授課班級', teacherInfo.classes.join(', ')],
     ['建立日期', new Date().toLocaleDateString()],
-    ['學年度', `${new Date().getFullYear()}學年`]
+    ['學年度', calculateSchoolYear()]
   ];
   
   sheet.getRange(3, 1, infoData.length, 2).setValues(infoData);
@@ -549,9 +549,21 @@ function createProgressSheet(recordBook, teacherInfo) {
     sheet.getRange(row, 1).setValue(st.semester);
     sheet.getRange(row, 2).setValue(st.term);
     sheet.getRange(row, 3).setValue(teacherInfo.studentCount || 0); // 學生總數
-    sheet.getRange(row, 4).setValue(0); // 已完成電聯（將通過公式計算）
-    sheet.getRange(row, 5).setValue('0%'); // 完成率（將通過公式計算）
-    sheet.getRange(row, 6).setValue('待開始'); // 狀態
+    
+    // 已完成電聯（即時計算公式）
+    // 計算特定學期+Term+Contact Type="Academic Contact"且Date欄位不為空的記錄數
+    const completedContactsFormula = `=COUNTIFS(${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.F:F,"${st.semester}",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.G:G,"${st.term}",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.H:H,"Academic Contact",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.E:E,"<>")`;
+    sheet.getRange(row, 4).setFormula(completedContactsFormula);
+    
+    // 完成率（即時計算公式）
+    // 已完成電聯 ÷ 學生總數，避免除零錯誤
+    const completionRateFormula = `=IF(C${row}>0,ROUND(D${row}/C${row}*100,1)&"%","0%")`;
+    sheet.getRange(row, 5).setFormula(completionRateFormula);
+    
+    // 狀態（即時計算公式）
+    // 根據完成率自動判斷狀態
+    const statusFormula = `=IF(D${row}>=C${row},"已完成",IF(D${row}=0,"待開始","進行中"))`;
+    sheet.getRange(row, 6).setFormula(statusFormula);
     
     // 如果是當前學期term，特別標示
     if (st.semester === SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER && 
@@ -572,8 +584,8 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', '=SUMIF(電聯記錄.H:H,"Academic Contact",電聯記錄.H:H)'],
-    ['平均每學期完成率', '待計算']
+    ['學期電聯總次數', `=COUNTIF(${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.H:H,"Academic Contact")`],
+    ['平均每學期完成率', `=IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%")`]
   ];
   
   sheet.getRange(summaryStartRow + 2, 1, summaryData.length, 2).setValues(summaryData);
@@ -1075,6 +1087,34 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
     });
   });
   
+  // 對記錄進行三層排序：學生ID → 學期 → Term
+  Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Academic Contact記錄...`);
+  prebuiltRecords.sort((a, b) => {
+    // 主要排序：學生ID（數字排序，小到大）
+    const studentIdA = parseInt(a[0]) || 0; // 如果無法解析為數字，預設為0
+    const studentIdB = parseInt(b[0]) || 0;
+    if (studentIdA !== studentIdB) {
+      return studentIdA - studentIdB;
+    }
+    
+    // 次要排序：學期（Fall → Spring）
+    const semesterA = a[5]; // Semester 欄位
+    const semesterB = b[5];
+    const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+    const semesterCompare = (semesterOrder[semesterA] || 999) - (semesterOrder[semesterB] || 999);
+    if (semesterCompare !== 0) {
+      return semesterCompare;
+    }
+    
+    // 第三排序：Term（Beginning → Midterm → Final）
+    const termA = a[6]; // Term 欄位
+    const termB = b[6];
+    const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+    return (termOrder[termA] || 999) - (termOrder[termB] || 999);
+  });
+  
+  Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
+  
   // 寫入預建記錄
   if (prebuiltRecords.length > 0) {
     const startRow = contactLogSheet.getLastRow() + 1;
@@ -1084,7 +1124,11 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
     // 為預建記錄設定特殊格式
     const prebuiltRange = contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length);
     prebuiltRange.setBackground('#F8F9FA'); // 淺灰背景
-    prebuiltRange.setNote('🤖 系統預建的Academic Contact記錄 - 請填寫Date、Teachers Content、Parents Responses和Contact Method欄位');
+    
+    // 在第一筆預建記錄的Student ID欄位加上說明註解（只在一個地方顯示）
+    if (prebuiltRecords.length > 0) {
+      contactLogSheet.getRange(startRow, 1, 1, 1).setNote('🤖 以下為系統預建的Academic Contact記錄，請填寫Date、Teachers Content、Parents Responses和Contact Method欄位');
+    }
     
     // 高亮需要填寫的欄位
     const dateRange = contactLogSheet.getRange(startRow, 5, prebuiltRecords.length, 1); // Date欄

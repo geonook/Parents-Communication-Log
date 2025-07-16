@@ -1370,4 +1370,41 @@ function clearSystemLogs() {
     systemLog(ERROR_LEVELS.ERROR, 'SystemUtils', 'clearSystemLogs', '清除系統日誌失敗', error);
     SpreadsheetApp.getUi().alert('錯誤', '清除系統日誌失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
   }
+}
+
+/**
+ * 計算學年格式
+ * 根據當前日期計算跨年的學年格式，例如：
+ * - 2025 Fall + 2026 Spring = "2526SY"
+ * - 2024 Fall + 2025 Spring = "2425SY"
+ * @returns {string} 學年格式字串
+ */
+function calculateSchoolYear() {
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // JavaScript月份從0開始
+  
+  let schoolYearStart, schoolYearEnd;
+  
+  // 判斷當前是在哪個學年
+  // 假設學年從8月開始到隔年7月結束
+  if (currentMonth >= 8) {
+    // 8月之後，當年是Fall semester年份
+    schoolYearStart = currentYear;
+    schoolYearEnd = currentYear + 1;
+  } else {
+    // 8月之前，去年是Fall semester年份  
+    schoolYearStart = currentYear - 1;
+    schoolYearEnd = currentYear;
+  }
+  
+  // 格式化為 XXYYSY (如 2526SY)
+  const startYearShort = schoolYearStart.toString().slice(-2); // 取後兩位
+  const endYearShort = schoolYearEnd.toString().slice(-2);     // 取後兩位
+  
+  const schoolYear = `${startYearShort}${endYearShort}SY`;
+  
+  Logger.log(`📅 計算學年：${schoolYearStart}-${schoolYearEnd} → ${schoolYear}`);
+  
+  return schoolYear;
 } 

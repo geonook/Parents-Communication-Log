@@ -13,7 +13,7 @@ const SYSTEM_CONFIG = {
   TEMPLATES_FOLDER_NAME: '範本檔案',
   
   // 檔案名稱格式
-  TEACHER_SHEET_NAME_FORMAT: '{teacherName}_電聯記錄簿_{year}學年',
+  TEACHER_SHEET_NAME_FORMAT: '{teacherName}_電聯記錄簿_{schoolYear}',
   
   // 工作表名稱
   SHEET_NAMES: {
