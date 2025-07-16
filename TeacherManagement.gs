@@ -552,25 +552,21 @@ function createProgressSheet(recordBook, teacherInfo) {
     
     // 已完成電聯（即時計算公式）
     // 計算特定學期+Term+Contact Type="Academic Contact"且Date欄位不為空的記錄數
-    const completedContactsFormula = `=COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>")`;
+    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
     // 完成率（即時計算公式）
-    // 已完成電聯 ÷ 學生總數，避免除零錯誤
-    const completionRateFormula = `=IF(C${row}>0,ROUND(D${row}/C${row}*100,1)&"%","0%")`;
+    // 已完成電聯 ÷ 學生總數，避免除零錯誤和其他計算錯誤
+    const completionRateFormula = `=IFERROR(IF(C${row}>0,ROUND(D${row}/C${row}*100,1)&"%","0%"),"0%")`;
     sheet.getRange(row, 5).setFormula(completionRateFormula);
     
     // 狀態（即時計算公式）
-    // 根據完成率自動判斷狀態
-    const statusFormula = `=IF(D${row}>=C${row},"已完成",IF(D${row}=0,"待開始","進行中"))`;
+    // 根據完成率自動判斷狀態，處理計算錯誤
+    const statusFormula = `=IFERROR(IF(D${row}>=C${row},"已完成",IF(D${row}=0,"待開始","進行中")),"待開始")`;
     sheet.getRange(row, 6).setFormula(statusFormula);
     
-    // 如果是當前學期term，特別標示
-    if (st.semester === SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER && 
-        st.term === SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM) {
-      sheet.getRange(row, 7).setValue('← 當前Term');
-      sheet.getRange(row, 1, 1, 7).setBackground('#FFF3E0'); // 淺橙色背景
-    }
+    // 備註欄位保持空白，供老師自行填寫
+    // (移除硬編碼的「當前Term」標示)
   });
   
   // 新增學年總結區域
@@ -584,8 +580,8 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', `=COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact")`],
-    ['平均每學期完成率', `=IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%")`]
+    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact"),0)`],
+    ['平均每學期完成率', `=IFERROR(IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%"),"0%")`]
   ];
   
   sheet.getRange(summaryStartRow + 2, 1, summaryData.length, 2).setValues(summaryData);
