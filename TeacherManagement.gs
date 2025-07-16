@@ -328,18 +328,18 @@ function createSummarySheet(recordBook, teacherInfo) {
     sheet.getRange(row, 1).setValue(className);
     
     // 學生人數（從學生清單計算）
-    sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'.J:J,"${className}"),0)`);
+    sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
     
     // 學期電聯次數（Academic Contact 類型且有填寫日期）
-    const academicContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
+    const academicContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
     sheet.getRange(row, 3).setFormula(academicContactsFormula);
     
     // 總電聯次數（該班級所有記錄且有填寫日期）
-    const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
+    const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(totalContactsFormula);
     
     // 最後聯繫日期（該班級最新的電聯日期）
-    const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
+    const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
     sheet.getRange(row, 5).setFormula(lastContactFormula);
   });
   
@@ -574,7 +574,7 @@ function createProgressSheet(recordBook, teacherInfo) {
     
     // 已完成電聯（即時計算公式）
     // 計算特定學期+Term+Contact Type="Academic Contact"且Date欄位不為空的記錄數
-    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>"),0)`;
+    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
     // 完成率（即時計算公式）
@@ -602,7 +602,7 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact"),0)`],
+    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact"),0)`],
     ['平均每學期完成率', `=IFERROR(IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%"),"0%")`]
   ];
   
@@ -621,7 +621,7 @@ function createProgressSheet(recordBook, teacherInfo) {
 }
 
 /**
- * 保護工作表，僅允許管理員編輯
+ * 保護工作表，僅允許管理員編輯（適用於共用資料夾環境）
  * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 要保護的工作表
  * @param {string} description - 保護說明
  */
@@ -630,10 +630,28 @@ function protectSheetForAdminOnly(sheet, description) {
     const protection = sheet.protect();
     protection.setDescription(description);
     
-    // Google Sheets 預設只允許工作表擁有者編輯受保護工作表
-    // 這確保只有管理員（建立者）可以編輯，其他共用者只能檢視
+    // 共用資料夾的特殊處理：
+    // 1. 取得當前使用者（系統管理員/建立者）
+    // 2. 明確設定只有管理員可以編輯，移除其他編輯者
+    const currentUser = Session.getActiveUser().getEmail();
+    Logger.log(`🔐 設定保護工作表，僅允許管理員編輯：${currentUser}`);
     
-    Logger.log(`🔒 已保護工作表：${sheet.getName()} - ${description}`);
+    // 清除所有編輯者，只保留管理員
+    try {
+      protection.removeEditors(protection.getEditors());
+      protection.addEditor(currentUser);
+      
+      // 設定警告訊息
+      protection.setWarningOnly(false); // 強制保護，不只是警告
+      
+      Logger.log(`🔒 已保護工作表：${sheet.getName()} - 僅 ${currentUser} 可編輯`);
+    } catch (editorError) {
+      // 如果無法設定特定編輯者（可能因為權限限制），退回到基本保護
+      Logger.log(`⚠️ 無法設定特定編輯者，使用基本保護模式：${editorError.toString()}`);
+      protection.setWarningOnly(false);
+    }
+    
+    Logger.log(`✅ 工作表保護設定完成：${sheet.getName()} - ${description}`);
     return protection;
   } catch (error) {
     Logger.log(`❌ 保護工作表失敗：${sheet.getName()} - ${error.toString()}`);
@@ -1131,6 +1149,16 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
   
   // 對記錄進行四層排序：English Class → 學生ID → 學期 → Term
   Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Academic Contact記錄...`);
+  
+  // 排序前記錄前5筆資料用於調試
+  if (prebuiltRecords.length > 0) {
+    Logger.log(`📊 排序前樣本數據（前5筆）：`);
+    for (let i = 0; i < Math.min(5, prebuiltRecords.length); i++) {
+      const record = prebuiltRecords[i];
+      Logger.log(`  ${i+1}. ID:${record[0]}, Name:${record[1]}, Class:${record[3]}, Semester:${record[5]}, Term:${record[6]}`);
+    }
+  }
+  
   prebuiltRecords.sort((a, b) => {
     // 首要排序：English Class（字串排序，小到大）
     const englishClassA = a[3] || ''; // English Class 欄位
@@ -1162,6 +1190,15 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
     const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
     return (termOrder[termA] || 999) - (termOrder[termB] || 999);
   });
+  
+  // 排序後記錄前5筆資料用於調試
+  if (prebuiltRecords.length > 0) {
+    Logger.log(`📊 排序後樣本數據（前5筆）：`);
+    for (let i = 0; i < Math.min(5, prebuiltRecords.length); i++) {
+      const record = prebuiltRecords[i];
+      Logger.log(`  ${i+1}. ID:${record[0]}, Name:${record[1]}, Class:${record[3]}, Semester:${record[5]}, Term:${record[6]}`);
+    }
+  }
   
   Logger.log(`✅ 記錄排序完成，順序：English Class (小→大) → 學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
   
