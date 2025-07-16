@@ -47,7 +47,7 @@ const SYSTEM_CONFIG = {
 
   // 電聯類型設定
   CONTACT_TYPES: {
-    SEMESTER: 'Academic Contact',    // 納入進度檢查
+    SEMESTER: 'Scheduled Contact',   // 納入進度檢查
     REGULAR: 'Regular Contact',      // 不納入檢查  
     SPECIAL: 'Special Contact'       // 不納入檢查
   },

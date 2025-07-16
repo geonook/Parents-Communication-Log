@@ -247,7 +247,7 @@ function setupTemplateContactSheet(sheet) {
       new Date().toLocaleDateString(),               // Date
       'Fall',                                        // Semester
       'Beginning',                                   // Term
-      'Academic Contact',                             // Contact Type
+      'Scheduled Contact',                            // Contact Type
       'Discussed Fall Beginning term progress. Student shows good improvement in English speaking skills.', // Teachers Content
       'Parents are pleased with progress and will continue supporting reading practice at home.', // Parents Responses
       'Phone Call'                                   // Contact Method
@@ -260,7 +260,7 @@ function setupTemplateContactSheet(sheet) {
       new Date(Date.now() - 86400000).toLocaleDateString(), // Date (yesterday)
       'Fall',                                        // Semester
       'Midterm',                                     // Term
-      'Academic Contact',                             // Contact Type
+      'Scheduled Contact',                            // Contact Type
       'Midterm assessment shows student needs extra support with vocabulary building.',  // Teachers Content
       'Parents will arrange additional reading time and practice sessions.', // Parents Responses
       'Line'                                         // Contact Method

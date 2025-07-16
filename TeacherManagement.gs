@@ -330,9 +330,9 @@ function createSummarySheet(recordBook, teacherInfo) {
     // 學生人數（從學生清單計算）
     sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
     
-    // 學期電聯次數（Academic Contact 類型且有填寫日期）
-    const academicContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
-    sheet.getRange(row, 3).setFormula(academicContactsFormula);
+    // 學期電聯次數（Scheduled Contact 類型且有填寫日期）
+    const scheduledContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
+    sheet.getRange(row, 3).setFormula(scheduledContactsFormula);
     
     // 總電聯次數（該班級所有記錄且有填寫日期）
     const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
@@ -536,7 +536,7 @@ function createContactLogSheet(recordBook, teacherInfo) {
   setupContactLogConditionalFormatting(sheet);
   
   // 新增說明註解
-  sheet.getRange('A2').setNote('💡 提示：學生資料匯入後，請使用「預建學期電聯記錄」功能自動為所有學生建立Academic Contact記錄');
+  sheet.getRange('A2').setNote('💡 提示：學生資料匯入後，請使用「預建學期電聯記錄」功能自動為所有學生建立Scheduled Contact記錄');
 }
 
 /**
@@ -573,9 +573,9 @@ function createProgressSheet(recordBook, teacherInfo) {
     sheet.getRange(row, 3).setValue(teacherInfo.studentCount || 0); // 學生總數
     
     // 已完成電聯（即時計算公式）
-    // 計算特定學期+Term+Contact Type="Academic Contact"且所有欄位都已填寫完整的記錄數
+    // 計算特定學期+Term+Contact Type="Scheduled Contact"且所有欄位都已填寫完整的記錄數
     // 必要欄位：ALL fields (A-K) - Student ID, Name, English Name, English Class, Date, Semester, Term, Contact Type, Teachers Content, Parents Responses, Contact Method
-    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!A:A,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!B:B,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!C:C,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!I:I,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!J:J,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!K:K,"<>"),0)`;
+    const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!A:A,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!B:B,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!C:C,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!I:I,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!J:J,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!K:K,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
     // 完成率（即時計算公式）
@@ -603,7 +603,7 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact"),0)`],
+    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact"),0)`],
     ['平均每學期完成率', `=IFERROR(IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%"),"0%")`]
   ];
   
@@ -768,14 +768,14 @@ function setupContactLogValidations(sheet, teacherInfo) {
   // Contact Type 電聯類型下拉選單 (第8欄) - 強化版
   const contactTypeRange = sheet.getRange('H2:H1000');
   const contactTypeOptions = [
-    SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,    // Academic Contact
+    SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,    // Scheduled Contact
     SYSTEM_CONFIG.CONTACT_TYPES.REGULAR,     // Regular Contact  
     SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL      // Special Contact
   ];
   const contactTypeValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(contactTypeOptions)
     .setAllowInvalid(false)
-    .setHelpText('📞 電聯類型：Academic(學期電聯) / Regular(平時電聯) / Special(特殊電聯)')
+    .setHelpText('📞 電聯類型：Scheduled(定期電聯) / Regular(平時電聯) / Special(特殊電聯)')
     .build();
   contactTypeRange.setDataValidation(contactTypeValidation);
   contactTypeRange.setBackground('#E3F2FD'); // 淺藍背景標示重要欄位
@@ -1046,10 +1046,10 @@ function validateSystemFolderStructure(folder) {
 }
 
 /**
- * 為所有學生預建Academic Contact電聯記錄
+ * 為所有學生預建Scheduled Contact電聯記錄
  * 此函數應在學生資料匯入後呼叫
  */
-function prebuildAcademicContactRecords() {
+function prebuildScheduledContactRecords() {
   try {
     // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
@@ -1078,32 +1078,32 @@ function prebuildAcademicContactRecords() {
     
     // 確認操作
     const response = ui.alert(
-      '預建Academic Contact記錄',
-      `將為 ${studentData.length - 1} 位學生建立完整學年的Academic Contact記錄\n\n每位學生建立：\n• Fall Beginning/Midterm/Final\n• Spring Beginning/Midterm/Final\n共 ${(studentData.length - 1) * 6} 筆記錄\n\n確定要繼續嗎？`,
+      '預建Scheduled Contact記錄',
+      `將為 ${studentData.length - 1} 位學生建立完整學年的Scheduled Contact記錄\n\n每位學生建立：\n• Fall Beginning/Midterm/Final\n• Spring Beginning/Midterm/Final\n共 ${(studentData.length - 1) * 6} 筆記錄\n\n確定要繼續嗎？`,
       ui.ButtonSet.YES_NO
     );
     
     if (response !== ui.Button.YES) return;
     
     // 執行預建
-    const result = performPrebuildAcademicContacts(recordBook, studentData);
+    const result = performPrebuildScheduledContacts(recordBook, studentData);
     
     ui.alert(
       '預建完成！',
-      `成功為 ${result.studentCount} 位學生預建 ${result.recordCount} 筆Academic Contact記錄\n\n請在電聯記錄工作表中查看，並填寫Teachers Content、Parents Responses和Contact Method欄位`,
+      `成功為 ${result.studentCount} 位學生預建 ${result.recordCount} 筆Scheduled Contact記錄\n\n請在電聯記錄工作表中查看，並填寫Teachers Content、Parents Responses和Contact Method欄位`,
       ui.ButtonSet.OK
     );
     
   } catch (error) {
-    Logger.log('預建Academic Contact記錄失敗：' + error.toString());
-    safeErrorHandler('預建Academic Contact記錄', error);
+    Logger.log('預建Scheduled Contact記錄失敗：' + error.toString());
+    safeErrorHandler('預建Scheduled Contact記錄', error);
   }
 }
 
 /**
- * 執行Academic Contact記錄預建
+ * 執行Scheduled Contact記錄預建
  */
-function performPrebuildAcademicContacts(recordBook, studentData) {
+function performPrebuildScheduledContacts(recordBook, studentData) {
   const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
   
   if (!contactLogSheet) {
@@ -1114,7 +1114,7 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
   const students = studentData.slice(1);
   const prebuiltRecords = [];
   
-  // 為每位學生建立6筆Academic Contact記錄
+  // 為每位學生建立6筆Scheduled Contact記錄
   students.forEach(student => {
     const studentId = student[0];       // ID
     const chineseName = student[4];     // Chinese Name  
@@ -1138,7 +1138,7 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
           '',                                          // Date (空白，由老師填寫)
           semester,                                    // Semester
           term,                                        // Term
-          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // Contact Type (Academic Contact)
+          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // Contact Type (Scheduled Contact)
           '',                                          // Teachers Content (空白，由老師填寫)
           '',                                          // Parents Responses (空白，由老師填寫)
           ''                                           // Contact Method (空白，由老師填寫)
@@ -1149,7 +1149,7 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
   });
   
   // 對記錄進行四層排序：English Class → 學生ID → 學期 → Term
-  Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Academic Contact記錄...`);
+  Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Scheduled Contact記錄...`);
   
   // 排序前記錄前5筆資料用於調試
   if (prebuiltRecords.length > 0) {
@@ -1215,7 +1215,7 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
     
     // 在第一筆預建記錄的Student ID欄位加上說明註解（只在一個地方顯示）
     if (prebuiltRecords.length > 0) {
-      contactLogSheet.getRange(startRow, 1, 1, 1).setNote('🤖 以下為系統預建的Academic Contact記錄，請填寫Date、Teachers Content、Parents Responses和Contact Method欄位');
+      contactLogSheet.getRange(startRow, 1, 1, 1).setNote('🤖 以下為系統預建的Scheduled Contact記錄，請填寫Date、Teachers Content、Parents Responses和Contact Method欄位');
     }
     
     // 高亮需要填寫的欄位

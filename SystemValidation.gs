@@ -292,20 +292,20 @@ function validateNewFeatures() {
   // 測試2: 預建電聯記錄功能
   try {
     // 檢查函數是否存在
-    const functionExists = typeof prebuildAcademicContactRecords === 'function';
-    const helperExists = typeof performPrebuildAcademicContacts === 'function';
+    const functionExists = typeof prebuildScheduledContactRecords === 'function';
+    const helperExists = typeof performPrebuildScheduledContacts === 'function';
     
     if (functionExists && helperExists) {
       tests.push({
         name: '預建電聯記錄功能',
-        description: '檢查Academic Contact預建功能',
+        description: '檢查Scheduled Contact預建功能',
         passed: true,
         details: '預建電聯記錄功能已正確實作'
       });
     } else {
       tests.push({
         name: '預建電聯記錄功能',
-        description: '檢查Academic Contact預建功能',
+        description: '檢查Scheduled Contact預建功能',
         passed: false,
         details: `主函數：${functionExists}，輔助函數：${helperExists}`
       });
@@ -313,7 +313,7 @@ function validateNewFeatures() {
   } catch (error) {
     tests.push({
       name: '預建電聯記錄功能',
-      description: '檢查Academic Contact預建功能',
+      description: '檢查Scheduled Contact預建功能',
       passed: false,
       details: `功能檢查失敗：${error.message}`
     });

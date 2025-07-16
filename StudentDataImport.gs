@@ -542,9 +542,9 @@ function createTeachersFromStudentMasterList() {
       resultMessage += '\n\n建議：\n1. 檢查系統初始化狀態\n2. 確認資料夾權限\n3. 查看日誌詳細錯誤資訊';
     } else if (createResult.successCount === teachersInfo.length) {
       resultMessage += '\n\n🎉 所有老師記錄簿創建完美成功！';
-      resultMessage += '\n\n每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Academic Contact記錄\n• 班級資訊和人數統計';
+      resultMessage += '\n\n每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Scheduled Contact記錄\n• 班級資訊和人數統計';
     } else {
-      resultMessage += '\n\n📋 每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Academic Contact記錄\n• 班級資訊和人數統計';
+      resultMessage += '\n\n📋 每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Scheduled Contact記錄\n• 班級資訊和人數統計';
     }
     
     ui.alert(
@@ -925,17 +925,17 @@ function importStudentsForTeacher(recordBook, teacherInfo, masterData) {
   // 重新設定資料驗證
   reapplyDataValidation(studentListSheet, recordBook);
   
-  // 自動預建Academic Contact記錄（根據用戶要求移除對話框，直接執行）
-  Logger.log(`🤖 自動為 ${teacherInfo.name} 老師的 ${studentData.length} 位學生預建Academic Contact記錄...`);
+  // 自動預建Scheduled Contact記錄（根據用戶要求移除對話框，直接執行）
+  Logger.log(`🤖 自動為 ${teacherInfo.name} 老師的 ${studentData.length} 位學生預建Scheduled Contact記錄...`);
   
   try {
     const allStudentData = studentListSheet.getDataRange().getValues();
-    const result = performPrebuildAcademicContacts(recordBook, allStudentData);
+    const result = performPrebuildScheduledContacts(recordBook, allStudentData);
     
-    Logger.log(`✅ 為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Academic Contact記錄`);
+    Logger.log(`✅ 為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Scheduled Contact記錄`);
     Logger.log(`📊 涵蓋 ${result.studentCount} 位學生，每位學生6筆記錄（Fall/Spring × Beginning/Midterm/Final）`);
   } catch (prebuildError) {
-    Logger.log(`⚠️ 預建Academic Contact記錄時發生錯誤：${prebuildError.message}`);
+    Logger.log(`⚠️ 預建Scheduled Contact記錄時發生錯誤：${prebuildError.message}`);
     // 不拋出錯誤，讓匯入繼續完成，只記錄警告
   }
 } 
