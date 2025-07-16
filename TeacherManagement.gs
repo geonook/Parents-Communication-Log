@@ -497,9 +497,9 @@ function createStudentListSheet(recordBook, teacherInfo) {
   englishClassRange.setDataValidation(englishClassValidation);
   englishClassRange.setBackground('#E8F5E8'); // 淺綠背景標示重要性
   
-  // LT (Language Teacher) 欄位提示（第11欄）
+  // LT (Local Teacher) 欄位提示（第11欄）
   const ltRange = sheet.getRange('K2:K1000');
-  ltRange.setNote('👨‍🏫 語言老師姓名 - 用於系統識別授課老師');
+  ltRange.setNote('👨‍🏫 本地老師姓名 - 用於系統識別授課老師');
   ltRange.setBackground('#FFF3E0'); // 淺橙背景
   
   // 電話欄位格式提示

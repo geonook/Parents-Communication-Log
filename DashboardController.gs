@@ -144,8 +144,8 @@ function getStudentMasterListById(sheetId) {
     
     // 檢查是否有必要的欄位
     const headers = data[2]; // 第3行是標題
-    if (!headers.includes('LT') && !headers.includes('Language Teacher')) {
-      throw new Error('學生總表缺少必要的 LT (Language Teacher) 欄位');
+    if (!headers.includes('LT') && !headers.includes('Local Teacher')) {
+      throw new Error('學生總表缺少必要的 LT (Local Teacher) 欄位');
     }
     
     Logger.log(`成功獲取學生總表資料：${data.length - 3} 筆學生資料`);

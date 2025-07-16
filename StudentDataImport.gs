@@ -497,7 +497,7 @@ function createTeachersFromStudentMasterList() {
     
     if (!teachersInfo || teachersInfo.length === 0) {
       Logger.log('❌ 未找到任何老師資訊');
-      ui.alert('提醒', '未從學生總表中找到老師資訊\n\n請確認：\n1. 學生總表包含 LT (Language Teacher) 欄位\n2. LT 欄位中有老師姓名資料\n3. 學生資料不為空', ui.ButtonSet.OK);
+      ui.alert('提醒', '未從學生總表中找到老師資訊\n\n請確認：\n1. 學生總表包含 LT (Local Teacher) 欄位\n2. LT 欄位中有老師姓名資料\n3. 學生資料不為空', ui.ButtonSet.OK);
       return;
     }
     
@@ -618,9 +618,9 @@ function extractTeachersFromMasterList(masterData) {
   Logger.log(`👥 學生資料行數：${data.length}`);
   Logger.log(`📝 標題欄位：${JSON.stringify(headers)}`);
   
-  // 找到 LT (Language Teacher) 欄位索引 - 增強搜尋邏輯
+  // 找到 LT (Local Teacher) 欄位索引 - 增強搜尋邏輯
   Logger.log(`🔍 搜尋老師欄位...`);
-  const possibleTeacherFields = ['LT', 'Language Teacher', 'English Teacher', 'Teacher', '老師', '語言老師', '英文老師'];
+  const possibleTeacherFields = ['LT', 'Local Teacher', 'English Teacher', 'Teacher', '老師', '本地老師', '英文老師'];
   let ltIndex = -1;
   
   // 精確匹配
