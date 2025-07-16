@@ -349,6 +349,9 @@ function createSummarySheet(recordBook, teacherInfo) {
   
   // 調整欄寬
   sheet.autoResizeColumns(1, 5);
+  
+  // 保護工作表，僅允許管理員編輯
+  protectSheetForAdminOnly(sheet, '總覽工作表 - 僅管理員可編輯統計數據和基本資訊');
 }
 
 /**
@@ -456,6 +459,9 @@ function createClassInfoSheet(recordBook, teacherInfo) {
   }
   
   sheet.autoResizeColumns(1, headers[0].length);
+  
+  // 保護工作表，僅允許管理員編輯
+  protectSheetForAdminOnly(sheet, '班級資訊工作表 - 僅管理員可編輯班級設定和基本資訊');
 }
 
 /**
@@ -505,6 +511,9 @@ function createStudentListSheet(recordBook, teacherInfo) {
   // 設定保護範圍（標題行）
   const protection = sheet.getRange(1, 1, 1, SYSTEM_CONFIG.STUDENT_FIELDS.length).protect();
   protection.setDescription('標題行保護');
+  
+  // 保護工作表，僅允許管理員編輯
+  protectSheetForAdminOnly(sheet, '學生清單工作表 - 僅管理員可編輯學生基本資料');
 }
 
 /**
@@ -606,6 +615,30 @@ function createProgressSheet(recordBook, teacherInfo) {
   
   // 設定條件式格式
   setupProgressSheetConditionalFormatting(sheet, 5, 5 + semesterTerms.length - 1);
+  
+  // 保護工作表，僅允許管理員編輯
+  protectSheetForAdminOnly(sheet, '進度追蹤工作表 - 僅管理員可編輯追蹤設定和統計數據');
+}
+
+/**
+ * 保護工作表，僅允許管理員編輯
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 要保護的工作表
+ * @param {string} description - 保護說明
+ */
+function protectSheetForAdminOnly(sheet, description) {
+  try {
+    const protection = sheet.protect();
+    protection.setDescription(description);
+    
+    // Google Sheets 預設只允許工作表擁有者編輯受保護工作表
+    // 這確保只有管理員（建立者）可以編輯，其他共用者只能檢視
+    
+    Logger.log(`🔒 已保護工作表：${sheet.getName()} - ${description}`);
+    return protection;
+  } catch (error) {
+    Logger.log(`❌ 保護工作表失敗：${sheet.getName()} - ${error.toString()}`);
+    throw error;
+  }
 }
 
 /**
