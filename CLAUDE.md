@@ -169,5 +169,35 @@ Before starting ANY task, verify:
 
 ---
 
+## 🚀 未來功能需求
+
+### 📋 學生異動管理系統 (STUDENT_CHANGE_MGMT)
+
+**優先級**: 中等 | **狀態**: 需求已記錄，待實施 | **複雜度**: 高
+
+**核心需求**:
+1. **轉學/移出**: 完全移除學生的所有電聯記錄
+2. **轉班**: 將學生從原老師轉移到新老師記錄簿
+3. **基本資料更新**: 更新學生個人資訊並同步到所有相關記錄
+
+**技術要求**:
+- 資料完整性保證
+- 異動歷史追蹤和回滾功能
+- 批量異動處理能力
+- Web Dashboard 整合
+
+**實施模組**:
+- `StudentChangeManager.gs` - 核心異動管理
+- `StudentLocator.gs` - 學生查找定位
+- `DataSyncManager.gs` - 資料同步管理
+
+**預估工作量**: 3-5天 (包含測試和文檔)
+
+**如何開始討論**: 
+- 提及 "學生異動管理" 或 "STUDENT_CHANGE_MGMT"
+- 參考 `FEATURE_ROADMAP.md` 獲取詳細設計
+
+---
+
 *🎯 Template by Chang Ho Chien | HC AI 說人話channel | v1.0.0*  
 *📺 Tutorial: https://youtu.be/8Q1bRZaHH24*
