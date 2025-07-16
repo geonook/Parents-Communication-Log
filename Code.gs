@@ -648,36 +648,76 @@ function showMainFolderInfo() {
 }
 
 /**
- * 生成20筆測試學生資料
- * 包含多樣化的年級、班級、老師組合
+ * 生成50筆測試學生資料
+ * 包含多樣化的年級、班級、老師組合，每位老師管理多個班級進行全面測試
  */
 function generateTestStudentData() {
   const testStudents = [
-    // 不同年級的學生資料
+    // Ms. Chen - 教授多個班級 (G1 Trailblazers + G1 Stars + G2 Champions)
     ['T001', 'G1', '701', '1', '測試學生1', 'Alice Chen', 'A1', 'A2', 'Mr. Smith', 'G1 Trailblazers', 'Ms. Chen', '0912-111-111', '0987-111-111'],
     ['T002', 'G1', '701', '2', '測試學生2', 'Bob Wang', 'A2', 'A1', 'Ms. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-222-222', '0987-222-222'],
-    ['T003', 'G1', '702', '3', '測試學生3', 'Cathy Liu', 'A1', 'A2', 'Mr. Brown', 'G1 Discoverers', 'Mr. Davis', '0912-333-333', '0987-333-333'],
-    ['T004', 'G1', '702', '4', '測試學生4', 'David Zhang', 'A2', 'A1', 'Ms. Wilson', 'G1 Discoverers', 'Mr. Davis', '0912-444-444', '0987-444-444'],
+    ['T003', 'G1', '701', '3', '測試學生3', 'Charlie Liu', 'A1', 'A2', 'Mr. Brown', 'G1 Trailblazers', 'Ms. Chen', '0912-333-333', '0987-333-333'],
+    ['T004', 'G1', '703', '4', '測試學生4', 'Diana Zhang', 'A2', 'A1', 'Ms. Wilson', 'G1 Stars', 'Ms. Chen', '0912-444-444', '0987-444-444'],
+    ['T005', 'G1', '703', '5', '測試學生5', 'Eric Wu', 'A1', 'A2', 'Mr. Garcia', 'G1 Stars', 'Ms. Chen', '0912-555-555', '0987-555-555'],
+    ['T006', 'G1', '703', '6', '測試學生6', 'Fiona Li', 'A2', 'A1', 'Ms. Martinez', 'G1 Stars', 'Ms. Chen', '0912-666-666', '0987-666-666'],
+    ['T007', 'G2', '805', '7', '測試學生7', 'George Kim', 'A1', 'A2', 'Mr. Thompson', 'G2 Champions', 'Ms. Chen', '0912-777-777', '0987-777-777'],
+    ['T008', 'G2', '805', '8', '測試學生8', 'Helen Chang', 'A2', 'A1', 'Ms. White', 'G2 Champions', 'Ms. Chen', '0912-888-888', '0987-888-888'],
     
-    ['T005', 'G2', '801', '5', '測試學生5', 'Emily Lin', 'A1', 'A2', 'Mr. Garcia', 'G2 Adventurers', 'Ms. Anderson', '0912-555-555', '0987-555-555'],
-    ['T006', 'G2', '801', '6', '測試學生6', 'Frank Wu', 'A2', 'A1', 'Ms. Martinez', 'G2 Adventurers', 'Ms. Anderson', '0912-666-666', '0987-666-666'],
-    ['T007', 'G2', '802', '7', '測試學生7', 'Grace Huang', 'A1', 'A2', 'Mr. Thompson', 'G2 Innovators', 'Mr. Taylor', '0912-777-777', '0987-777-777'],
-    ['T008', 'G2', '802', '8', '測試學生8', 'Henry Lee', 'A2', 'A1', 'Ms. White', 'G2 Innovators', 'Mr. Taylor', '0912-888-888', '0987-888-888'],
+    // Mr. Davis - 教授多個班級 (G1 Discoverers + G2 Rangers)
+    ['T009', 'G1', '702', '9', '測試學生9', 'Ivan Chen', 'A1', 'A2', 'Mr. Rodriguez', 'G1 Discoverers', 'Mr. Davis', '0912-999-999', '0987-999-999'],
+    ['T010', 'G1', '702', '10', '測試學生10', 'Jenny Yang', 'A2', 'A1', 'Ms. Lewis', 'G1 Discoverers', 'Mr. Davis', '0912-101-101', '0987-101-101'],
+    ['T011', 'G1', '702', '11', '測試學生11', 'Kevin Tsai', 'A1', 'A2', 'Mr. Clark', 'G1 Discoverers', 'Mr. Davis', '0912-111-101', '0987-111-101'],
+    ['T012', 'G1', '702', '12', '測試學生12', 'Linda Chiu', 'A2', 'A1', 'Ms. Hall', 'G1 Discoverers', 'Mr. Davis', '0912-121-121', '0987-121-121'],
+    ['T013', 'G2', '804', '13', '測試學生13', 'Mark Wu', 'A1', 'A2', 'Mr. Allen', 'G2 Rangers', 'Mr. Davis', '0912-131-131', '0987-131-131'],
+    ['T014', 'G2', '804', '14', '測試學生14', 'Nancy Lin', 'A2', 'A1', 'Ms. Scott', 'G2 Rangers', 'Mr. Davis', '0912-141-141', '0987-141-141'],
+    ['T015', 'G2', '804', '15', '測試學生15', 'Oscar Huang', 'A1', 'A2', 'Mr. Green', 'G2 Rangers', 'Mr. Davis', '0912-151-151', '0987-151-151'],
     
-    ['T009', 'G3', '901', '9', '測試學生9', 'Ivy Chen', 'A1', 'A2', 'Mr. Rodriguez', 'G3 Explorers', 'Ms. Moore', '0912-999-999', '0987-999-999'],
-    ['T010', 'G3', '901', '10', '測試學生10', 'Jack Yang', 'A2', 'A1', 'Ms. Lewis', 'G3 Explorers', 'Ms. Moore', '0912-100-100', '0987-100-100'],
-    ['T011', 'G3', '902', '11', '測試學生11', 'Kelly Tsai', 'A1', 'A2', 'Mr. Clark', 'G3 Navigators', 'Mr. Jackson', '0912-110-110', '0987-110-110'],
-    ['T012', 'G3', '902', '12', '測試學生12', 'Leo Chiu', 'A2', 'A1', 'Ms. Hall', 'G3 Navigators', 'Mr. Jackson', '0912-120-120', '0987-120-120'],
+    // Ms. Anderson - 教授多個班級 (G2 Adventurers + G3 Explorers)
+    ['T016', 'G2', '801', '16', '測試學生16', 'Patricia Hsu', 'A2', 'A1', 'Ms. Adams', 'G2 Adventurers', 'Ms. Anderson', '0912-161-161', '0987-161-161'],
+    ['T017', 'G2', '801', '17', '測試學生17', 'Quinn Liu', 'A1', 'A2', 'Mr. Baker', 'G2 Adventurers', 'Ms. Anderson', '0912-171-171', '0987-171-171'],
+    ['T018', 'G2', '801', '18', '測試學生18', 'Rachel Wang', 'A2', 'A1', 'Ms. Carter', 'G2 Adventurers', 'Ms. Anderson', '0912-181-181', '0987-181-181'],
+    ['T019', 'G2', '801', '19', '測試學生19', 'Steve Chen', 'A1', 'A2', 'Mr. Mitchell', 'G2 Adventurers', 'Ms. Anderson', '0912-191-191', '0987-191-191'],
+    ['T020', 'G3', '901', '20', '測試學生20', 'Tina Yeh', 'A2', 'A1', 'Ms. Phillips', 'G3 Explorers', 'Ms. Anderson', '0912-201-201', '0987-201-201'],
+    ['T021', 'G3', '901', '21', '測試學生21', 'Uma Zhou', 'A1', 'A2', 'Mr. Turner', 'G3 Explorers', 'Ms. Anderson', '0912-211-211', '0987-211-211'],
+    ['T022', 'G3', '901', '22', '測試學生22', 'Victor Kao', 'A2', 'A1', 'Ms. Evans', 'G3 Explorers', 'Ms. Anderson', '0912-221-221', '0987-221-221'],
     
-    ['T013', 'G4', '1001', '13', '測試學生13', 'Mia Wu', 'A1', 'A2', 'Mr. Allen', 'G4 Inventors', 'Ms. King', '0912-130-130', '0987-130-130'],
-    ['T014', 'G4', '1001', '14', '測試學生14', 'Noah Lin', 'A2', 'A1', 'Ms. Scott', 'G4 Inventors', 'Ms. King', '0912-140-140', '0987-140-140'],
-    ['T015', 'G4', '1002', '15', '測試學生15', 'Olivia Chang', 'A1', 'A2', 'Mr. Green', 'G4 Voyagers', 'Mr. Wright', '0912-150-150', '0987-150-150'],
-    ['T016', 'G4', '1002', '16', '測試學生16', 'Peter Hsu', 'A2', 'A1', 'Ms. Adams', 'G4 Voyagers', 'Mr. Wright', '0912-160-160', '0987-160-160'],
+    // Mr. Taylor - 教授多個班級 (G2 Innovators + G3 Navigators)
+    ['T023', 'G2', '802', '23', '測試學生23', 'Wendy Liao', 'A1', 'A2', 'Mr. Cooper', 'G2 Innovators', 'Mr. Taylor', '0912-231-231', '0987-231-231'],
+    ['T024', 'G2', '802', '24', '測試學生24', 'Xavier Peng', 'A2', 'A1', 'Ms. Foster', 'G2 Innovators', 'Mr. Taylor', '0912-241-241', '0987-241-241'],
+    ['T025', 'G2', '802', '25', '測試學生25', 'Yuki Jiang', 'A1', 'A2', 'Mr. Hughes', 'G2 Innovators', 'Mr. Taylor', '0912-251-251', '0987-251-251'],
+    ['T026', 'G3', '902', '26', '測試學生26', 'Zoe Chou', 'A2', 'A1', 'Ms. Kelly', 'G3 Navigators', 'Mr. Taylor', '0912-261-261', '0987-261-261'],
+    ['T027', 'G3', '902', '27', '測試學生27', 'Aaron Xu', 'A1', 'A2', 'Mr. Murphy', 'G3 Navigators', 'Mr. Taylor', '0912-271-271', '0987-271-271'],
+    ['T028', 'G3', '902', '28', '測試學生28', 'Betty Shih', 'A2', 'A1', 'Ms. Rivera', 'G3 Navigators', 'Mr. Taylor', '0912-281-281', '0987-281-281'],
     
-    ['T017', 'G5', '1101', '17', '測試學生17', 'Quinn Liu', 'A1', 'A2', 'Mr. Baker', 'G5 Pioneers', 'Ms. Nelson', '0912-170-170', '0987-170-170'],
-    ['T018', 'G5', '1101', '18', '測試學生18', 'Ruby Wang', 'A2', 'A1', 'Ms. Carter', 'G5 Pioneers', 'Ms. Nelson', '0912-180-180', '0987-180-180'],
-    ['T019', 'G6', '1201', '19', '測試學生19', 'Sam Chen', 'A1', 'A2', 'Mr. Mitchell', 'G6 Guardians', 'Mr. Roberts', '0912-190-190', '0987-190-190'],
-    ['T020', 'G6', '1201', '20', '測試學生20', 'Tina Yeh', 'A2', 'A1', 'Ms. Phillips', 'G6 Guardians', 'Mr. Roberts', '0912-200-200', '0987-200-200']
+    // Ms. Moore - 單一班級但較多學生 (G3 Guardians)
+    ['T029', 'G3', '903', '29', '測試學生29', 'Chris Fan', 'A1', 'A2', 'Mr. Reed', 'G3 Guardians', 'Ms. Moore', '0912-291-291', '0987-291-291'],
+    ['T030', 'G3', '903', '30', '測試學生30', 'Daisy Guo', 'A2', 'A1', 'Ms. Ward', 'G3 Guardians', 'Ms. Moore', '0912-301-301', '0987-301-301'],
+    ['T031', 'G3', '903', '31', '測試學生31', 'Edward Song', 'A1', 'A2', 'Mr. Cox', 'G3 Guardians', 'Ms. Moore', '0912-311-311', '0987-311-311'],
+    ['T032', 'G3', '903', '32', '測試學生32', 'Flora Wen', 'A2', 'A1', 'Ms. Price', 'G3 Guardians', 'Ms. Moore', '0912-321-321', '0987-321-321'],
+    ['T033', 'G3', '903', '33', '測試學生33', 'Gary Fu', 'A1', 'A2', 'Mr. Long', 'G3 Guardians', 'Ms. Moore', '0912-331-331', '0987-331-331'],
+    
+    // Mr. Jackson - 跨年級教學 (G4 Inventors + G5 Pioneers) 
+    ['T034', 'G4', '1001', '34', '測試學生34', 'Hannah Ma', 'A2', 'A1', 'Ms. Bell', 'G4 Inventors', 'Mr. Jackson', '0912-341-341', '0987-341-341'],
+    ['T035', 'G4', '1001', '35', '測試學生35', 'Ian Dong', 'A1', 'A2', 'Mr. Stone', 'G4 Inventors', 'Mr. Jackson', '0912-351-351', '0987-351-351'],
+    ['T036', 'G4', '1001', '36', '測試學生36', 'Julia Tang', 'A2', 'A1', 'Ms. Wood', 'G4 Inventors', 'Mr. Jackson', '0912-361-361', '0987-361-361'],
+    ['T037', 'G5', '1101', '37', '測試學生37', 'Kyle Zheng', 'A1', 'A2', 'Mr. Ross', 'G5 Pioneers', 'Mr. Jackson', '0912-371-371', '0987-371-371'],
+    ['T038', 'G5', '1101', '38', '測試學生38', 'Luna Qiu', 'A2', 'A1', 'Ms. Gray', 'G5 Pioneers', 'Mr. Jackson', '0912-381-381', '0987-381-381'],
+    ['T039', 'G5', '1101', '39', '測試學生39', 'Max Feng', 'A1', 'A2', 'Mr. Perry', 'G5 Pioneers', 'Mr. Jackson', '0912-391-391', '0987-391-391'],
+    
+    // Ms. King - 多班級 (G4 Voyagers + G5 Scholars)
+    ['T040', 'G4', '1002', '40', '測試學生40', 'Nina Bai', 'A2', 'A1', 'Ms. James', 'G4 Voyagers', 'Ms. King', '0912-401-401', '0987-401-401'],
+    ['T041', 'G4', '1002', '41', '測試學生41', 'Owen Deng', 'A1', 'A2', 'Mr. Watson', 'G4 Voyagers', 'Ms. King', '0912-411-411', '0987-411-411'],
+    ['T042', 'G4', '1002', '42', '測試學生42', 'Penny Zhu', 'A2', 'A1', 'Ms. Brooks', 'G4 Voyagers', 'Ms. King', '0912-421-421', '0987-421-421'],
+    ['T043', 'G5', '1102', '43', '測試學生43', 'Quinn Jia', 'A1', 'A2', 'Mr. Sanders', 'G5 Scholars', 'Ms. King', '0912-431-431', '0987-431-431'],
+    ['T044', 'G5', '1102', '44', '測試學生44', 'Ruby Xie', 'A2', 'A1', 'Ms. Powell', 'G5 Scholars', 'Ms. King', '0912-441-441', '0987-441-441'],
+    
+    // Mr. Wright - 高年級專責 (G6 Guardians + G6 Champions)
+    ['T045', 'G6', '1201', '45', '測試學生45', 'Sam Meng', 'A1', 'A2', 'Mr. Butler', 'G6 Guardians', 'Mr. Wright', '0912-451-451', '0987-451-451'],
+    ['T046', 'G6', '1201', '46', '測試學生46', 'Tiffany Dai', 'A2', 'A1', 'Ms. Russell', 'G6 Guardians', 'Mr. Wright', '0912-461-461', '0987-461-461'],
+    ['T047', 'G6', '1201', '47', '測試學生47', 'Ulysses Pan', 'A1', 'A2', 'Mr. Griffin', 'G6 Guardians', 'Mr. Wright', '0912-471-471', '0987-471-471'],
+    ['T048', 'G6', '1202', '48', '測試學生48', 'Vivian Su', 'A2', 'A1', 'Ms. Diaz', 'G6 Champions', 'Mr. Wright', '0912-481-481', '0987-481-481'],
+    ['T049', 'G6', '1202', '49', '測試學生49', 'Walter Cui', 'A1', 'A2', 'Mr. Hayes', 'G6 Champions', 'Mr. Wright', '0912-491-491', '0987-491-491'],
+    ['T050', 'G6', '1202', '50', '測試學生50', 'Xenia Yao', 'A2', 'A1', 'Ms. Myers', 'G6 Champions', 'Mr. Wright', '0912-501-501', '0987-501-501']
   ];
   
   return testStudents;

@@ -552,7 +552,7 @@ function createProgressSheet(recordBook, teacherInfo) {
     
     // 已完成電聯（即時計算公式）
     // 計算特定學期+Term+Contact Type="Academic Contact"且Date欄位不為空的記錄數
-    const completedContactsFormula = `=COUNTIFS(${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.F:F,"${st.semester}",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.G:G,"${st.term}",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.H:H,"Academic Contact",${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.E:E,"<>")`;
+    const completedContactsFormula = `=COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.E:E,"<>")`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
     // 完成率（即時計算公式）
@@ -584,7 +584,7 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', `=COUNTIF(${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}.H:H,"Academic Contact")`],
+    ['學期電聯總次數', `=COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'.H:H,"Academic Contact")`],
     ['平均每學期完成率', `=IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%")`]
   ];
   
