@@ -1087,17 +1087,25 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
     });
   });
   
-  // 對記錄進行三層排序：學生ID → 學期 → Term
+  // 對記錄進行四層排序：English Class → 學生ID → 學期 → Term
   Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Academic Contact記錄...`);
   prebuiltRecords.sort((a, b) => {
-    // 主要排序：學生ID（數字排序，小到大）
+    // 首要排序：English Class（字串排序，小到大）
+    const englishClassA = a[3] || ''; // English Class 欄位
+    const englishClassB = b[3] || '';
+    const classCompare = englishClassA.localeCompare(englishClassB);
+    if (classCompare !== 0) {
+      return classCompare;
+    }
+    
+    // 次要排序：學生ID（數字排序，小到大）
     const studentIdA = parseInt(a[0]) || 0; // 如果無法解析為數字，預設為0
     const studentIdB = parseInt(b[0]) || 0;
     if (studentIdA !== studentIdB) {
       return studentIdA - studentIdB;
     }
     
-    // 次要排序：學期（Fall → Spring）
+    // 第三排序：學期（Fall → Spring）
     const semesterA = a[5]; // Semester 欄位
     const semesterB = b[5];
     const semesterOrder = { 'Fall': 0, 'Spring': 1 };
@@ -1106,14 +1114,14 @@ function performPrebuildAcademicContacts(recordBook, studentData) {
       return semesterCompare;
     }
     
-    // 第三排序：Term（Beginning → Midterm → Final）
+    // 第四排序：Term（Beginning → Midterm → Final）
     const termA = a[6]; // Term 欄位
     const termB = b[6];
     const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
     return (termOrder[termA] || 999) - (termOrder[termB] || 999);
   });
   
-  Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
+  Logger.log(`✅ 記錄排序完成，順序：English Class (小→大) → 學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
   
   // 寫入預建記錄
   if (prebuiltRecords.length > 0) {
