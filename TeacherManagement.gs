@@ -574,7 +574,7 @@ function createProgressSheet(recordBook, teacherInfo) {
     
     // 已完成電聯（即時計算公式）
     // 計算特定學期+Term+Contact Type="Academic Contact"且所有必要欄位都已填寫的記錄數
-    // 必要欄位：Date(E), Contact Method(I), Contact Content(J), Follow-up(K)
+    // 必要欄位：Date(E), Teachers Content(I), Parents Responses(J), Contact Method(K)
     const completedContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!F:F,"${st.semester}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!G:G,"${st.term}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Academic Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!I:I,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!J:J,"<>",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!K:K,"<>"),0)`;
     sheet.getRange(row, 4).setFormula(completedContactsFormula);
     
