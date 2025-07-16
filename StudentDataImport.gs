@@ -453,35 +453,97 @@ function createContactFromStudentList() {
  */
 function createTeachersFromStudentMasterList() {
   try {
+    Logger.log('========== 開始從學生總表批量創建老師記錄簿 ==========');
     const ui = SpreadsheetApp.getUi();
     
+    // 檢查系統狀態
+    Logger.log('步驟1: 檢查系統狀態...');
+    try {
+      const mainFolder = getSystemMainFolder();
+      Logger.log(`✅ 系統主資料夾正常：${mainFolder.getName()}`);
+    } catch (systemError) {
+      Logger.log(`❌ 系統狀態檢查失敗：${systemError.message}`);
+      ui.alert('系統錯誤', `系統未正確初始化：${systemError.message}\n\n請先執行「初始化系統」功能`, ui.ButtonSet.OK);
+      return;
+    }
+    
     // 獲取學生總表
+    Logger.log('步驟2: 獲取學生總表資料...');
     const studentMasterData = getStudentMasterList();
-    if (!studentMasterData) return;
+    if (!studentMasterData) {
+      Logger.log('❌ 用戶取消或無法獲取學生總表');
+      return;
+    }
+    Logger.log(`✅ 成功獲取學生總表，資料行數：${studentMasterData.data.length}`);
+    Logger.log(`📋 標題欄位：${JSON.stringify(studentMasterData.headers)}`);
     
     // 從學生總表中提取老師資訊
-    const teachersInfo = extractTeachersFromMasterList(studentMasterData);
+    Logger.log('步驟3: 從學生總表提取老師資訊...');
+    let teachersInfo;
+    try {
+      teachersInfo = extractTeachersFromMasterList(studentMasterData);
+      Logger.log(`✅ 成功提取老師資訊，找到 ${teachersInfo ? teachersInfo.length : 0} 位老師`);
+      
+      if (teachersInfo && teachersInfo.length > 0) {
+        teachersInfo.forEach((teacher, index) => {
+          Logger.log(`老師 ${index + 1}: ${teacher.name}, 班級: ${teacher.classes.join(', ')}, 學生數: ${teacher.studentCount}`);
+        });
+      }
+    } catch (extractError) {
+      Logger.log(`❌ 提取老師資訊失敗：${extractError.message}`);
+      ui.alert('資料提取錯誤', `無法從學生總表中提取老師資訊：${extractError.message}\n\n請檢查學生總表格式是否正確`, ui.ButtonSet.OK);
+      return;
+    }
+    
     if (!teachersInfo || teachersInfo.length === 0) {
-      ui.alert('提醒', '未從學生總表中找到老師資訊', ui.ButtonSet.OK);
+      Logger.log('❌ 未找到任何老師資訊');
+      ui.alert('提醒', '未從學生總表中找到老師資訊\n\n請確認：\n1. 學生總表包含 LT (Language Teacher) 欄位\n2. LT 欄位中有老師姓名資料\n3. 學生資料不為空', ui.ButtonSet.OK);
       return;
     }
     
     // 確認要創建的老師清單
+    Logger.log('步驟4: 確認創建老師清單...');
     const confirmed = confirmTeachersCreation(teachersInfo);
-    if (!confirmed) return;
+    if (!confirmed) {
+      Logger.log('❌ 用戶取消創建操作');
+      return;
+    }
+    Logger.log(`✅ 用戶確認創建 ${teachersInfo.length} 位老師的記錄簿`);
     
     // 批量創建老師記錄簿
+    Logger.log('步驟5: 開始批量創建老師記錄簿...');
     const createResult = batchCreateTeachersFromMasterList(teachersInfo, studentMasterData);
+    
+    Logger.log(`🎉 批量創建完成！成功：${createResult.successCount}，失敗：${createResult.errorCount}`);
+    
+    // 顯示詳細結果
+    let resultMessage = `成功創建：${createResult.successCount} 位老師的記錄簿\n失敗：${createResult.errorCount} 位`;
+    
+    if (createResult.errorCount > 0) {
+      resultMessage += '\n\n失敗詳情：';
+      createResult.results.forEach(result => {
+        if (!result.success) {
+          resultMessage += `\n• ${result.teacher}: ${result.error}`;
+        }
+      });
+      resultMessage += '\n\n建議：\n1. 檢查系統初始化狀態\n2. 確認資料夾權限\n3. 查看日誌詳細錯誤資訊';
+    } else {
+      resultMessage += '\n\n每位老師的記錄簿已包含相關學生資料';
+    }
     
     ui.alert(
       '批量創建完成！',
-      `成功創建：${createResult.successCount} 位老師的記錄簿\n失敗：${createResult.errorCount} 位\n\n每位老師的記錄簿已包含相關學生資料`,
+      resultMessage,
       ui.ButtonSet.OK
     );
     
   } catch (error) {
-    Logger.log('從學生總表批量創建老師記錄簿失敗：' + error.toString());
-    safeErrorHandler('從學生總表批量創建老師記錄簿', error);
+    Logger.log('💥 從學生總表批量創建老師記錄簿失敗：' + error.toString());
+    Logger.log('📍 錯誤堆疊：' + error.stack);
+    
+    const detailedMessage = `批量創建過程發生錯誤：${error.message}\n\n可能原因：\n1. 系統未正確初始化\n2. 資料夾權限不足\n3. 學生總表格式錯誤\n4. 網路連線問題\n\n請檢查日誌獲取詳細資訊`;
+    
+    safeErrorHandler('從學生總表批量創建老師記錄簿', error, detailedMessage);
   }
 }
 
@@ -526,62 +588,142 @@ function getStudentMasterList() {
  * 主要針對英文科，從 'LT' 欄位提取老師姓名
  */
 function extractTeachersFromMasterList(masterData) {
+  Logger.log(`🔍 開始從學生總表提取老師資訊...`);
+  
+  // 驗證輸入資料
+  if (!masterData || !masterData.headers || !masterData.data) {
+    throw new Error('學生總表資料格式不正確：缺少 headers 或 data');
+  }
+  
   const headers = masterData.headers;
   const data = masterData.data.slice(1); // 跳過標題列
   
-  // 找到 LT (Language Teacher) 欄位索引
-  const ltIndex = headers.findIndex(header => 
-    header.toString().toLowerCase().includes('lt') || 
-    header.toString().includes('Language Teacher') ||
-    header.toString().includes('English Teacher')
-  );
+  Logger.log(`📋 標題欄位數量：${headers.length}`);
+  Logger.log(`👥 學生資料行數：${data.length}`);
+  Logger.log(`📝 標題欄位：${JSON.stringify(headers)}`);
+  
+  // 找到 LT (Language Teacher) 欄位索引 - 增強搜尋邏輯
+  Logger.log(`🔍 搜尋老師欄位...`);
+  const possibleTeacherFields = ['LT', 'Language Teacher', 'English Teacher', 'Teacher', '老師', '語言老師', '英文老師'];
+  let ltIndex = -1;
+  
+  // 精確匹配
+  for (const field of possibleTeacherFields) {
+    ltIndex = headers.findIndex(header => 
+      header && header.toString().trim().toLowerCase() === field.toLowerCase()
+    );
+    if (ltIndex !== -1) {
+      Logger.log(`✅ 找到老師欄位（精確匹配）：${headers[ltIndex]} (第 ${ltIndex + 1} 欄)`);
+      break;
+    }
+  }
+  
+  // 如果精確匹配失敗，嘗試包含匹配
+  if (ltIndex === -1) {
+    for (const field of possibleTeacherFields) {
+      ltIndex = headers.findIndex(header => 
+        header && header.toString().toLowerCase().includes(field.toLowerCase())
+      );
+      if (ltIndex !== -1) {
+        Logger.log(`✅ 找到老師欄位（包含匹配）：${headers[ltIndex]} (第 ${ltIndex + 1} 欄)`);
+        break;
+      }
+    }
+  }
   
   if (ltIndex === -1) {
-    throw new Error('在學生總表中找不到老師欄位 (LT/Language Teacher/English Teacher)');
+    Logger.log(`❌ 找不到老師欄位`);
+    Logger.log(`📋 可用欄位：${headers.map((h, i) => `${i + 1}. ${h}`).join(', ')}`);
+    throw new Error(`在學生總表中找不到老師欄位。\n\n請確認學生總表包含以下任一欄位：\n${possibleTeacherFields.join(', ')}\n\n當前欄位：${headers.join(', ')}`);
   }
   
   // 提取所有老師名稱（去重）
+  Logger.log(`👥 從第 ${ltIndex + 1} 欄 (${headers[ltIndex]}) 提取老師資訊...`);
   const teacherNames = new Set();
   const teacherStudentMap = new Map();
+  let processedRows = 0;
+  let validTeacherRows = 0;
   
-  data.forEach(row => {
+  data.forEach((row, index) => {
+    processedRows++;
     const teacherName = row[ltIndex];
+    
     if (teacherName && teacherName.toString().trim()) {
       const cleanName = teacherName.toString().trim();
       teacherNames.add(cleanName);
+      validTeacherRows++;
       
       // 記錄每位老師對應的學生
       if (!teacherStudentMap.has(cleanName)) {
         teacherStudentMap.set(cleanName, []);
       }
       teacherStudentMap.get(cleanName).push(row);
+    } else {
+      Logger.log(`⚠️ 第 ${index + 2} 行老師欄位為空或無效`);
     }
   });
   
+  Logger.log(`📊 處理統計：處理 ${processedRows} 行，有效老師資料 ${validTeacherRows} 行`);
+  Logger.log(`👨‍🏫 找到 ${teacherNames.size} 位不重複老師：${Array.from(teacherNames).join(', ')}`);
+  
+  if (teacherNames.size === 0) {
+    throw new Error(`學生總表的老師欄位 (${headers[ltIndex]}) 中沒有找到任何老師資料。\n\n請檢查：\n1. 老師欄位是否填寫\n2. 資料格式是否正確\n3. 是否有空白行干擾`);
+  }
+  
+  // 找到 English Class 欄位索引
+  Logger.log(`🔍 搜尋英語班級欄位...`);
+  const possibleClassFields = ['English Class', 'Class', '英語班級', '班級', 'EC'];
+  let englishClassIndex = -1;
+  
+  for (const field of possibleClassFields) {
+    englishClassIndex = headers.findIndex(h => 
+      h && h.toString().includes(field) && 
+      !h.toString().includes('Old') && 
+      !h.toString().includes('Previous')
+    );
+    if (englishClassIndex !== -1) {
+      Logger.log(`✅ 找到英語班級欄位：${headers[englishClassIndex]} (第 ${englishClassIndex + 1} 欄)`);
+      break;
+    }
+  }
+  
+  if (englishClassIndex === -1) {
+    Logger.log(`⚠️ 未找到英語班級欄位，將使用空班級列表`);
+  }
+  
   // 轉換為老師資訊物件陣列
-  return Array.from(teacherNames).map(teacherName => {
+  Logger.log(`🔄 轉換老師資訊為物件陣列...`);
+  const teachersInfo = Array.from(teacherNames).map(teacherName => {
     const students = teacherStudentMap.get(teacherName) || [];
     const classes = new Set();
     
-    // 從學生資料中提取英語班級資訊（使用 English Class 欄位）
-    students.forEach(student => {
-      const englishClassIndex = headers.findIndex(h => 
-        h.toString().includes('English Class') && 
-        !h.toString().includes('Old')
-      );
-      if (englishClassIndex !== -1 && student[englishClassIndex]) {
-        classes.add(student[englishClassIndex].toString().trim());
-      }
-    });
+    // 從學生資料中提取英語班級資訊
+    if (englishClassIndex !== -1) {
+      students.forEach(student => {
+        if (student[englishClassIndex]) {
+          const className = student[englishClassIndex].toString().trim();
+          if (className) {
+            classes.add(className);
+          }
+        }
+      });
+    }
     
-    return {
+    const teacherInfo = {
       name: teacherName,
       subject: '英文', // 固定為英文科
       classes: Array.from(classes).sort(),
       studentCount: students.length,
       students: students
     };
+    
+    Logger.log(`👨‍🏫 老師：${teacherName}, 班級：${teacherInfo.classes.join(', ') || '無'}, 學生數：${teacherInfo.studentCount}`);
+    
+    return teacherInfo;
   });
+  
+  Logger.log(`✅ 老師資訊提取完成，共 ${teachersInfo.length} 位老師`);
+  return teachersInfo;
 }
 
 /**
@@ -612,36 +754,66 @@ function confirmTeachersCreation(teachersInfo) {
  * 批量創建老師記錄簿（從學生總表）
  */
 function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
+  Logger.log(`========== 開始批量創建 ${teachersInfo.length} 位老師的記錄簿 ==========`);
+  
   let successCount = 0;
   let errorCount = 0;
   const results = [];
   
-  teachersInfo.forEach(teacherInfo => {
+  teachersInfo.forEach((teacherInfo, index) => {
+    const teacherNum = index + 1;
+    Logger.log(`\n📝 處理老師 ${teacherNum}/${teachersInfo.length}: ${teacherInfo.name}`);
+    
     try {
+      // 驗證老師資訊
+      if (!teacherInfo || !teacherInfo.name) {
+        throw new Error('老師資訊不完整：缺少姓名');
+      }
+      if (!teacherInfo.classes || teacherInfo.classes.length === 0) {
+        throw new Error('老師資訊不完整：缺少授課班級');
+      }
+      if (!teacherInfo.students || teacherInfo.students.length === 0) {
+        throw new Error('老師資訊不完整：缺少學生資料');
+      }
+      
+      Logger.log(`✅ 老師資訊驗證通過：${teacherInfo.name}，班級：${teacherInfo.classes.join(', ')}，學生數：${teacherInfo.studentCount}`);
+      
       // 創建老師記錄簿
+      Logger.log(`📊 開始創建記錄簿...`);
       const recordBook = createTeacherSheet(teacherInfo);
+      Logger.log(`✅ 記錄簿創建成功：${recordBook.getUrl()}`);
       
       // 匯入該老師的學生資料
+      Logger.log(`👥 開始匯入學生資料...`);
       importStudentsForTeacher(recordBook, teacherInfo, masterData);
+      Logger.log(`✅ 學生資料匯入完成`);
       
       results.push({
         success: true,
         teacher: teacherInfo.name,
-        recordBook: recordBook
+        recordBook: recordBook,
+        url: recordBook.getUrl()
       });
       successCount++;
       
+      Logger.log(`🎉 老師 ${teacherNum} (${teacherInfo.name}) 處理完成`);
+      
     } catch (error) {
-      Logger.log(`創建 ${teacherInfo.name} 記錄簿失敗：` + error.toString());
-      Logger.log(`錯誤詳細資訊：` + JSON.stringify({
-        teacherInfo: teacherInfo,
+      Logger.log(`💥 老師 ${teacherNum} (${teacherInfo.name}) 處理失敗：${error.toString()}`);
+      Logger.log(`❌ 詳細錯誤資訊：${JSON.stringify({
+        teacherInfo: {
+          name: teacherInfo?.name || '未知',
+          classes: teacherInfo?.classes || [],
+          studentCount: teacherInfo?.studentCount || 0
+        },
         errorMessage: error.message,
-        errorStack: error.stack
-      }));
+        errorStack: error.stack?.substring(0, 500) + '...' // 限制堆疊長度
+      })}`);
+      
       results.push({
         success: false,
-        teacher: teacherInfo.name,
-        error: error.message
+        teacher: teacherInfo?.name || '未知',
+        error: error.message || '未知錯誤'
       });
       errorCount++;
     }

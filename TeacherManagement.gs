@@ -129,63 +129,126 @@ function getTeachersDataFromSheet(sheetId) {
  */
 function createTeacherSheet(teacherInfo) {
   try {
-    Logger.log(`開始創建老師記錄簿：${teacherInfo.name}`);
+    Logger.log(`========== 開始創建老師記錄簿：${teacherInfo.name} ==========`);
+    Logger.log(`老師資訊：${JSON.stringify(teacherInfo)}`);
+    
+    // 驗證輸入參數
+    if (!teacherInfo || !teacherInfo.name) {
+      throw new Error('老師資訊不完整：缺少老師姓名');
+    }
+    if (!teacherInfo.classes || teacherInfo.classes.length === 0) {
+      throw new Error(`老師 ${teacherInfo.name} 缺少授課班級資訊`);
+    }
     
     // 取得系統資料夾
-    const mainFolder = getSystemMainFolder();
+    Logger.log('步驟1: 獲取系統主資料夾...');
+    let mainFolder;
+    try {
+      mainFolder = getSystemMainFolder();
+      Logger.log(`✅ 成功獲取系統主資料夾：${mainFolder.getName()}`);
+    } catch (folderError) {
+      Logger.log(`❌ 獲取系統主資料夾失敗：${folderError.message}`);
+      throw new Error(`無法獲取系統主資料夾：${folderError.message}。請先執行系統初始化或檢查資料夾權限。`);
+    }
+    
     if (!mainFolder) {
-      throw new Error('無法獲取系統主資料夾，請先初始化系統');
+      throw new Error('系統主資料夾為空，請先初始化系統');
     }
     
     // 安全獲取老師記錄簿資料夾
+    Logger.log('步驟2: 獲取或創建老師記錄簿資料夾...');
     const teachersFolderIterator = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
     let teachersFolder;
     
     if (teachersFolderIterator.hasNext()) {
       teachersFolder = teachersFolderIterator.next();
-      Logger.log(`找到老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+      Logger.log(`✅ 找到老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
     } else {
       // 如果老師記錄簿資料夾不存在，創建它
-      Logger.log(`創建缺少的老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
-      teachersFolder = mainFolder.createFolder(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+      Logger.log(`⚠️ 老師記錄簿資料夾不存在，正在創建：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+      try {
+        teachersFolder = mainFolder.createFolder(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+        Logger.log(`✅ 成功創建老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+      } catch (createError) {
+        Logger.log(`❌ 創建老師記錄簿資料夾失敗：${createError.message}`);
+        throw new Error(`無法創建老師記錄簿資料夾：${createError.message}`);
+      }
     }
   
     // 創建老師專屬資料夾
+    Logger.log('步驟3: 獲取或創建老師專屬資料夾...');
     const teacherFolderName = `${teacherInfo.name}_${new Date().getFullYear()}學年`;
     let teacherFolder;
-    const existingTeacherFolder = teachersFolder.getFoldersByName(teacherFolderName);
-    if (existingTeacherFolder.hasNext()) {
-      teacherFolder = existingTeacherFolder.next();
-      Logger.log(`使用現有老師資料夾：${teacherFolderName}`);
-    } else {
-      Logger.log(`創建新老師資料夾：${teacherFolderName}`);
-      teacherFolder = teachersFolder.createFolder(teacherFolderName);
+    
+    try {
+      const existingTeacherFolder = teachersFolder.getFoldersByName(teacherFolderName);
+      if (existingTeacherFolder.hasNext()) {
+        teacherFolder = existingTeacherFolder.next();
+        Logger.log(`✅ 找到現有老師資料夾：${teacherFolderName}`);
+      } else {
+        Logger.log(`📁 創建新老師資料夾：${teacherFolderName}`);
+        teacherFolder = teachersFolder.createFolder(teacherFolderName);
+        Logger.log(`✅ 成功創建老師資料夾：${teacherFolderName}`);
+      }
+    } catch (folderCreateError) {
+      Logger.log(`❌ 創建老師專屬資料夾失敗：${folderCreateError.message}`);
+      throw new Error(`無法創建老師專屬資料夾：${folderCreateError.message}`);
     }
     
     // 創建記錄簿檔案
+    Logger.log('步驟4: 創建記錄簿檔案...');
     const fileName = SYSTEM_CONFIG.TEACHER_SHEET_NAME_FORMAT
       .replace('{teacherName}', teacherInfo.name)
       .replace('{year}', new Date().getFullYear().toString());
     
-    Logger.log(`創建記錄簿檔案：${fileName}`);
-    const recordBook = SpreadsheetApp.create(fileName);
-    const recordFile = DriveApp.getFileById(recordBook.getId());
+    Logger.log(`📊 準備創建記錄簿檔案：${fileName}`);
+    let recordBook, recordFile;
+    
+    try {
+      recordBook = SpreadsheetApp.create(fileName);
+      recordFile = DriveApp.getFileById(recordBook.getId());
+      Logger.log(`✅ 成功創建記錄簿檔案，ID：${recordBook.getId()}`);
+    } catch (createFileError) {
+      Logger.log(`❌ 創建記錄簿檔案失敗：${createFileError.message}`);
+      throw new Error(`無法創建記錄簿檔案：${createFileError.message}`);
+    }
     
     // 移動到老師資料夾
-    Logger.log(`移動記錄簿到老師資料夾`);
-    teacherFolder.addFile(recordFile);
-    DriveApp.getRootFolder().removeFile(recordFile);
+    Logger.log('步驟5: 移動記錄簿到老師資料夾...');
+    try {
+      teacherFolder.addFile(recordFile);
+      DriveApp.getRootFolder().removeFile(recordFile);
+      Logger.log(`✅ 成功移動記錄簿到老師資料夾`);
+    } catch (moveError) {
+      Logger.log(`❌ 移動記錄簿檔案失敗：${moveError.message}`);
+      // 繼續執行，不讓移動失敗影響整個流程
+      Logger.log(`⚠️ 記錄簿檔案保留在根目錄，請手動移動`);
+    }
     
     // 設定記錄簿內容
-    Logger.log(`設定記錄簿內容`);
-    setupTeacherRecordBook(recordBook, teacherInfo);
+    Logger.log('步驟6: 設定記錄簿內容...');
+    try {
+      setupTeacherRecordBook(recordBook, teacherInfo);
+      Logger.log(`✅ 成功設定記錄簿內容`);
+    } catch (setupError) {
+      Logger.log(`❌ 設定記錄簿內容失敗：${setupError.message}`);
+      throw new Error(`記錄簿創建成功但內容設定失敗：${setupError.message}`);
+    }
     
-    Logger.log(`✅ 成功創建老師記錄簿：${teacherInfo.name}`);
+    Logger.log(`🎉 ========== 成功創建老師記錄簿：${teacherInfo.name} ==========`);
+    Logger.log(`📊 記錄簿URL：${recordBook.getUrl()}`);
     return recordBook;
     
   } catch (error) {
-    Logger.log(`❌ 創建老師記錄簿失敗：${teacherInfo.name} - ${error.toString()}`);
-    throw new Error(`創建 ${teacherInfo.name} 老師記錄簿失敗：${error.message}`);
+    Logger.log(`💥 ========== 創建老師記錄簿失敗：${teacherInfo?.name || '未知'} ==========`);
+    Logger.log(`❌ 錯誤詳細：${error.toString()}`);
+    Logger.log(`📍 錯誤堆疊：${error.stack}`);
+    
+    // 提供更詳細的錯誤訊息
+    const detailedError = new Error(`創建 ${teacherInfo?.name || '未知'} 老師記錄簿失敗：${error.message}`);
+    detailedError.originalError = error;
+    detailedError.teacherInfo = teacherInfo;
+    throw detailedError;
   }
 }
 
@@ -649,32 +712,96 @@ function setupContactLogConditionalFormatting(sheet) {
 /**
  * 取得系統主資料夾
  * 如果有指定 MAIN_FOLDER_ID，優先使用該資料夾，否則按名稱搜尋
+ * 包含故障恢復機制
  */
 function getSystemMainFolder(strictMode = false) {
-  // 如果有指定資料夾 ID，優先使用
+  Logger.log(`🔍 開始搜尋系統主資料夾，嚴格模式：${strictMode}`);
+  
+  // 方法1：如果有指定資料夾 ID，優先使用
   if (SYSTEM_CONFIG.MAIN_FOLDER_ID && SYSTEM_CONFIG.MAIN_FOLDER_ID.trim() !== '') {
+    Logger.log(`📁 嘗試使用指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}`);
     try {
       const folder = DriveApp.getFolderById(SYSTEM_CONFIG.MAIN_FOLDER_ID);
+      Logger.log(`✅ 成功存取指定資料夾：${folder.getName()}`);
+      
       if (strictMode) {
+        Logger.log(`🔧 進行嚴格模式驗證...`);
         return validateSystemFolderStructure(folder);
       }
       return folder;
     } catch (error) {
-      Logger.log(`無法存取指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}，嘗試按名稱搜尋`);
+      Logger.log(`❌ 無法存取指定的資料夾 ID：${SYSTEM_CONFIG.MAIN_FOLDER_ID}`);
+      Logger.log(`🔄 錯誤詳情：${error.message}，嘗試按名稱搜尋`);
+    }
+  } else {
+    Logger.log(`⚠️ 未設定 MAIN_FOLDER_ID，直接按名稱搜尋`);
+  }
+  
+  // 方法2：按名稱搜尋資料夾
+  Logger.log(`🔍 按名稱搜尋資料夾：${SYSTEM_CONFIG.MAIN_FOLDER_NAME}`);
+  try {
+    const folders = DriveApp.getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
+    if (folders.hasNext()) {
+      const folder = folders.next();
+      Logger.log(`✅ 找到同名資料夾：${folder.getName()}, ID: ${folder.getId()}`);
+      
+      // 檢查是否有多個同名資料夾
+      if (folders.hasNext()) {
+        Logger.log(`⚠️ 發現多個同名資料夾，使用第一個`);
+      }
+      
+      if (strictMode) {
+        Logger.log(`🔧 進行嚴格模式驗證...`);
+        return validateSystemFolderStructure(folder);
+      }
+      return folder;
+    }
+  } catch (searchError) {
+    Logger.log(`❌ 按名稱搜尋失敗：${searchError.message}`);
+  }
+  
+  // 方法3：嘗試在我的雲端硬碟根目錄搜尋
+  Logger.log(`🔍 在我的雲端硬碟根目錄搜尋...`);
+  try {
+    const rootFolders = DriveApp.getRootFolder().getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
+    if (rootFolders.hasNext()) {
+      const folder = rootFolders.next();
+      Logger.log(`✅ 在根目錄找到資料夾：${folder.getName()}, ID: ${folder.getId()}`);
+      
+      if (strictMode) {
+        Logger.log(`🔧 進行嚴格模式驗證...`);
+        return validateSystemFolderStructure(folder);
+      }
+      return folder;
+    }
+  } catch (rootSearchError) {
+    Logger.log(`❌ 根目錄搜尋失敗：${rootSearchError.message}`);
+  }
+  
+  // 方法4：故障恢復 - 提供自動創建選項
+  Logger.log(`❌ 所有搜尋方法都失敗，系統資料夾不存在`);
+  
+  if (!strictMode) {
+    Logger.log(`🔧 嘗試故障恢復：自動創建系統資料夾`);
+    try {
+      return createSystemFolders();
+    } catch (createError) {
+      Logger.log(`💥 自動創建失敗：${createError.message}`);
     }
   }
   
-  // 按名稱搜尋資料夾
-  const folders = DriveApp.getFoldersByName(SYSTEM_CONFIG.MAIN_FOLDER_NAME);
-  if (folders.hasNext()) {
-    const folder = folders.next();
-    if (strictMode) {
-      return validateSystemFolderStructure(folder);
-    }
-    return folder;
-  }
+  const detailedError = new Error(`系統資料夾不存在，請執行以下步驟：
+1. 檢查 SYSTEM_CONFIG.MAIN_FOLDER_ID 設定是否正確
+2. 確認您有資料夾存取權限
+3. 執行「初始化系統」功能重新創建系統資料夾
+4. 或手動創建名為「${SYSTEM_CONFIG.MAIN_FOLDER_NAME}」的資料夾
+
+當前設定：
+- MAIN_FOLDER_ID: ${SYSTEM_CONFIG.MAIN_FOLDER_ID}
+- MAIN_FOLDER_NAME: ${SYSTEM_CONFIG.MAIN_FOLDER_NAME}`);
   
-  throw new Error('系統資料夾不存在，請先執行系統初始化');
+  detailedError.code = 'SYSTEM_FOLDER_NOT_FOUND';
+  throw detailedError;
 }
 
 /**
