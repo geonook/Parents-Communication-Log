@@ -31,6 +31,7 @@ This file provides essential guidance to Claude Code (claude.ai/code) when worki
 ### 📝 MANDATORY REQUIREMENTS
 - **COMMIT** after every completed task/phase - no exceptions
 - **GITHUB BACKUP** - Push to GitHub after every commit to maintain backup: `git push origin main`
+- **CLASP PUSH** - Push to Google Apps Script after every .gs file change: `clasp push` - EQUALLY IMPORTANT as GitHub backup
 - **USE TASK AGENTS** for all long-running operations (>30 seconds) - Bash commands stop when context switches
 - **TODOWRITE** for complex tasks (3+ steps) → parallel agents → git checkpoints → test validation
 - **READ FILES FIRST** before editing - Edit/Write tools will fail if you didn't read the file first
@@ -45,8 +46,8 @@ This file provides essential guidance to Claude Code (claude.ai/code) when worki
 
 ### ⚡ EXECUTION PATTERNS
 - **PARALLEL TASK AGENTS** - Launch multiple Task agents simultaneously for maximum efficiency
-- **SYSTEMATIC WORKFLOW** - TodoWrite → Parallel agents → Git checkpoints → GitHub backup → Test validation
-- **GITHUB BACKUP WORKFLOW** - After every commit: `git push origin main` to maintain GitHub backup
+- **SYSTEMATIC WORKFLOW** - TodoWrite → Parallel agents → Git checkpoints → GitHub backup → clasp push → Test validation
+- **DUAL BACKUP WORKFLOW** - After every commit: `git push origin main` + `clasp push` to maintain both GitHub and GAS sync
 - **BACKGROUND PROCESSING** - ONLY Task agents can run true background operations
 
 ### 🔍 MANDATORY PRE-TASK COMPLIANCE CHECK
@@ -74,6 +75,7 @@ This file provides essential guidance to Claude Code (claude.ai/code) when worki
 - [ ] Does this need to be a .gs file for GAS compatibility?
 - [ ] Can I extend existing .gs files instead of creating new ones?
 - [ ] Will this work with GAS runtime limitations?
+- [ ] Need clasp push for .gs changes? → If YES, run `clasp push` after commit
 
 **Step 5: Session Management**
 - [ ] Is this a long/complex task? → If YES, plan context checkpoints
@@ -136,16 +138,17 @@ Edit(file_path="TeacherManagement.gs", old_string="...", new_string="...")
 ## 🚀 COMMON COMMANDS
 
 ```bash
+# Complete deployment workflow (ALWAYS do both!)
+git add .
+git commit -m "Descriptive commit message"
+git push origin main    # GitHub backup
+clasp push             # Deploy to Google Apps Script - CRITICAL!
+
 # Test Google Apps Script functions
 # (Add your testing commands here as you develop them)
 
-# Deploy to Google Apps Script
-# (Add deployment commands here)
-
-# Backup to GitHub
-git add .
-git commit -m "Descriptive commit message"
-git push origin main
+# Check clasp status
+clasp status
 ```
 
 ## 🎯 RULE COMPLIANCE CHECK
@@ -156,6 +159,7 @@ Before starting ANY task, verify:
 - [ ] Use Task agents for >30 second operations
 - [ ] TodoWrite for 3+ step tasks
 - [ ] Commit after each completed task
+- [ ] **CLASP PUSH** after .gs file changes - EQUALLY IMPORTANT as GitHub backup
 
 ---
 
