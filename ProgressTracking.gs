@@ -327,7 +327,7 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
   summarySheet.setName('進度摘要');
   
   // 寫入摘要資料
-  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '學期電聯次數', '最後聯繫日期', '狀態', '提醒訊息']];
+  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '定期電聯次數', '最後聯繫日期', '狀態', '提醒訊息']];
   summarySheet.getRange(1, 1, 1, summaryHeaders[0].length).setValues(summaryHeaders);
   
   if (summaryData.length > 0) {
@@ -497,7 +497,7 @@ function generateDetailedProgressReport(progressResults) {
     
     // 設定表頭
     const headers = [
-      '老師姓名', '授課班級數', '總電聯次數', '學期電聯次數', 
+      '老師姓名', '授課班級數', '總電聯次數', '定期電聯次數', 
       '最後聯繫日期', '距今天數', '狀態', '當前Term完成', '提醒訊息'
     ];
     sheet.getRange(4, 1, 1, headers.length).setValues([headers]);

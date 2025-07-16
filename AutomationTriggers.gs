@@ -270,9 +270,9 @@ function saveSemesterSummary(summaryData) {
       ['總老師數', summaryData.totalTeachers],
       ['活躍老師數', summaryData.activeTeachers],
       ['總電聯次數', summaryData.totalContacts],
-      ['學期電聯次數', summaryData.academicContacts],
+      ['定期電聯次數', summaryData.academicContacts],
       ['平均每人電聯次數', summaryData.averageContacts],
-      ['平均每人學期電聯次數', summaryData.averageAcademicContacts],
+      ['平均每人定期電聯次數', summaryData.averageAcademicContacts],
       ['', ''],
       ['班級分布', '']
     ];

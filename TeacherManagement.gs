@@ -319,7 +319,7 @@ function createSummarySheet(recordBook, teacherInfo) {
   sheet.getRange('A10').setValue('電聯統計');
   sheet.getRange('A10').setFontSize(14).setFontWeight('bold');
   
-  const statsHeaders = [['班級', '學生人數', '學期電聯次數', '總電聯次數', '最後聯繫日期']];
+  const statsHeaders = [['班級', '學生人數', '定期電聯次數', '總電聯次數', '最後聯繫日期']];
   sheet.getRange(11, 1, 1, statsHeaders[0].length).setValues(statsHeaders);
   
   // 為每個班級創建統計行和實時統計公式
@@ -330,7 +330,7 @@ function createSummarySheet(recordBook, teacherInfo) {
     // 學生人數（從學生清單計算）
     sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
     
-    // 學期電聯次數（Scheduled Contact 類型且有填寫日期）
+    // 定期電聯次數（Scheduled Contact 類型且有填寫日期）
     const scheduledContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
     sheet.getRange(row, 3).setFormula(scheduledContactsFormula);
     
@@ -349,6 +349,36 @@ function createSummarySheet(recordBook, teacherInfo) {
   
   // 調整欄寬
   sheet.autoResizeColumns(1, 5);
+  
+  // 強制計算公式以確保統計數據正確顯示
+  try {
+    SpreadsheetApp.flush(); // 刷新所有待處理的操作
+    Utilities.sleep(1000); // 等待1秒讓公式穩定
+    
+    // 強制重新計算統計區域的公式
+    const statsRange = sheet.getRange(12, 1, teacherInfo.classes.length, 5);
+    statsRange.clearContent();
+    Utilities.sleep(500); // 短暫等待
+    
+    // 重新設定公式
+    teacherInfo.classes.forEach((className, index) => {
+      const row = 12 + index;
+      sheet.getRange(row, 1).setValue(className);
+      
+      // 重新設定公式並強制計算
+      sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
+      sheet.getRange(row, 3).setFormula(scheduledContactsFormula);
+      sheet.getRange(row, 4).setFormula(totalContactsFormula);
+      sheet.getRange(row, 5).setFormula(lastContactFormula);
+    });
+    
+    // 最後強制重新計算
+    SpreadsheetApp.flush();
+    Logger.log('✅ 總覽工作表公式計算完成');
+    
+  } catch (formulaError) {
+    Logger.log(`⚠️ 公式計算時發生錯誤：${formulaError.message}`);
+  }
   
   // 保護工作表，僅允許管理員編輯
   protectSheetForAdminOnly(sheet, '總覽工作表 - 僅管理員可編輯統計數據和基本資訊');
@@ -603,7 +633,7 @@ function createProgressSheet(recordBook, teacherInfo) {
   const summaryData = [
     ['總學生數', teacherInfo.studentCount || 0],
     ['授課班級', teacherInfo.classes.join(', ')],
-    ['學期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact"),0)`],
+    ['定期電聯總次數', `=IFERROR(COUNTIF('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact"),0)`],
     ['平均每學期完成率', `=IFERROR(IF(COUNTA(D5:D${4 + semesterTerms.length})>0,ROUND(AVERAGE(D5:D${4 + semesterTerms.length})/AVERAGE(C5:C${4 + semesterTerms.length})*100,1)&"%","0%"),"0%")`]
   ];
   
@@ -1233,5 +1263,145 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
   return {
     studentCount: students.length,
     recordCount: prebuiltRecords.length
+  };
+}
+
+/**
+ * 手動排序現有的電聯記錄
+ */
+function sortContactRecords() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const currentSheet = SpreadsheetApp.getActiveSheet();
+    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 檢查是否在老師記錄簿中
+    const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      ui.alert('錯誤', '請在老師記錄簿中執行此功能', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取電聯記錄工作表
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactLogSheet) {
+      ui.alert('錯誤', '找不到電聯記錄工作表', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取所有資料
+    const allData = contactLogSheet.getDataRange().getValues();
+    if (allData.length < 2) {
+      ui.alert('提醒', '沒有電聯記錄需要排序', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 確認操作
+    const response = ui.alert(
+      '重新排序電聯記錄',
+      '將按照以下順序重新排序所有電聯記錄：\n• 班級 (小→大)\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n\n確定要繼續嗎？',
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (response !== ui.Button.YES) return;
+    
+    // 執行排序
+    const sortResult = performContactRecordSort(contactLogSheet, allData);
+    
+    ui.alert(
+      '排序完成！',
+      `成功排序 ${sortResult.recordCount} 筆電聯記錄\n\n排序規則：\n• 班級 (小→大)\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    Logger.log('排序電聯記錄失敗：' + error.toString());
+    safeErrorHandler('排序電聯記錄', error);
+  }
+}
+
+/**
+ * 執行電聯記錄排序
+ */
+function performContactRecordSort(contactLogSheet, allData) {
+  const headers = allData[0];
+  const records = allData.slice(1); // 跳過標題行
+  
+  if (records.length === 0) {
+    return { recordCount: 0 };
+  }
+  
+  Logger.log(`🔄 開始排序 ${records.length} 筆電聯記錄...`);
+  
+  // 排序前記錄前5筆資料用於調試
+  if (records.length > 0) {
+    Logger.log(`📊 排序前樣本數據（前5筆）：`);
+    for (let i = 0; i < Math.min(5, records.length); i++) {
+      const record = records[i];
+      Logger.log(`  ${i+1}. ID:${record[0]}, Name:${record[1]}, Class:${record[3]}, Semester:${record[5]}, Term:${record[6]}`);
+    }
+  }
+  
+  // 執行四層排序：English Class → 學生ID → 學期 → Term
+  records.sort((a, b) => {
+    // 首要排序：English Class（字串排序，小到大）
+    const englishClassA = a[3] || ''; // English Class 欄位
+    const englishClassB = b[3] || '';
+    const classCompare = englishClassA.localeCompare(englishClassB);
+    if (classCompare !== 0) {
+      return classCompare;
+    }
+    
+    // 次要排序：學生ID（數字排序，小到大）
+    const studentIdA = parseInt(a[0]) || 0; // 如果無法解析為數字，預設為0
+    const studentIdB = parseInt(b[0]) || 0;
+    if (studentIdA !== studentIdB) {
+      return studentIdA - studentIdB;
+    }
+    
+    // 第三排序：學期（Fall → Spring）
+    const semesterA = a[5]; // Semester 欄位
+    const semesterB = b[5];
+    const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+    const semesterCompare = (semesterOrder[semesterA] || 999) - (semesterOrder[semesterB] || 999);
+    if (semesterCompare !== 0) {
+      return semesterCompare;
+    }
+    
+    // 第四排序：Term（Beginning → Midterm → Final）
+    const termA = a[6]; // Term 欄位
+    const termB = b[6];
+    const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+    return (termOrder[termA] || 999) - (termOrder[termB] || 999);
+  });
+  
+  // 排序後記錄前5筆資料用於調試
+  if (records.length > 0) {
+    Logger.log(`📊 排序後樣本數據（前5筆）：`);
+    for (let i = 0; i < Math.min(5, records.length); i++) {
+      const record = records[i];
+      Logger.log(`  ${i+1}. ID:${record[0]}, Name:${record[1]}, Class:${record[3]}, Semester:${record[5]}, Term:${record[6]}`);
+    }
+  }
+  
+  Logger.log(`✅ 記錄排序完成，順序：English Class (小→大) → 學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
+  
+  // 清除工作表內容並重新寫入
+  contactLogSheet.clear();
+  
+  // 重新寫入標題行
+  contactLogSheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  
+  // 重新寫入排序後的記錄
+  if (records.length > 0) {
+    contactLogSheet.getRange(2, 1, records.length, headers.length).setValues(records);
+  }
+  
+  // 重新設定格式
+  contactLogSheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#E8F4FD');
+  contactLogSheet.autoResizeColumns(1, headers.length);
+  
+  return {
+    recordCount: records.length
   };
 } 
