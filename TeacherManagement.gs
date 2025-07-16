@@ -126,8 +126,13 @@ function getTeachersDataFromSheet(sheetId) {
 
 /**
  * 創建老師的電聯記錄簿
+ * 改進版：更精確的錯誤處理，區分致命錯誤和非致命錯誤
  */
 function createTeacherSheet(teacherInfo) {
+  let recordBook = null;
+  let isCreationSuccessful = false;
+  let setupWarnings = [];
+  
   try {
     Logger.log(`========== 開始創建老師記錄簿：${teacherInfo.name} ==========`);
     Logger.log(`老師資訊：${JSON.stringify(teacherInfo)}`);
@@ -140,7 +145,7 @@ function createTeacherSheet(teacherInfo) {
       throw new Error(`老師 ${teacherInfo.name} 缺少授課班級資訊`);
     }
     
-    // 取得系統資料夾
+    // 步驟1: 取得系統資料夾 (致命錯誤)
     Logger.log('步驟1: 獲取系統主資料夾...');
     let mainFolder;
     try {
@@ -151,34 +156,28 @@ function createTeacherSheet(teacherInfo) {
       throw new Error(`無法獲取系統主資料夾：${folderError.message}。請先執行系統初始化或檢查資料夾權限。`);
     }
     
-    if (!mainFolder) {
-      throw new Error('系統主資料夾為空，請先初始化系統');
-    }
-    
-    // 安全獲取老師記錄簿資料夾
+    // 步驟2: 獲取或創建老師記錄簿資料夾 (致命錯誤)
     Logger.log('步驟2: 獲取或創建老師記錄簿資料夾...');
-    const teachersFolderIterator = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
     let teachersFolder;
-    
-    if (teachersFolderIterator.hasNext()) {
-      teachersFolder = teachersFolderIterator.next();
-      Logger.log(`✅ 找到老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
-    } else {
-      // 如果老師記錄簿資料夾不存在，創建它
-      Logger.log(`⚠️ 老師記錄簿資料夾不存在，正在創建：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
-      try {
+    try {
+      const teachersFolderIterator = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+      if (teachersFolderIterator.hasNext()) {
+        teachersFolder = teachersFolderIterator.next();
+        Logger.log(`✅ 找到老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
+      } else {
+        Logger.log(`⚠️ 老師記錄簿資料夾不存在，正在創建：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
         teachersFolder = mainFolder.createFolder(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
         Logger.log(`✅ 成功創建老師記錄簿資料夾：${SYSTEM_CONFIG.TEACHERS_FOLDER_NAME}`);
-      } catch (createError) {
-        Logger.log(`❌ 創建老師記錄簿資料夾失敗：${createError.message}`);
-        throw new Error(`無法創建老師記錄簿資料夾：${createError.message}`);
       }
+    } catch (createError) {
+      Logger.log(`❌ 處理老師記錄簿資料夾失敗：${createError.message}`);
+      throw new Error(`無法處理老師記錄簿資料夾：${createError.message}`);
     }
-  
-    // 創建老師專屬資料夾
+    
+    // 步驟3: 創建老師專屬資料夾 (非致命錯誤)
     Logger.log('步驟3: 獲取或創建老師專屬資料夾...');
     const teacherFolderName = `${teacherInfo.name}_${new Date().getFullYear()}學年`;
-    let teacherFolder;
+    let teacherFolder = null;
     
     try {
       const existingTeacherFolder = teachersFolder.getFoldersByName(teacherFolderName);
@@ -191,48 +190,56 @@ function createTeacherSheet(teacherInfo) {
         Logger.log(`✅ 成功創建老師資料夾：${teacherFolderName}`);
       }
     } catch (folderCreateError) {
-      Logger.log(`❌ 創建老師專屬資料夾失敗：${folderCreateError.message}`);
-      throw new Error(`無法創建老師專屬資料夾：${folderCreateError.message}`);
+      Logger.log(`⚠️ 創建老師專屬資料夾失敗：${folderCreateError.message}`);
+      setupWarnings.push(`無法創建專屬資料夾：${folderCreateError.message}`);
+      teacherFolder = teachersFolder; // 使用上層資料夾作為備選
     }
     
-    // 創建記錄簿檔案
+    // 步驟4: 創建記錄簿檔案 (致命錯誤)
     Logger.log('步驟4: 創建記錄簿檔案...');
     const fileName = SYSTEM_CONFIG.TEACHER_SHEET_NAME_FORMAT
       .replace('{teacherName}', teacherInfo.name)
       .replace('{year}', new Date().getFullYear().toString());
     
     Logger.log(`📊 準備創建記錄簿檔案：${fileName}`);
-    let recordBook, recordFile;
+    let recordFile;
     
     try {
       recordBook = SpreadsheetApp.create(fileName);
       recordFile = DriveApp.getFileById(recordBook.getId());
       Logger.log(`✅ 成功創建記錄簿檔案，ID：${recordBook.getId()}`);
+      isCreationSuccessful = true; // 核心創建成功
     } catch (createFileError) {
       Logger.log(`❌ 創建記錄簿檔案失敗：${createFileError.message}`);
       throw new Error(`無法創建記錄簿檔案：${createFileError.message}`);
     }
     
-    // 移動到老師資料夾
+    // 步驟5: 移動到老師資料夾 (非致命錯誤)
     Logger.log('步驟5: 移動記錄簿到老師資料夾...');
-    try {
-      teacherFolder.addFile(recordFile);
-      DriveApp.getRootFolder().removeFile(recordFile);
-      Logger.log(`✅ 成功移動記錄簿到老師資料夾`);
-    } catch (moveError) {
-      Logger.log(`❌ 移動記錄簿檔案失敗：${moveError.message}`);
-      // 繼續執行，不讓移動失敗影響整個流程
-      Logger.log(`⚠️ 記錄簿檔案保留在根目錄，請手動移動`);
+    if (teacherFolder && recordFile) {
+      try {
+        teacherFolder.addFile(recordFile);
+        DriveApp.getRootFolder().removeFile(recordFile);
+        Logger.log(`✅ 成功移動記錄簿到老師資料夾`);
+      } catch (moveError) {
+        Logger.log(`⚠️ 移動記錄簿檔案失敗：${moveError.message}`);
+        setupWarnings.push(`檔案移動失敗，保留在根目錄：${moveError.message}`);
+      }
     }
     
-    // 設定記錄簿內容
+    // 步驟6: 設定記錄簿內容 (非致命錯誤)
     Logger.log('步驟6: 設定記錄簿內容...');
     try {
       setupTeacherRecordBook(recordBook, teacherInfo);
       Logger.log(`✅ 成功設定記錄簿內容`);
     } catch (setupError) {
-      Logger.log(`❌ 設定記錄簿內容失敗：${setupError.message}`);
-      throw new Error(`記錄簿創建成功但內容設定失敗：${setupError.message}`);
+      Logger.log(`⚠️ 設定記錄簿內容失敗：${setupError.message}`);
+      setupWarnings.push(`內容設定失敗：${setupError.message}`);
+    }
+    
+    // 創建成功，記錄警告但不影響成功狀態
+    if (setupWarnings.length > 0) {
+      Logger.log(`⚠️ 記錄簿創建成功但有警告：${setupWarnings.join('；')}`);
     }
     
     Logger.log(`🎉 ========== 成功創建老師記錄簿：${teacherInfo.name} ==========`);
@@ -244,10 +251,22 @@ function createTeacherSheet(teacherInfo) {
     Logger.log(`❌ 錯誤詳細：${error.toString()}`);
     Logger.log(`📍 錯誤堆疊：${error.stack}`);
     
+    // 如果記錄簿已創建但設定失敗，嘗試清理
+    if (isCreationSuccessful && recordBook) {
+      try {
+        DriveApp.getFileById(recordBook.getId()).setTrashed(true);
+        Logger.log(`🗑️ 已清理失敗的記錄簿檔案`);
+      } catch (cleanupError) {
+        Logger.log(`⚠️ 清理失敗檔案時發生錯誤：${cleanupError.message}`);
+      }
+    }
+    
     // 提供更詳細的錯誤訊息
     const detailedError = new Error(`創建 ${teacherInfo?.name || '未知'} 老師記錄簿失敗：${error.message}`);
     detailedError.originalError = error;
     detailedError.teacherInfo = teacherInfo;
+    detailedError.isCreationSuccessful = isCreationSuccessful;
+    detailedError.setupWarnings = setupWarnings;
     throw detailedError;
   }
 }
@@ -321,6 +340,7 @@ function createSummarySheet(recordBook, teacherInfo) {
 
 /**
  * 創建班級資訊工作表
+ * 增強版：自動填入班導師和班級人數資訊
  */
 function createClassInfoSheet(recordBook, teacherInfo) {
   const sheet = recordBook.insertSheet(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
@@ -329,15 +349,99 @@ function createClassInfoSheet(recordBook, teacherInfo) {
   const headers = [['班級', '班導師', '班級人數', '班級特殊情況說明', '最後更新日期']];
   sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
   
-  // 為每個班級創建資料行
+  // 如果有學生資料，從中提取班級資訊
+  let classData = {};
+  if (teacherInfo.students && teacherInfo.students.length > 0) {
+    Logger.log(`📊 從 ${teacherInfo.students.length} 筆學生資料中提取班級資訊...`);
+    
+    teacherInfo.students.forEach(student => {
+      // student 陣列格式: [ID, Grade, HR, Seat #, Chinese Name, English Name, ...]
+      const hrClass = student[2]; // HR 班級 (第3欄)
+      const englishClass = student[9]; // English Class (第10欄)
+      
+      // 找出實際的班級名稱（HR 或 English Class）
+      let actualClass = null;
+      if (teacherInfo.classes.includes(hrClass)) {
+        actualClass = hrClass;
+      } else if (teacherInfo.classes.includes(englishClass)) {
+        actualClass = englishClass;
+      }
+      
+      if (actualClass) {
+        if (!classData[actualClass]) {
+          classData[actualClass] = {
+            homeroomTeacher: '', // 將通過其他方式獲取
+            studentCount: 0,
+            students: []
+          };
+        }
+        classData[actualClass].studentCount++;
+        classData[actualClass].students.push(student);
+      }
+    });
+    
+    Logger.log(`✅ 提取到 ${Object.keys(classData).length} 個班級的資訊`);
+  }
+  
+  // 為每個班級創建資料行並填入資訊
   teacherInfo.classes.forEach((className, index) => {
     const row = 2 + index;
-    sheet.getRange(row, 1).setValue(className);
+    sheet.getRange(row, 1).setValue(className); // 班級
+    
+    // 填入班級人數
+    if (classData[className]) {
+      sheet.getRange(row, 3).setValue(classData[className].studentCount); // 班級人數
+      Logger.log(`📊 ${className} 班級人數：${classData[className].studentCount}`);
+    } else {
+      sheet.getRange(row, 3).setValue('待確認'); // 無學生資料時的預設值
+    }
+    
+    // 班導師欄位 - 目前設為空白，可後續透過其他方式填入
+    sheet.getRange(row, 2).setValue('待填入'); // 班導師 (留待人工填入或後續功能擴充)
+    
+    // 最後更新日期
     sheet.getRange(row, 5).setValue(new Date().toLocaleDateString());
   });
   
+  // 新增資料來源說明
+  if (Object.keys(classData).length > 0) {
+    const noteRow = 2 + teacherInfo.classes.length + 1;
+    sheet.getRange(noteRow, 1).setValue('📝 資料來源說明：');
+    sheet.getRange(noteRow + 1, 1).setValue('• 班級人數：從學生清單自動計算');
+    sheet.getRange(noteRow + 2, 1).setValue('• 班導師：需手動填入或透過系統管理員設定');
+    sheet.getRange(noteRow, 1, 3, 1).setFontStyle('italic').setFontColor('#666666');
+  }
+  
   // 格式設定
   sheet.getRange(1, 1, 1, headers[0].length).setFontWeight('bold').setBackground('#E8F4FD');
+  
+  // 為班級人數欄位設定數字格式
+  const classCount = teacherInfo.classes.length;
+  if (classCount > 0) {
+    sheet.getRange(2, 3, classCount, 1).setNumberFormat('0'); // 整數格式
+  }
+  
+  // 條件式格式設定 - 班級人數
+  if (classCount > 0) {
+    const studentCountRange = sheet.getRange(2, 3, classCount, 1);
+    
+    // 班級人數 > 30 的班級用紅色背景標示
+    const highCountRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberGreaterThan(30)
+      .setBackground('#FFEBEE')
+      .setRanges([studentCountRange])
+      .build();
+    
+    // 班級人數 < 10 的班級用黃色背景標示
+    const lowCountRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenNumberLessThan(10)
+      .setBackground('#FFF3E0')
+      .setRanges([studentCountRange])
+      .build();
+    
+    sheet.setConditionalFormatRules([highCountRule, lowCountRule]);
+  }
+  
   sheet.autoResizeColumns(1, headers[0].length);
 }
 

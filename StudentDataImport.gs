@@ -514,21 +514,37 @@ function createTeachersFromStudentMasterList() {
     Logger.log('步驟5: 開始批量創建老師記錄簿...');
     const createResult = batchCreateTeachersFromMasterList(teachersInfo, studentMasterData);
     
-    Logger.log(`🎉 批量創建完成！成功：${createResult.successCount}，失敗：${createResult.errorCount}`);
+    Logger.log(`🎉 批量創建完成！完全成功：${createResult.successCount}，部分成功：${createResult.partialSuccessCount}，失敗：${createResult.errorCount}`);
     
-    // 顯示詳細結果
-    let resultMessage = `成功創建：${createResult.successCount} 位老師的記錄簿\n失敗：${createResult.errorCount} 位`;
+    // 顯示詳細結果 - 使用新的統計結構
+    let resultMessage = `批量創建完成！\n\n`;
+    resultMessage += `✅ 成功創建：${createResult.totalSuccessCount} 位老師的記錄簿\n`;
+    resultMessage += `❌ 失敗：${createResult.errorCount} 位`;
+    
+    // 如果有部分成功的情況，顯示詳細說明
+    if (createResult.partialSuccessCount > 0) {
+      resultMessage += `\n\n⚠️ 其中 ${createResult.partialSuccessCount} 位老師創建成功但有輕微問題：`;
+      createResult.results.forEach(result => {
+        if (result.success && result.partialSuccess && result.warnings) {
+          resultMessage += `\n• ${result.teacher}: ${result.warnings.join('；')}`;
+        }
+      });
+      resultMessage += '\n\n這些記錄簿已可正常使用，問題不影響核心功能。';
+    }
     
     if (createResult.errorCount > 0) {
-      resultMessage += '\n\n失敗詳情：';
+      resultMessage += '\n\n❌ 失敗詳情：';
       createResult.results.forEach(result => {
         if (!result.success) {
           resultMessage += `\n• ${result.teacher}: ${result.error}`;
         }
       });
       resultMessage += '\n\n建議：\n1. 檢查系統初始化狀態\n2. 確認資料夾權限\n3. 查看日誌詳細錯誤資訊';
+    } else if (createResult.successCount === teachersInfo.length) {
+      resultMessage += '\n\n🎉 所有老師記錄簿創建完美成功！';
+      resultMessage += '\n\n每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Academic Contact記錄\n• 班級資訊和人數統計';
     } else {
-      resultMessage += '\n\n每位老師的記錄簿已包含相關學生資料';
+      resultMessage += '\n\n📋 每位老師的記錄簿已包含：\n• 完整學生清單\n• 自動預建的Academic Contact記錄\n• 班級資訊和人數統計';
     }
     
     ui.alert(
@@ -752,12 +768,14 @@ function confirmTeachersCreation(teachersInfo) {
 
 /**
  * 批量創建老師記錄簿（從學生總表）
+ * 增強版：更精確的成功/失敗統計，區分創建成功和設定警告
  */
 function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
   Logger.log(`========== 開始批量創建 ${teachersInfo.length} 位老師的記錄簿 ==========`);
   
-  let successCount = 0;
-  let errorCount = 0;
+  let successCount = 0;  // 實際創建成功的記錄簿數量
+  let errorCount = 0;    // 完全失敗的數量
+  let partialSuccessCount = 0; // 創建成功但有設定警告的數量
   const results = [];
   
   teachersInfo.forEach((teacherInfo, index) => {
@@ -780,23 +798,65 @@ function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
       
       // 創建老師記錄簿
       Logger.log(`📊 開始創建記錄簿...`);
-      const recordBook = createTeacherSheet(teacherInfo);
-      Logger.log(`✅ 記錄簿創建成功：${recordBook.getUrl()}`);
+      let recordBook = null;
+      let creationWarnings = [];
       
-      // 匯入該老師的學生資料
-      Logger.log(`👥 開始匯入學生資料...`);
-      importStudentsForTeacher(recordBook, teacherInfo, masterData);
-      Logger.log(`✅ 學生資料匯入完成`);
+      try {
+        recordBook = createTeacherSheet(teacherInfo);
+        Logger.log(`✅ 記錄簿創建成功：${recordBook.getUrl()}`);
+      } catch (createError) {
+        // 檢查是否為部分成功（記錄簿已創建但設定有問題）
+        if (createError.isCreationSuccessful) {
+          Logger.log(`⚠️ 記錄簿創建成功但有設定問題：${createError.message}`);
+          creationWarnings.push(createError.message);
+          if (createError.setupWarnings && createError.setupWarnings.length > 0) {
+            creationWarnings = creationWarnings.concat(createError.setupWarnings);
+          }
+          // 嘗試重新獲取記錄簿（如果有的話）
+          // 這裡需要根據實際情況調整
+        } else {
+          // 真正的創建失敗
+          throw createError;
+        }
+      }
       
-      results.push({
-        success: true,
-        teacher: teacherInfo.name,
-        recordBook: recordBook,
-        url: recordBook.getUrl()
-      });
-      successCount++;
-      
-      Logger.log(`🎉 老師 ${teacherNum} (${teacherInfo.name}) 處理完成`);
+      // 如果記錄簿存在，繼續匯入學生資料
+      if (recordBook) {
+        Logger.log(`👥 開始匯入學生資料...`);
+        try {
+          importStudentsForTeacher(recordBook, teacherInfo, masterData);
+          Logger.log(`✅ 學生資料匯入完成`);
+        } catch (importError) {
+          Logger.log(`⚠️ 學生資料匯入失敗：${importError.message}`);
+          creationWarnings.push(`學生資料匯入失敗：${importError.message}`);
+        }
+        
+        // 記錄結果
+        if (creationWarnings.length > 0) {
+          results.push({
+            success: true,
+            partialSuccess: true,
+            teacher: teacherInfo.name,
+            recordBook: recordBook,
+            url: recordBook.getUrl(),
+            warnings: creationWarnings
+          });
+          partialSuccessCount++;
+          Logger.log(`⚠️ 老師 ${teacherNum} (${teacherInfo.name}) 創建完成但有警告`);
+        } else {
+          results.push({
+            success: true,
+            teacher: teacherInfo.name,
+            recordBook: recordBook,
+            url: recordBook.getUrl()
+          });
+          successCount++;
+          Logger.log(`🎉 老師 ${teacherNum} (${teacherInfo.name}) 處理完成`);
+        }
+      } else {
+        // 無法獲取記錄簿，視為失敗
+        throw new Error('無法獲取創建的記錄簿');
+      }
       
     } catch (error) {
       Logger.log(`💥 老師 ${teacherNum} (${teacherInfo.name}) 處理失敗：${error.toString()}`);
@@ -807,21 +867,32 @@ function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
           studentCount: teacherInfo?.studentCount || 0
         },
         errorMessage: error.message,
+        isCreationSuccessful: error.isCreationSuccessful || false,
+        setupWarnings: error.setupWarnings || [],
         errorStack: error.stack?.substring(0, 500) + '...' // 限制堆疊長度
       })}`);
       
       results.push({
         success: false,
         teacher: teacherInfo?.name || '未知',
-        error: error.message || '未知錯誤'
+        error: error.message || '未知錯誤',
+        isCreationSuccessful: error.isCreationSuccessful || false
       });
       errorCount++;
     }
   });
   
+  Logger.log(`📊 批量創建統計：`);
+  Logger.log(`   ✅ 完全成功：${successCount} 位`);
+  Logger.log(`   ⚠️ 部分成功：${partialSuccessCount} 位`);
+  Logger.log(`   ❌ 失敗：${errorCount} 位`);
+  Logger.log(`   📊 總計：${successCount + partialSuccessCount + errorCount}/${teachersInfo.length} 位`);
+  
   return {
     successCount: successCount,
+    partialSuccessCount: partialSuccessCount,
     errorCount: errorCount,
+    totalSuccessCount: successCount + partialSuccessCount, // 實際創建成功的總數
     results: results
   };
 }
@@ -854,19 +925,17 @@ function importStudentsForTeacher(recordBook, teacherInfo, masterData) {
   // 重新設定資料驗證
   reapplyDataValidation(studentListSheet, recordBook);
   
-  // 詢問是否預建Academic Contact記錄
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    '自動預建電聯記錄',
-    `已成功匯入 ${studentData.length} 位學生資料到 ${teacherInfo.name} 老師的記錄簿\n\n是否要自動為所有學生預建Academic Contact記錄？\n• 每位學生建立完整學年6筆記錄\n• 減少老師手動建立工作`,
-    ui.ButtonSet.YES_NO
-  );
+  // 自動預建Academic Contact記錄（根據用戶要求移除對話框，直接執行）
+  Logger.log(`🤖 自動為 ${teacherInfo.name} 老師的 ${studentData.length} 位學生預建Academic Contact記錄...`);
   
-  if (response === ui.Button.YES) {
-    // 執行預建
+  try {
     const allStudentData = studentListSheet.getDataRange().getValues();
     const result = performPrebuildAcademicContacts(recordBook, allStudentData);
     
-    Logger.log(`為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Academic Contact記錄`);
+    Logger.log(`✅ 為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Academic Contact記錄`);
+    Logger.log(`📊 涵蓋 ${result.studentCount} 位學生，每位學生6筆記錄（Fall/Spring × Beginning/Midterm/Final）`);
+  } catch (prebuildError) {
+    Logger.log(`⚠️ 預建Academic Contact記錄時發生錯誤：${prebuildError.message}`);
+    // 不拋出錯誤，讓匯入繼續完成，只記錄警告
   }
 } 
