@@ -89,7 +89,7 @@ function onOpen() {
         .addItem('📥 匯入學生資料', 'importStudentData')
         .addItem('📤 匯出學生資料', 'exportStudentData')
         .addSeparator()
-        .addItem('🤖 預建學期電聯記錄', 'prebuildAcademicContactRecords')
+        .addItem('🤖 預建學期電聯記錄', 'prebuildScheduledContactRecords')
         .addItem('➕ 快速新增電聯記錄', 'createContactFromStudentList'))
       .addSeparator()
       .addItem('📊 檢查全體進度', 'checkAllProgress')
