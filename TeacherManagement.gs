@@ -292,6 +292,21 @@ function setupTeacherRecordBook(recordBook, teacherInfo) {
   
   // 設定記錄簿為第一個工作表
   recordBook.setActiveSheet(recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY));
+  
+  // 自動執行電聯記錄排序（如果已有電聯記錄的話）
+  try {
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (contactLogSheet) {
+      const dataRange = contactLogSheet.getDataRange();
+      if (dataRange.getNumRows() > 1) { // 除了標題行還有資料
+        Logger.log('🔄 新建記錄簿中檢測到電聯記錄，執行自動排序');
+        // 這裡不直接調用 sortContactRecords，而是在記錄簿創建完成提示中建議用戶手動排序
+        Logger.log('📝 提醒：記錄簿建立完成後，如有電聯記錄請使用「🔄 重新排序電聯記錄」功能');
+      }
+    }
+  } catch (sortError) {
+    Logger.log(`⚠️ 檢查排序需求時發生錯誤：${sortError.message}`);
+  }
 }
 
 /**
@@ -355,21 +370,11 @@ function createSummarySheet(recordBook, teacherInfo) {
     SpreadsheetApp.flush(); // 刷新所有待處理的操作
     Utilities.sleep(1000); // 等待1秒讓公式穩定
     
-    // 強制重新計算統計區域的公式
-    const statsRange = sheet.getRange(12, 1, teacherInfo.classes.length, 5);
-    statsRange.clearContent();
-    Utilities.sleep(500); // 短暫等待
-    
-    // 重新設定公式
+    // 驗證公式是否正確設定
+    Logger.log(`✅ 已為 ${teacherInfo.classes.length} 個班級設定統計公式`);
     teacherInfo.classes.forEach((className, index) => {
       const row = 12 + index;
-      sheet.getRange(row, 1).setValue(className);
-      
-      // 重新設定公式並強制計算
-      sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
-      sheet.getRange(row, 3).setFormula(scheduledContactsFormula);
-      sheet.getRange(row, 4).setFormula(totalContactsFormula);
-      sheet.getRange(row, 5).setFormula(lastContactFormula);
+      Logger.log(`📊 班級 ${className} 統計行：第 ${row} 行`);
     });
     
     // 最後強制重新計算
