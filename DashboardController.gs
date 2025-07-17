@@ -1475,3 +1475,94 @@ function showSystemSettingsWeb() {
     };
   }
 }
+
+/**
+ * Web 版本的重新排序電聯記錄功能
+ */
+function sortContactRecordsWeb() {
+  try {
+    Logger.log('Dashboard: 開始重新排序電聯記錄');
+    
+    // 獲取所有老師記錄簿
+    const teacherBooks = getAllTeacherBooksForDashboard();
+    if (teacherBooks.length === 0) {
+      return {
+        success: false,
+        message: '系統中沒有找到任何老師記錄簿。請先建立老師記錄簿。'
+      };
+    }
+    
+    let successCount = 0;
+    let errorCount = 0;
+    let totalRecords = 0;
+    const results = [];
+    
+    teacherBooks.forEach(book => {
+      try {
+        const summarySheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+        const teacherName = summarySheet ? summarySheet.getRange('B3').getValue() : book.getName();
+        
+        const contactLogSheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+        if (contactLogSheet) {
+          const allData = contactLogSheet.getDataRange().getValues();
+          if (allData.length > 1) { // 有資料需要排序
+            const sortResult = performContactRecordSort(contactLogSheet, allData);
+            totalRecords += sortResult.recordCount;
+            successCount++;
+            
+            results.push({
+              teacherName: teacherName,
+              recordCount: sortResult.recordCount,
+              success: true
+            });
+            
+            Logger.log(`Dashboard: 成功排序 ${teacherName} 的 ${sortResult.recordCount} 筆記錄`);
+          } else {
+            results.push({
+              teacherName: teacherName,
+              recordCount: 0,
+              success: true,
+              message: '無電聯記錄需要排序'
+            });
+          }
+        } else {
+          errorCount++;
+          results.push({
+            teacherName: teacherName,
+            success: false,
+            error: '找不到電聯記錄工作表'
+          });
+        }
+      } catch (error) {
+        errorCount++;
+        const teacherName = book.getName();
+        results.push({
+          teacherName: teacherName,
+          success: false,
+          error: error.message
+        });
+        Logger.log(`Dashboard: 排序 ${teacherName} 失敗：${error.toString()}`);
+      }
+    });
+    
+    Logger.log(`Dashboard: 重新排序完成 - 成功：${successCount}，失敗：${errorCount}，總記錄數：${totalRecords}`);
+    
+    return {
+      success: true,
+      message: `重新排序完成！\n\n📊 處理結果：\n• 成功：${successCount} 位老師\n• 失敗：${errorCount} 位老師\n• 總排序記錄數：${totalRecords} 筆\n\n📋 排序規則：\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n• 班級 (小→大)`,
+      results: {
+        successCount,
+        errorCount,
+        totalRecords,
+        details: results
+      }
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 重新排序電聯記錄失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '重新排序失敗：' + error.message
+    };
+  }
+}

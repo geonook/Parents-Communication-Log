@@ -343,7 +343,8 @@ function createSummarySheet(recordBook, teacherInfo) {
     sheet.getRange(row, 1).setValue(className);
     
     // 學生人數（從學生清單計算）
-    sheet.getRange(row, 2).setFormula(`=IFERROR(COUNTIFS('學生清單'!J:J,"${className}"),0)`);
+    const studentCountFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST}'!J:J,"${className}"),0)`;
+    sheet.getRange(row, 2).setFormula(studentCountFormula);
     
     // 定期電聯次數（Scheduled Contact 類型且有填寫日期）
     const scheduledContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
@@ -356,6 +357,10 @@ function createSummarySheet(recordBook, teacherInfo) {
     // 最後聯繫日期（該班級最新的電聯日期）
     const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
     sheet.getRange(row, 5).setFormula(lastContactFormula);
+    
+    // 立即強制計算該行的公式，仿照進度追蹤工作表的成功模式
+    SpreadsheetApp.flush();
+    Utilities.sleep(50); // 短暫延遲讓公式穩定
   });
   
   // 格式設定
@@ -367,19 +372,31 @@ function createSummarySheet(recordBook, teacherInfo) {
   
   // 強制計算公式以確保統計數據正確顯示
   try {
-    SpreadsheetApp.flush(); // 刷新所有待處理的操作
-    Utilities.sleep(1000); // 等待1秒讓公式穩定
+    // 第一次全域刷新
+    SpreadsheetApp.flush(); 
+    Utilities.sleep(500); // 等待0.5秒讓公式穩定
     
-    // 驗證公式是否正確設定
+    // 驗證公式是否正確設定並強制重新計算
     Logger.log(`✅ 已為 ${teacherInfo.classes.length} 個班級設定統計公式`);
     teacherInfo.classes.forEach((className, index) => {
       const row = 12 + index;
       Logger.log(`📊 班級 ${className} 統計行：第 ${row} 行`);
+      
+      // 逐一觸發每個公式的重新計算（仿照進度追蹤工作表的成功模式）
+      try {
+        const currentFormula = sheet.getRange(row, 2).getFormula();
+        if (currentFormula) {
+          sheet.getRange(row, 2).setFormula(currentFormula); // 重新設定觸發計算
+        }
+      } catch (cellError) {
+        Logger.log(`⚠️ 觸發第 ${row} 行計算時發生錯誤：${cellError.message}`);
+      }
     });
     
-    // 最後強制重新計算
+    // 最後一次全域強制重新計算
     SpreadsheetApp.flush();
-    Logger.log('✅ 總覽工作表公式計算完成');
+    Utilities.sleep(500); // 額外延遲確保計算完成
+    Logger.log('✅ 總覽工作表公式計算完成（使用增強觸發機制）');
     
   } catch (formulaError) {
     Logger.log(`⚠️ 公式計算時發生錯誤：${formulaError.message}`);
@@ -1196,22 +1213,14 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
   }
   
   prebuiltRecords.sort((a, b) => {
-    // 首要排序：English Class（字串排序，小到大）
-    const englishClassA = a[3] || ''; // English Class 欄位
-    const englishClassB = b[3] || '';
-    const classCompare = englishClassA.localeCompare(englishClassB);
-    if (classCompare !== 0) {
-      return classCompare;
-    }
-    
-    // 次要排序：學生ID（數字排序，小到大）
+    // 第一優先：學生ID（數字排序，小到大）
     const studentIdA = parseInt(a[0]) || 0; // 如果無法解析為數字，預設為0
     const studentIdB = parseInt(b[0]) || 0;
     if (studentIdA !== studentIdB) {
       return studentIdA - studentIdB;
     }
     
-    // 第三排序：學期（Fall → Spring）
+    // 第二優先：學期（Fall → Spring）
     const semesterA = a[5]; // Semester 欄位
     const semesterB = b[5];
     const semesterOrder = { 'Fall': 0, 'Spring': 1 };
@@ -1220,11 +1229,19 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
       return semesterCompare;
     }
     
-    // 第四排序：Term（Beginning → Midterm → Final）
+    // 第三優先：Term（Beginning → Midterm → Final）
     const termA = a[6]; // Term 欄位
     const termB = b[6];
     const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
-    return (termOrder[termA] || 999) - (termOrder[termB] || 999);
+    const termCompare = (termOrder[termA] || 999) - (termOrder[termB] || 999);
+    if (termCompare !== 0) {
+      return termCompare;
+    }
+    
+    // 第四優先：English Class（字串排序，小到大，作為最後區分）
+    const englishClassA = a[3] || ''; // English Class 欄位
+    const englishClassB = b[3] || '';
+    return englishClassA.localeCompare(englishClassB);
   });
   
   // 排序後記錄前5筆資料用於調試
@@ -1236,7 +1253,7 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     }
   }
   
-  Logger.log(`✅ 記錄排序完成，順序：English Class (小→大) → 學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
+  Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
   
   // 寫入預建記錄
   if (prebuiltRecords.length > 0) {
@@ -1304,7 +1321,7 @@ function sortContactRecords() {
     // 確認操作
     const response = ui.alert(
       '重新排序電聯記錄',
-      '將按照以下順序重新排序所有電聯記錄：\n• 班級 (小→大)\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n\n確定要繼續嗎？',
+      '將按照以下順序重新排序所有電聯記錄：\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n• 班級 (小→大)\n\n確定要繼續嗎？',
       ui.ButtonSet.YES_NO
     );
     
@@ -1315,7 +1332,7 @@ function sortContactRecords() {
     
     ui.alert(
       '排序完成！',
-      `成功排序 ${sortResult.recordCount} 筆電聯記錄\n\n排序規則：\n• 班級 (小→大)\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)`,
+      `成功排序 ${sortResult.recordCount} 筆電聯記錄\n\n排序規則：\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n• 班級 (小→大)`,
       ui.ButtonSet.OK
     );
     
@@ -1347,24 +1364,16 @@ function performContactRecordSort(contactLogSheet, allData) {
     }
   }
   
-  // 執行四層排序：English Class → 學生ID → 學期 → Term
+  // 執行四層排序：學生ID → 學期 → Term → English Class
   records.sort((a, b) => {
-    // 首要排序：English Class（字串排序，小到大）
-    const englishClassA = a[3] || ''; // English Class 欄位
-    const englishClassB = b[3] || '';
-    const classCompare = englishClassA.localeCompare(englishClassB);
-    if (classCompare !== 0) {
-      return classCompare;
-    }
-    
-    // 次要排序：學生ID（數字排序，小到大）
+    // 第一優先：學生ID（數字排序，小到大）
     const studentIdA = parseInt(a[0]) || 0; // 如果無法解析為數字，預設為0
     const studentIdB = parseInt(b[0]) || 0;
     if (studentIdA !== studentIdB) {
       return studentIdA - studentIdB;
     }
     
-    // 第三排序：學期（Fall → Spring）
+    // 第二優先：學期（Fall → Spring）
     const semesterA = a[5]; // Semester 欄位
     const semesterB = b[5];
     const semesterOrder = { 'Fall': 0, 'Spring': 1 };
@@ -1373,11 +1382,19 @@ function performContactRecordSort(contactLogSheet, allData) {
       return semesterCompare;
     }
     
-    // 第四排序：Term（Beginning → Midterm → Final）
+    // 第三優先：Term（Beginning → Midterm → Final）
     const termA = a[6]; // Term 欄位
     const termB = b[6];
     const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
-    return (termOrder[termA] || 999) - (termOrder[termB] || 999);
+    const termCompare = (termOrder[termA] || 999) - (termOrder[termB] || 999);
+    if (termCompare !== 0) {
+      return termCompare;
+    }
+    
+    // 第四優先：English Class（字串排序，小到大，作為最後區分）
+    const englishClassA = a[3] || ''; // English Class 欄位
+    const englishClassB = b[3] || '';
+    return englishClassA.localeCompare(englishClassB);
   });
   
   // 排序後記錄前5筆資料用於調試
@@ -1389,7 +1406,7 @@ function performContactRecordSort(contactLogSheet, allData) {
     }
   }
   
-  Logger.log(`✅ 記錄排序完成，順序：English Class (小→大) → 學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final)`);
+  Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
   
   // 清除工作表內容並重新寫入
   contactLogSheet.clear();
