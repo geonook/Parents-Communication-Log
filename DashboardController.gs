@@ -1547,15 +1547,25 @@ function sortContactRecordsWeb() {
     
     Logger.log(`Dashboard: 重新排序完成 - 成功：${successCount}，失敗：${errorCount}，總記錄數：${totalRecords}`);
     
+    // 檢查是否有任何失敗的情況
+    if (errorCount > 0) {
+      return {
+        success: false,
+        message: `部分記錄簿排序失敗`,
+        successCount: successCount,
+        failureCount: errorCount,
+        totalRecords: totalRecords,
+        results: results
+      };
+    }
+    
     return {
       success: true,
-      message: `重新排序完成！\n\n📊 處理結果：\n• 成功：${successCount} 位老師\n• 失敗：${errorCount} 位老師\n• 總排序記錄數：${totalRecords} 筆\n\n📋 排序規則：\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 時期 (Beginning→Midterm→Final)\n• 班級 (小→大)`,
-      results: {
-        successCount,
-        errorCount,
-        totalRecords,
-        details: results
-      }
+      message: `重新排序完成！所有記錄已按照新的排序規則重新整理。`,
+      successCount: successCount,
+      failureCount: errorCount,
+      totalRecords: totalRecords,
+      results: results
     };
     
   } catch (error) {
