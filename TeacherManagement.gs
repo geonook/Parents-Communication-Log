@@ -278,7 +278,7 @@ function setupTeacherRecordBook(recordBook, teacherInfo) {
   // 刪除預設工作表
   const defaultSheet = recordBook.getActiveSheet();
   
-  // 創建各個工作表
+  // 創建各個工作表（先建立基本結構，不設定公式）
   createSummarySheet(recordBook, teacherInfo);
   createClassInfoSheet(recordBook, teacherInfo);
   createStudentListSheet(recordBook, teacherInfo);
@@ -288,6 +288,15 @@ function setupTeacherRecordBook(recordBook, teacherInfo) {
   // 刪除預設工作表
   if (recordBook.getSheets().length > 1) {
     recordBook.deleteSheet(defaultSheet);
+  }
+  
+  // 在所有工作表建立完成後，設定總覽工作表的公式
+  try {
+    Logger.log('🔄 所有工作表建立完成，開始設定總覽工作表公式');
+    setupSummaryFormulas(recordBook, teacherInfo);
+    Logger.log('✅ 總覽工作表公式設定完成');
+  } catch (error) {
+    Logger.log(`⚠️ 設定總覽工作表公式時發生錯誤：${error.message}`);
   }
   
   // 設定記錄簿為第一個工作表
@@ -337,69 +346,16 @@ function createSummarySheet(recordBook, teacherInfo) {
   const statsHeaders = [['班級', '學生人數', '定期電聯次數', '總電聯次數', '最後聯繫日期']];
   sheet.getRange(11, 1, 1, statsHeaders[0].length).setValues(statsHeaders);
   
-  // 為每個班級創建統計行和實時統計公式
+  // 為每個班級創建統計行（暫時不設定公式，稍後統一設定）
   teacherInfo.classes.forEach((className, index) => {
     const row = 12 + index;
     sheet.getRange(row, 1).setValue(className);
     
-    // 學生人數（從學生清單計算）
-    const studentCountFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST}'!J:J,"${className}"),0)`;
-    const studentCountRange = sheet.getRange(row, 2);
-    studentCountRange.setFormula(studentCountFormula);
-    
-    // 強制計算並設置數值格式
-    SpreadsheetApp.flush();
-    Utilities.sleep(100); // 增加延遲時間
-    
-    // 檢查公式是否正確計算，如果仍為0則嘗試重新計算
-    const currentValue = studentCountRange.getValue();
-    if (currentValue === 0 || currentValue === "") {
-      // 重新設置公式並強制計算
-      studentCountRange.setFormula(studentCountFormula);
-      SpreadsheetApp.flush();
-      Utilities.sleep(100);
-      
-      // 如果仍然無效，嘗試手動計算
-      try {
-        const studentListSheet = sheet.getParent().getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
-        if (studentListSheet) {
-          const studentData = studentListSheet.getDataRange().getValues();
-          const count = studentData.filter(row => row[9] === className).length; // J欄位(index 9)是English Class
-          if (count > 0) {
-            studentCountRange.setValue(count);
-            Logger.log(`手動計算學生人數: ${className} = ${count}`);
-          }
-        }
-      } catch (e) {
-        Logger.log(`手動計算學生人數時發生錯誤: ${e.message}`);
-      }
-    }
-    
-    // 定期電聯次數（Scheduled Contact 類型且有填寫日期）
-    const scheduledContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
-    sheet.getRange(row, 3).setFormula(scheduledContactsFormula);
-    
-    // 總電聯次數（該班級所有記錄且有填寫日期）
-    const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
-    sheet.getRange(row, 4).setFormula(totalContactsFormula);
-    
-    // 最後聯繫日期（該班級最新的電聯日期）
-    const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
-    sheet.getRange(row, 5).setFormula(lastContactFormula);
-    
-    // 對其他公式也進行類似的強制計算處理
-    const scheduledRange = sheet.getRange(row, 3);
-    const totalRange = sheet.getRange(row, 4);
-    const lastContactRange = sheet.getRange(row, 5);
-    
-    // 強制計算所有公式
-    SpreadsheetApp.flush();
-    Utilities.sleep(100);
-    
-    // 設置數值格式
-    scheduledRange.setNumberFormat('0');
-    totalRange.setNumberFormat('0');
-    lastContactRange.setNumberFormat('@'); // 文字格式用於日期顯示
+    // 預設值，稍後會由setupSummaryFormulas函數設定公式
+    sheet.getRange(row, 2).setValue('計算中...');
+    sheet.getRange(row, 3).setValue('計算中...');
+    sheet.getRange(row, 4).setValue('計算中...');
+    sheet.getRange(row, 5).setValue('計算中...');
   });
   
   // 格式設定
@@ -409,40 +365,115 @@ function createSummarySheet(recordBook, teacherInfo) {
   // 調整欄寬
   sheet.autoResizeColumns(1, 5);
   
-  // 強制計算公式以確保統計數據正確顯示
-  try {
-    // 第一次全域刷新
-    SpreadsheetApp.flush(); 
-    Utilities.sleep(500); // 等待0.5秒讓公式穩定
+  // 暫時不設定公式，稍後由setupSummaryFormulas函數統一設定
+  Logger.log('✅ 總覽工作表基本結構建立完成，公式將在所有工作表建立完成後設定');
+  
+  // 保護工作表，僅允許管理員編輯
+  protectSheetForAdminOnly(sheet, '總覽工作表 - 僅管理員可編輯統計數據和基本資訊');
+}
+
+/**
+ * 設定總覽工作表的公式（在所有工作表建立完成後執行）
+ */
+function setupSummaryFormulas(recordBook, teacherInfo) {
+  const sheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+  if (!sheet) {
+    throw new Error('找不到總覽工作表');
+  }
+  
+  Logger.log('🔄 開始設定總覽工作表公式');
+  
+  // 確保參考的工作表存在
+  const studentListSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+  const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+  
+  if (!studentListSheet) {
+    throw new Error('找不到學生清單工作表，無法設定統計公式');
+  }
+  
+  if (!contactLogSheet) {
+    throw new Error('找不到電聯記錄工作表，無法設定統計公式');
+  }
+  
+  // 為每個班級設定統計公式
+  teacherInfo.classes.forEach((className, index) => {
+    const row = 12 + index;
+    Logger.log(`設定班級 ${className} 的統計公式 (第${row}行)`);
     
-    // 驗證公式是否正確設定並強制重新計算
-    Logger.log(`✅ 已為 ${teacherInfo.classes.length} 個班級設定統計公式`);
+    // 學生人數（從學生清單計算）
+    const studentCountFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST}'!J:J,"${className}"),0)`;
+    const studentCountRange = sheet.getRange(row, 2);
+    studentCountRange.setFormula(studentCountFormula);
+    
+    // 定期電聯次數（Scheduled Contact 類型且有填寫日期）
+    const scheduledContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!H:H,"Scheduled Contact",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
+    const scheduledRange = sheet.getRange(row, 3);
+    scheduledRange.setFormula(scheduledContactsFormula);
+    
+    // 總電聯次數（該班級所有記錄且有填寫日期）
+    const totalContactsFormula = `=IFERROR(COUNTIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),0)`;
+    const totalRange = sheet.getRange(row, 4);
+    totalRange.setFormula(totalContactsFormula);
+    
+    // 最後聯繫日期（該班級最新的電聯日期）
+    const lastContactFormula = `=IFERROR(TEXT(MAXIFS('${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!D:D,"${className}",'${SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG}'!E:E,"<>"),"yyyy/mm/dd"),"無記錄")`;
+    const lastContactRange = sheet.getRange(row, 5);
+    lastContactRange.setFormula(lastContactFormula);
+    
+    // 設置數值格式
+    studentCountRange.setNumberFormat('0');
+    scheduledRange.setNumberFormat('0');
+    totalRange.setNumberFormat('0');
+    lastContactRange.setNumberFormat('@'); // 文字格式用於日期顯示
+  });
+  
+  // 採用與進度追蹤相同的強制計算機制
+  try {
+    Logger.log('🔄 強制計算總覽工作表公式（使用進度追蹤成功模式）');
+    
+    // 第一次全域刷新
+    SpreadsheetApp.flush();
+    Utilities.sleep(200);
+    
+    // 逐一觸發每個公式的重新計算（仿照進度追蹤工作表的成功模式）
     teacherInfo.classes.forEach((className, index) => {
       const row = 12 + index;
-      Logger.log(`📊 班級 ${className} 統計行：第 ${row} 行`);
-      
-      // 逐一觸發每個公式的重新計算（仿照進度追蹤工作表的成功模式）
       try {
-        const currentFormula = sheet.getRange(row, 2).getFormula();
-        if (currentFormula) {
-          sheet.getRange(row, 2).setFormula(currentFormula); // 重新設定觸發計算
+        // 重新設定所有公式以觸發計算
+        const studentCountFormula = sheet.getRange(row, 2).getFormula();
+        if (studentCountFormula) {
+          sheet.getRange(row, 2).setFormula(studentCountFormula);
         }
+        
+        const scheduledFormula = sheet.getRange(row, 3).getFormula();
+        if (scheduledFormula) {
+          sheet.getRange(row, 3).setFormula(scheduledFormula);
+        }
+        
+        const totalFormula = sheet.getRange(row, 4).getFormula();
+        if (totalFormula) {
+          sheet.getRange(row, 4).setFormula(totalFormula);
+        }
+        
+        const lastContactFormula = sheet.getRange(row, 5).getFormula();
+        if (lastContactFormula) {
+          sheet.getRange(row, 5).setFormula(lastContactFormula);
+        }
+        
+        Logger.log(`✅ 班級 ${className} 公式設定完成`);
       } catch (cellError) {
-        Logger.log(`⚠️ 觸發第 ${row} 行計算時發生錯誤：${cellError.message}`);
+        Logger.log(`⚠️ 設定班級 ${className} 公式時發生錯誤：${cellError.message}`);
       }
     });
     
     // 最後一次全域強制重新計算
     SpreadsheetApp.flush();
-    Utilities.sleep(500); // 額外延遲確保計算完成
-    Logger.log('✅ 總覽工作表公式計算完成（使用增強觸發機制）');
+    Utilities.sleep(300);
     
-  } catch (formulaError) {
-    Logger.log(`⚠️ 公式計算時發生錯誤：${formulaError.message}`);
+    Logger.log('✅ 總覽工作表公式設定完成（使用增強觸發機制）');
+  } catch (error) {
+    Logger.log(`⚠️ 總覽工作表公式計算時發生錯誤：${error.message}`);
   }
-  
-  // 保護工作表，僅允許管理員編輯
-  protectSheetForAdminOnly(sheet, '總覽工作表 - 僅管理員可編輯統計數據和基本資訊');
 }
 
 /**
@@ -1292,13 +1323,78 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     }
   }
   
+  // 在寫入工作表之前進行最終排序驗證
+  let finalSortCheck = true;
+  for (let i = 1; i < prebuiltRecords.length; i++) {
+    const prev = prebuiltRecords[i - 1];
+    const curr = prebuiltRecords[i];
+    
+    const prevId = parseInt(prev[0]) || 0;
+    const currId = parseInt(curr[0]) || 0;
+    
+    if (prevId > currId) {
+      finalSortCheck = false;
+      Logger.log(`❌ 最終檢查失敗: 學生ID ${prevId} > ${currId}`);
+      break;
+    }
+    
+    if (prevId === currId) {
+      const semOrder = { 'Fall': 0, 'Spring': 1 };
+      const prevSem = semOrder[prev[5]] || 999;
+      const currSem = semOrder[curr[5]] || 999;
+      
+      if (prevSem > currSem) {
+        finalSortCheck = false;
+        Logger.log(`❌ 最終檢查失敗: 學期 ${prev[5]} > ${curr[5]} (學生ID: ${prevId})`);
+        break;
+      }
+    }
+  }
+  
+  if (!finalSortCheck) {
+    Logger.log('🔄 最終檢查失敗，執行緊急重新排序...');
+    prebuiltRecords.sort((a, b) => {
+      const idA = parseInt(a[0]) || 0;
+      const idB = parseInt(b[0]) || 0;
+      if (idA !== idB) return idA - idB;
+      
+      const semOrder = { 'Fall': 0, 'Spring': 1 };
+      const semA = semOrder[a[5]] || 999;
+      const semB = semOrder[b[5]] || 999;
+      if (semA !== semB) return semA - semB;
+      
+      const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+      const termA = termOrder[a[6]] || 999;
+      const termB = termOrder[b[6]] || 999;
+      if (termA !== termB) return termA - termB;
+      
+      return (a[3] || '').localeCompare(b[3] || '');
+    });
+    Logger.log('🔄 緊急重新排序完成');
+  }
+  
   Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
   
   // 寫入預建記錄
   if (prebuiltRecords.length > 0) {
     const startRow = contactLogSheet.getLastRow() + 1;
+    
+    // 確保工作表沒有舊的預建記錄（清除可能的重複資料）
+    const existingData = contactLogSheet.getDataRange().getValues();
+    if (existingData.length > 1) {
+      Logger.log('⚠️ 工作表中已有資料，檢查是否有重複的預建記錄...');
+      // 這裡可以添加清理邏輯，但需要小心不要刪除用戶填寫的記錄
+    }
+    
     contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length)
       .setValues(prebuiltRecords);
+    
+    // 立即驗證寫入的資料
+    const writtenData = contactLogSheet.getRange(startRow, 1, Math.min(5, prebuiltRecords.length), SYSTEM_CONFIG.CONTACT_FIELDS.length).getValues();
+    Logger.log('📊 寫入工作表的資料驗證（前5筆）：');
+    writtenData.forEach((row, index) => {
+      Logger.log(`  ${index + 1}. ID:${row[0]}, Name:${row[1]}, Class:${row[3]}, Semester:${row[5]}, Term:${row[6]}`);
+    });
     
     // 為預建記錄設定特殊格式
     const prebuiltRange = contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length);

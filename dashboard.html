@@ -307,9 +307,6 @@
                     <button class="action-button secondary" onclick="generateProgressReport()">
                         📈 生成進度報告
                     </button>
-                    <button class="action-button" onclick="sortContactRecords()">
-                        🔄 重新排序電聯記錄
-                    </button>
                 </div>
             </div>
             
@@ -870,42 +867,6 @@
                 .executeSystemFunction('generateProgressReport');
         }
 
-        function sortContactRecords() {
-            if (confirm('確定要重新排序所有老師記錄簿的電聯記錄嗎？\\n\\n這將統一將所有記錄簿的排序調整為：\\n• Student ID (遞增)\\n• Fall → Spring\\n• Beginning → Midterm → Final\\n\\n處理過程約需1-2分鐘。')) {
-                
-                const button = event.target;
-                const originalText = button.textContent;
-                button.textContent = '排序中...';
-                button.disabled = true;
-                
-                google.script.run
-                    .withSuccessHandler(function(result) {
-                        button.textContent = originalText;
-                        button.disabled = false;
-                        
-                        if (result.success) {
-                            let message = '✅ 電聯記錄重新排序完成！\\n\\n';
-                            message += `📊 處理結果：\\n`;
-                            message += `• 成功處理：${result.successCount} 位老師\\n`;
-                            if (result.failureCount > 0) {
-                                message += `• 處理失敗：${result.failureCount} 位老師\\n`;
-                            }
-                            message += `• 總記錄數：${result.totalRecords} 筆\\n\\n`;
-                            message += '所有記錄已按照新的排序規則重新整理。';
-                            
-                            alert(message);
-                        } else {
-                            alert('❌ 排序失敗：' + result.message);
-                        }
-                    })
-                    .withFailureHandler(function(error) {
-                        button.textContent = originalText;
-                        button.disabled = false;
-                        alert('❌ 排序失敗：' + error.message);
-                    })
-                    .sortContactRecordsWeb();
-            }
-        }
 
         function setupAutomation() {
             const button = event.target;
