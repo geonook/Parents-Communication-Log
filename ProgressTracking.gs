@@ -170,12 +170,27 @@ function checkTeacherProgress(recordBook) {
     dateIndex, semesterIndex, termIndex, contactTypeIndex, studentIdIndex
   });
   
-  // 找出最後聯繫日期（僅計算學期電聯）
+  // 找出最後聯繫日期（僅計算學期電聯，使用新標準：4個關鍵欄位）
   const semesterContacts = contacts.filter(row => {
-    if (contactTypeIndex >= 0) {
-      return row[contactTypeIndex] === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER;
+    // 檢查是否為學期電聯類型
+    if (contactTypeIndex >= 0 && row[contactTypeIndex] !== SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER) {
+      return false;
     }
-    return true; // 如果沒有類型欄位，假設都是學期電聯（向後相容）
+    
+    // 新標準：檢查四個關鍵欄位是否都已填寫
+    const date = row[dateIndex];
+    const teachersContent = row[8]; // Teachers Content 欄位
+    const parentsResponses = row[9]; // Parents Responses 欄位
+    const contactMethod = row[10]; // Contact Method 欄位
+    
+    return date && 
+           teachersContent && 
+           parentsResponses && 
+           contactMethod && 
+           date.toString().trim() !== '' &&
+           teachersContent.toString().trim() !== '' &&
+           parentsResponses.toString().trim() !== '' &&
+           contactMethod.toString().trim() !== '';
   });
   
   const lastContactDate = semesterContacts.length > 0 ? 
@@ -215,7 +230,7 @@ function checkTeacherProgress(recordBook) {
     totalClasses: classes.length,
     totalStudents: totalStudents,
     totalContacts: contacts.length,
-    semesterContacts: semesterContacts.length,
+    semesterContacts: semesterContacts.length, // 使用新標準計算的學期電聯數量
     semesterProgress: semesterProgress,
     currentTermProgress: currentTermProgress,
     lastContactDate: lastContactDate ? new Date(lastContactDate).toLocaleDateString() : '無記錄',
@@ -231,6 +246,11 @@ function checkTeacherProgress(recordBook) {
  * 計算學期進度
  */
 function calculateSemesterProgress(contacts, students, fieldIndexes) {
+  // 增強欄位映射（為新標準增加必要欄位）
+  if (!fieldIndexes.teachersContentIndex) fieldIndexes.teachersContentIndex = 8;
+  if (!fieldIndexes.parentsResponsesIndex) fieldIndexes.parentsResponsesIndex = 9;
+  if (!fieldIndexes.contactMethodIndex) fieldIndexes.contactMethodIndex = 10;
+  if (!fieldIndexes.dateIndex) fieldIndexes.dateIndex = 4;
   const progress = {};
   
   // 初始化所有學期和term
@@ -245,7 +265,7 @@ function calculateSemesterProgress(contacts, students, fieldIndexes) {
     });
   });
   
-  // 統計實際電聯記錄
+  // 統計實際電聯記錄（使用新標準：4個關鍵欄位）
   contacts.forEach(contact => {
     const semester = contact[fieldIndexes.semesterIndex] || SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER;
     const term = contact[fieldIndexes.termIndex] || SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM;
@@ -257,7 +277,23 @@ function calculateSemesterProgress(contacts, students, fieldIndexes) {
       return;
     }
     
-    if (progress[semester] && progress[semester][term] && studentId) {
+    // 新標準：檢查四個關鍵欄位是否都已填寫（Date, Teachers Content, Parents Responses, Contact Method）
+    const date = contact[fieldIndexes.dateIndex] || contact[4]; // Date 欄位
+    const teachersContent = contact[fieldIndexes.teachersContentIndex] || contact[8]; // Teachers Content 欄位
+    const parentsResponses = contact[fieldIndexes.parentsResponsesIndex] || contact[9]; // Parents Responses 欄位
+    const contactMethod = contact[fieldIndexes.contactMethodIndex] || contact[10]; // Contact Method 欄位
+    
+    // 只有四個關鍵欄位都已填寫的才算「已完成電聯」
+    const isCompleted = date && 
+                       teachersContent && 
+                       parentsResponses && 
+                       contactMethod && 
+                       date.toString().trim() !== '' &&
+                       teachersContent.toString().trim() !== '' &&
+                       parentsResponses.toString().trim() !== '' &&
+                       contactMethod.toString().trim() !== '';
+    
+    if (progress[semester] && progress[semester][term] && studentId && isCompleted) {
       progress[semester][term].contactedStudents.add(studentId.toString());
     }
   });
