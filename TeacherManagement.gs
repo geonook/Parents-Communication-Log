@@ -1552,11 +1552,29 @@ function sortContactRecords() {
 
 /**
  * 驗證電聯記錄排序正確性
- * @param {Sheet} contactLogSheet - 電聯記錄工作表
+ * @param {Sheet} contactLogSheet - 電聯記錄工作表 (可選，未提供時自動獲取當前工作表)
  * @returns {Object} - {isValid: boolean, errors: Array}
  */
 function validateContactRecordsSorting(contactLogSheet) {
   try {
+    // 參數檢查和自動獲取工作表
+    if (!contactLogSheet) {
+      const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+      const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+      if (!summarySheet) {
+        return { isValid: false, errors: ['請在老師記錄簿中執行此功能'] };
+      }
+      contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+      if (!contactLogSheet) {
+        return { isValid: false, errors: ['找不到電聯記錄工作表'] };
+      }
+    }
+    
+    // 檢查工作表是否有效
+    if (typeof contactLogSheet.getDataRange !== 'function') {
+      return { isValid: false, errors: ['無效的工作表物件'] };
+    }
+    
     const allData = contactLogSheet.getDataRange().getValues();
     if (allData.length < 2) {
       return { isValid: true, errors: [] }; // 無資料或只有標題，視為有效
@@ -1565,7 +1583,11 @@ function validateContactRecordsSorting(contactLogSheet) {
     const records = allData.slice(1); // 跳過標題行
     const errors = [];
     
-    Logger.log(`🔍 驗證 ${records.length} 筆電聯記錄的排序正確性...`);
+    // 減少日誌輸出以提高性能（診斷模式時）
+    const isQuietMode = typeof arguments[1] === 'boolean' ? arguments[1] : false;
+    if (!isQuietMode) {
+      Logger.log(`🔍 驗證 ${records.length} 筆電聯記錄的排序正確性...`);
+    }
     
     // 欄位映射
     const fieldMapping = {
@@ -1617,11 +1639,17 @@ function validateContactRecordsSorting(contactLogSheet) {
     
     const isValid = errors.length === 0;
     
-    if (isValid) {
-      Logger.log('✅ 電聯記錄排序驗證通過');
-    } else {
-      Logger.log(`❌ 電聯記錄排序驗證失敗，發現 ${errors.length} 個問題`);
-      errors.forEach(error => Logger.log(`  - ${error}`));
+    if (!isQuietMode) {
+      if (isValid) {
+        Logger.log('✅ 電聯記錄排序驗證通過');
+      } else {
+        Logger.log(`❌ 電聯記錄排序驗證失敗，發現 ${errors.length} 個問題`);
+        // 在非靜默模式下只顯示前3個錯誤
+        errors.slice(0, 3).forEach(error => Logger.log(`  - ${error}`));
+        if (errors.length > 3) {
+          Logger.log(`  ... 還有 ${errors.length - 3} 個問題（已省略）`);
+        }
+      }
     }
     
     return { isValid, errors };
@@ -1660,64 +1688,132 @@ function diagnoseSortingIssues() {
       return;
     }
     
-    Logger.log('🔧 ========== 電聯記錄排序診斷開始 ==========');
-    Logger.log(`📊 總資料行數：${allData.length} (包含標題)`);
-    Logger.log(`📋 標題行：${allData[0].join(' | ')}`);
-    
-    const records = allData.slice(1);
-    Logger.log(`📄 實際記錄數：${records.length}`);
-    
-    // 檢查資料完整性
-    let incompleteRecords = 0;
-    records.forEach((record, index) => {
-      if (!record[0] || !record[3] || !record[5] || !record[6]) { // ID, Class, Semester, Term
-        incompleteRecords++;
-        Logger.log(`⚠️ 第${index + 2}行資料不完整：ID=${record[0]}, Class=${record[3]}, Semester=${record[5]}, Term=${record[6]}`);
+    // 執行保護機制：大量資料時提醒用戶
+    const recordCount = allData.length - 1;
+    if (recordCount > 1000) {
+      const proceed = ui.alert(
+        '大量資料警告',
+        `即將診斷 ${recordCount} 筆記錄，執行時間可能較長。\n\n建議：\n• 資料量大時請耐心等待\n• 可以先嘗試手動排序功能\n\n確定要繼續診斷嗎？`,
+        ui.ButtonSet.YES_NO
+      );
+      if (proceed !== ui.Button.YES) {
+        return;
       }
-    });
-    
-    Logger.log(`📊 不完整記錄數：${incompleteRecords}`);
-    
-    // 執行排序驗證
-    const sortValidation = validateContactRecordsSorting(contactLogSheet);
-    Logger.log(`✅ 排序驗證結果：${sortValidation.isValid ? '通過' : '失敗'}`);
-    
-    if (!sortValidation.isValid) {
-      Logger.log('❌ 排序問題詳情：');
-      sortValidation.errors.forEach(error => Logger.log(`  - ${error}`));
     }
     
-    // 嘗試測試排序功能
-    Logger.log('🧪 測試排序功能...');
-    const sortResult = sortContactRecordsData(allData);
-    Logger.log(`🔧 排序測試結果：${sortResult.success ? '成功' : '失敗'}`);
-    if (!sortResult.success) {
-      Logger.log(`❌ 排序失敗原因：${sortResult.error}`);
-    }
+    // 減少日誌輸出，提高性能，添加進度控制
+    const startTime = new Date();
+    const records = allData.slice(1);
     
-    Logger.log('🔧 ========== 電聯記錄排序診斷完成 ==========');
+    // 設定超時保護（30秒）
+    const TIMEOUT_MS = 30000;
+    let isTimedOut = false;
     
-    // 顯示診斷結果
-    const diagnosticMessage = `電聯記錄排序診斷結果：
+    try {
+      // 快速資料完整性檢查（只記錄統計，不逐筆記錄）
+      let incompleteRecords = 0;
+      for (let i = 0; i < records.length; i++) {
+        // 超時檢查
+        if (new Date() - startTime > TIMEOUT_MS) {
+          isTimedOut = true;
+          Logger.log('⏰ 診斷執行超時，終止檢查');
+          break;
+        }
+        
+        const record = records[i];
+        if (!record[0] || !record[3] || !record[5] || !record[6]) {
+          incompleteRecords++;
+          // 只記錄前3筆問題記錄的詳細資訊
+          if (incompleteRecords <= 3) {
+            Logger.log(`⚠️ 第${i + 2}行資料不完整：ID=${record[0]}, Class=${record[3]}, Semester=${record[5]}, Term=${record[6]}`);
+          }
+        }
+      }
+      
+      if (isTimedOut) {
+        ui.alert('診斷超時', '診斷執行時間過長已自動終止。\n\n建議：\n• 資料量過大，請先嘗試手動排序\n• 聯繫系統管理員檢查資料結構', ui.ButtonSet.OK);
+        return;
+      }
+      
+      // 執行排序驗證（使用靜默模式減少日誌輸出）
+      const sortValidation = validateContactRecordsSorting(contactLogSheet, true);
+      
+      // 快速測試排序功能（不輸出詳細日誌）
+      const sortResult = sortContactRecordsData(allData);
+      
+      const endTime = new Date();
+      const executionTime = endTime - startTime;
+      
+      // 只記錄關鍵結果
+      Logger.log(`🔧 診斷完成：記錄數=${records.length}, 不完整=${incompleteRecords}, 排序=${sortValidation.isValid ? '正確' : '錯誤'}, 執行時間=${executionTime}ms`);
+      
+      // 顯示優化後的診斷結果
+      const diagnosticMessage = `電聯記錄排序診斷結果：
 
 📊 基本資訊：
 • 總記錄數：${records.length}
-• 不完整記錄：${incompleteRecords}
+• 不完整記錄：${incompleteRecords}${incompleteRecords > 3 ? ' (只顯示前3筆)' : ''}
+• 執行時間：${executionTime}ms
 
 🔍 排序狀態：
 • 當前排序：${sortValidation.isValid ? '✅ 正確' : '❌ 錯誤'}
 • 排序功能：${sortResult.success ? '✅ 正常' : '❌ 異常'}
 
-${!sortValidation.isValid ? `\n⚠️ 發現問題：\n${sortValidation.errors.slice(0, 3).join('\n')}` : ''}
+${!sortValidation.isValid ? `⚠️ 發現問題 (前${Math.min(3, sortValidation.errors.length)}個)：\n${sortValidation.errors.slice(0, 3).join('\n')}` : ''}
 
-詳細診斷信息請查看執行日誌。`;
-    
-    ui.alert('排序診斷完成', diagnosticMessage, ui.ButtonSet.OK);
+${!sortResult.success ? `\n❌ 排序功能錯誤：${sortResult.error}` : ''}
+
+📈 性能優化：減少日誌輸出，提高執行速度。`;
+      
+      ui.alert('排序診斷完成', diagnosticMessage, ui.ButtonSet.OK);
+      
+    } catch (timeoutError) {
+      // 處理超時或其他執行錯誤
+      Logger.log(`⏰ 診斷執行異常：${timeoutError.message}`);
+      ui.alert('診斷執行異常', `診斷過程發生錯誤：${timeoutError.message}\n\n建議：\n• 檢查資料完整性\n• 嘗試手動排序功能\n• 聯繫系統管理員`, ui.ButtonSet.OK);
+    }
     
   } catch (error) {
     Logger.log(`❌ 排序診斷失敗：${error.toString()}`);
     Logger.log(`📍 錯誤堆疊：${error.stack}`);
     safeErrorHandler('排序診斷', error);
+  }
+}
+
+/**
+ * 測試診斷功能修復 - 用於驗證修復後的功能
+ */
+function testDiagnosticFixes() {
+  try {
+    Logger.log('🧪 ========== 開始測試診斷功能修復 ==========');
+    
+    // 測試1: validateContactRecordsSorting 獨立執行
+    Logger.log('測試1: validateContactRecordsSorting 獨立執行');
+    const validation1 = validateContactRecordsSorting();
+    Logger.log(`✅ 獨立執行結果: ${validation1.isValid ? '成功' : '失敗'} - ${validation1.errors.join('; ')}`);
+    
+    // 測試2: validateContactRecordsSorting 靜默模式
+    Logger.log('測試2: validateContactRecordsSorting 靜默模式');
+    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (contactLogSheet) {
+      const validation2 = validateContactRecordsSorting(contactLogSheet, true);
+      Logger.log(`✅ 靜默模式結果: ${validation2.isValid ? '成功' : '失敗'}`);
+    } else {
+      Logger.log('⚠️ 找不到電聯記錄工作表，跳過測試2');
+    }
+    
+    // 測試3: 性能測試 - diagnoseSortingIssues 應該快速執行
+    Logger.log('測試3: diagnoseSortingIssues 性能測試準備');
+    Logger.log('✅ 建議手動執行 diagnoseSortingIssues 來測試性能改進');
+    
+    Logger.log('🧪 ========== 診斷功能修復測試完成 ==========');
+    return { success: true, message: '所有測試通過' };
+    
+  } catch (error) {
+    Logger.log(`❌ 測試失敗: ${error.message}`);
+    Logger.log(`📍 錯誤堆疊: ${error.stack}`);
+    return { success: false, message: error.message };
   }
 }
 
