@@ -166,14 +166,31 @@ function handleTransferOut(studentId, reason, operator) {
           removedRecords.push(`${record.teacherName} - 學生清單`);
         }
         
-        // 移除電聯記錄（將狀態標記為已轉出而非刪除）
+        // 移除電聯記錄（將狀態標記為已轉出而非刪除，加上刪除線格式）
         if (record.contactRecords && record.contactRecords.length > 0) {
           const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
           record.contactRecords.forEach(contactRow => {
+            // 在最後一欄標記轉出狀態
             contactSheet.getRange(contactRow, contactSheet.getLastColumn() + 1).setValue('學生已轉出');
+            
+            // 為整行加上刪除線格式
+            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn());
+            rowRange.setFontLine('line-through');
+            rowRange.setFontColor('#888888'); // 設為灰色
           });
           removedRecords.push(`${record.teacherName} - 電聯記錄標記`);
         }
+        
+        // 更新班級資訊工作表的異動記錄
+        addStudentChangeToClassInfo(teacherBook, {
+          studentId: studentId,
+          studentName: getStudentName(studentId) || '未知',
+          changeType: '轉出',
+          fromTeacher: record.teacherName,
+          toTeacher: '',
+          changeDate: new Date().toLocaleString(),
+          reason: reason || '學生轉出'
+        });
         
       } catch (error) {
         Logger.log(`❌ 處理老師記錄簿失敗 ${record.teacherName}：${error.message}`);
@@ -244,13 +261,30 @@ function handleClassChange(studentId, newTeacher, operator) {
           studentSheet.deleteRow(record.studentListRow);
         }
         
-        // 電聯記錄標記轉班
+        // 電聯記錄標記轉班（加上刪除線格式）
         if (record.contactRecords && record.contactRecords.length > 0) {
           const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
           record.contactRecords.forEach(contactRow => {
+            // 在最後一欄標記轉班狀態
             contactSheet.getRange(contactRow, contactSheet.getLastColumn() + 1).setValue(`已轉至${newTeacher}`);
+            
+            // 為整行加上刪除線格式
+            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn());
+            rowRange.setFontLine('line-through');
+            rowRange.setFontColor('#888888'); // 設為灰色
           });
         }
+        
+        // 更新班級資訊工作表的異動記錄
+        addStudentChangeToClassInfo(teacherBook, {
+          studentId: studentId,
+          studentName: studentData['Chinese Name'] || studentData['English Name'],
+          changeType: '轉班',
+          fromTeacher: record.teacherName,
+          toTeacher: newTeacher,
+          changeDate: new Date().toLocaleString(),
+          reason: '學生轉班'
+        });
         
       } catch (error) {
         Logger.log(`❌ 從原老師記錄簿移除失敗：${error.message}`);
@@ -440,13 +474,26 @@ function generateChangeId() {
 function createChangeRecord(changeId, changeRequest) {
   const changeRecord = {};
   
+  // 如果沒有提供 fromTeacher，嘗試從學生記錄中獲取
+  let fromTeacher = changeRequest.fromTeacher || '';
+  if (!fromTeacher && changeRequest.studentId) {
+    try {
+      const studentRecords = locateStudentRecords(changeRequest.studentId);
+      if (studentRecords.found && studentRecords.teacherRecords.length > 0) {
+        fromTeacher = studentRecords.teacherRecords[0].teacherName;
+      }
+    } catch (error) {
+      Logger.log('❌ 無法獲取原老師資訊：' + error.message);
+    }
+  }
+  
   changeRecord['Change ID'] = changeId;
   changeRecord['Student ID'] = changeRequest.studentId;
   changeRecord['Student Name'] = getStudentName(changeRequest.studentId) || '未知';
   changeRecord['Change Type'] = changeRequest.changeType;
   changeRecord['Change Date'] = new Date().toLocaleString();
   changeRecord['Operator'] = changeRequest.operator;
-  changeRecord['From Teacher'] = changeRequest.fromTeacher || '';
+  changeRecord['From Teacher'] = fromTeacher;
   changeRecord['To Teacher'] = changeRequest.newTeacher || '';
   changeRecord['Reason'] = changeRequest.reason || '';
   changeRecord['Status'] = CHANGE_LOG_CONFIG.STATUS.PENDING;
@@ -674,5 +721,89 @@ function logStudentChange(changeRequest) {
       success: false,
       message: '記錄失敗：' + error.message
     };
+  }
+}
+
+/**
+ * 添加學生異動記錄到班級資訊工作表
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {Object} changeInfo 異動資訊
+ */
+function addStudentChangeToClassInfo(teacherBook, changeInfo) {
+  try {
+    const classInfoSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+    if (!classInfoSheet) {
+      Logger.log('❌ 找不到班級資訊工作表');
+      return;
+    }
+    
+    // 尋找或創建異動記錄區域
+    const lastRow = classInfoSheet.getLastRow();
+    let changeLogStartRow = -1;
+    
+    // 查找是否已經有異動記錄區域
+    for (let i = 1; i <= lastRow; i++) {
+      const cellValue = classInfoSheet.getRange(i, 1).getValue();
+      if (cellValue === '學生異動記錄') {
+        changeLogStartRow = i;
+        break;
+      }
+    }
+    
+    // 如果沒有找到，創建新的異動記錄區域
+    if (changeLogStartRow === -1) {
+      changeLogStartRow = lastRow + 2; // 留空一行
+      classInfoSheet.getRange(changeLogStartRow, 1).setValue('學生異動記錄');
+      classInfoSheet.getRange(changeLogStartRow, 1).setFontWeight('bold');
+      classInfoSheet.getRange(changeLogStartRow, 1).setFontSize(12);
+      
+      // 添加標題行
+      const headerRow = changeLogStartRow + 1;
+      const headers = ['異動日期', '學生ID', '學生姓名', '異動類型', '原老師', '新老師', '異動原因'];
+      classInfoSheet.getRange(headerRow, 1, 1, headers.length).setValues([headers]);
+      classInfoSheet.getRange(headerRow, 1, 1, headers.length).setFontWeight('bold');
+      classInfoSheet.getRange(headerRow, 1, 1, headers.length).setBackground('#f0f0f0');
+    }
+    
+    // 找到插入位置（標題行後的第一個空行）
+    const headerRow = changeLogStartRow + 1;
+    let insertRow = headerRow + 1;
+    
+    // 找到第一個空行
+    while (insertRow <= classInfoSheet.getLastRow() && 
+           classInfoSheet.getRange(insertRow, 1).getValue() !== '') {
+      insertRow++;
+    }
+    
+    // 插入異動記錄
+    const changeData = [
+      changeInfo.changeDate,
+      changeInfo.studentId,
+      changeInfo.studentName,
+      changeInfo.changeType,
+      changeInfo.fromTeacher,
+      changeInfo.toTeacher,
+      changeInfo.reason
+    ];
+    
+    classInfoSheet.getRange(insertRow, 1, 1, changeData.length).setValues([changeData]);
+    
+    // 設定格式
+    const changeRow = classInfoSheet.getRange(insertRow, 1, 1, changeData.length);
+    changeRow.setBorder(true, true, true, true, true, true);
+    
+    // 根據異動類型設定不同顏色
+    if (changeInfo.changeType === '轉出') {
+      changeRow.setBackground('#ffe6e6'); // 淡紅色
+    } else if (changeInfo.changeType === '轉班') {
+      changeRow.setBackground('#e6f3ff'); // 淡藍色
+    } else {
+      changeRow.setBackground('#f0f8e6'); // 淡綠色
+    }
+    
+    Logger.log(`✅ 已添加學生異動記錄到班級資訊：${changeInfo.studentName} - ${changeInfo.changeType}`);
+    
+  } catch (error) {
+    Logger.log('❌ 添加學生異動記錄到班級資訊失敗：' + error.message);
   }
 }

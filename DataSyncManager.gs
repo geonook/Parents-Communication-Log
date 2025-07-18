@@ -912,6 +912,21 @@ function addStudentToTeacher(studentData, newTeacher) {
       };
     }
     
+    // 獲取新老師的 English Class 資訊
+    let newEnglishClass = '';
+    const summarySheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (summarySheet) {
+      try {
+        // 嘗試從總覽工作表獲取 English Class 資訊
+        const teacherClasses = summarySheet.getRange('B5').getValue(); // 假設班級資訊在B5
+        if (teacherClasses && teacherClasses.toString().trim() !== '') {
+          newEnglishClass = teacherClasses.toString().trim();
+        }
+      } catch (error) {
+        Logger.log('無法從總覽工作表獲取班級資訊：' + error.message);
+      }
+    }
+    
     // 添加學生到學生清單
     const studentSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
     if (!studentSheet) {
@@ -922,13 +937,29 @@ function addStudentToTeacher(studentData, newTeacher) {
     }
     
     const headers = studentSheet.getRange(1, 1, 1, studentSheet.getLastColumn()).getValues()[0];
-    const newRow = headers.map(header => studentData[header] || '');
+    
+    // 更新學生資料，特別是 English Class
+    const updatedStudentData = { ...studentData };
+    if (newEnglishClass) {
+      updatedStudentData['English Class'] = newEnglishClass;
+    }
+    
+    const newRow = headers.map(header => updatedStudentData[header] || '');
     studentSheet.appendRow(newRow);
+    
+    // 同步更新學生總表中的 English Class
+    if (newEnglishClass) {
+      updateStudentEnglishClassInMasterList(studentData.ID || studentData['Student ID'], newEnglishClass);
+    }
     
     return {
       success: true,
       teacherName: newTeacher,
-      bookId: targetBook.getId()
+      bookId: targetBook.getId(),
+      details: {
+        newEnglishClass: newEnglishClass,
+        updatedFields: newEnglishClass ? ['English Class'] : []
+      }
     };
     
   } catch (error) {
@@ -970,6 +1001,47 @@ function updateStudentTeacherInMasterList(studentId, newTeacher) {
     
     return {
       success: true
+    };
+    
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
+ * 更新學生總表中的 English Class 資訊
+ * @param {string} studentId 學生ID
+ * @param {string} newEnglishClass 新的 English Class
+ * @returns {Object} 更新結果
+ */
+function updateStudentEnglishClassInMasterList(studentId, newEnglishClass) {
+  try {
+    const masterListLocation = locateStudentInMasterList(studentId);
+    if (!masterListLocation.found) {
+      return {
+        success: false,
+        message: '在學生總表中找不到學生記錄'
+      };
+    }
+    
+    const masterSheet = SpreadsheetApp.openById(masterListLocation.fileId);
+    const sheet = masterSheet.getActiveSheet();
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    // 更新 English Class 欄位
+    const englishClassCol = headers.indexOf('English Class');
+    if (englishClassCol !== -1) {
+      sheet.getRange(masterListLocation.rowIndex, englishClassCol + 1).setValue(newEnglishClass);
+      Logger.log(`✅ 已更新學生總表中的 English Class：${studentId} → ${newEnglishClass}`);
+    }
+    
+    return {
+      success: true,
+      updatedField: 'English Class',
+      newValue: newEnglishClass
     };
     
   } catch (error) {

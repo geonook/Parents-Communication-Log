@@ -782,6 +782,10 @@ function processStudentTransferOutWeb(studentId, reason) {
   try {
     Logger.log(`Dashboard: 處理學生轉學 - ${studentId}`);
     
+    // 先獲取學生資訊用於詳細回應
+    const studentInfo = getStudentBasicData(studentId);
+    const studentName = studentInfo ? (studentInfo['Chinese Name'] || studentInfo['English Name']) : '未知';
+    
     const changeRequest = {
       studentId: studentId,
       changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.TRANSFER_OUT,
@@ -795,14 +799,23 @@ function processStudentTransferOutWeb(studentId, reason) {
       success: result.success,
       message: result.message,
       changeId: result.changeId,
-      details: result.details
+      details: result.details,
+      // 增強的回應資訊
+      studentInfo: {
+        studentId: studentId,
+        studentName: studentName,
+        reason: reason,
+        processTime: new Date().toLocaleString(),
+        operator: Session.getActiveUser().getEmail()
+      }
     };
     
   } catch (error) {
     Logger.log('Dashboard: 學生轉學處理失敗 - ' + error.toString());
     return {
       success: false,
-      message: '轉學處理失敗：' + error.message
+      message: '轉學處理失敗：' + error.message,
+      error: error.toString()
     };
   }
 }
@@ -817,10 +830,21 @@ function processStudentClassChangeWeb(studentId, newTeacher) {
   try {
     Logger.log(`Dashboard: 處理學生轉班 - ${studentId} → ${newTeacher}`);
     
+    // 先獲取學生資訊和原老師資訊
+    const studentInfo = getStudentBasicData(studentId);
+    const studentName = studentInfo ? (studentInfo['Chinese Name'] || studentInfo['English Name']) : '未知';
+    
+    // 獲取原老師資訊
+    const studentRecords = locateStudentRecords(studentId);
+    const fromTeacher = studentRecords.found && studentRecords.teacherRecords.length > 0 
+      ? studentRecords.teacherRecords[0].teacherName 
+      : '未知';
+    
     const changeRequest = {
       studentId: studentId,
       changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE,
       newTeacher: newTeacher,
+      fromTeacher: fromTeacher,
       operator: Session.getActiveUser().getEmail()
     };
     
@@ -830,14 +854,24 @@ function processStudentClassChangeWeb(studentId, newTeacher) {
       success: result.success,
       message: result.message,
       changeId: result.changeId,
-      details: result.details
+      details: result.details,
+      // 增強的回應資訊
+      studentInfo: {
+        studentId: studentId,
+        studentName: studentName,
+        fromTeacher: fromTeacher,
+        newTeacher: newTeacher,
+        processTime: new Date().toLocaleString(),
+        operator: Session.getActiveUser().getEmail()
+      }
     };
     
   } catch (error) {
     Logger.log('Dashboard: 學生轉班處理失敗 - ' + error.toString());
     return {
       success: false,
-      message: '轉班處理失敗：' + error.message
+      message: '轉班處理失敗：' + error.message,
+      error: error.toString()
     };
   }
 }
@@ -852,6 +886,11 @@ function processStudentClassChangeWeb(studentId, newTeacher) {
 function processStudentInfoUpdateWeb(studentId, field, value) {
   try {
     Logger.log(`Dashboard: 處理學生資料更新 - ${studentId}, ${field}: ${value}`);
+    
+    // 先獲取學生資訊和原值
+    const studentInfo = getStudentBasicData(studentId);
+    const studentName = studentInfo ? (studentInfo['Chinese Name'] || studentInfo['English Name']) : '未知';
+    const originalValue = studentInfo ? studentInfo[field] : '未知';
     
     const updateData = {};
     updateData[field] = value;
@@ -869,14 +908,25 @@ function processStudentInfoUpdateWeb(studentId, field, value) {
       success: result.success,
       message: result.message,
       changeId: result.changeId,
-      details: result.details
+      details: result.details,
+      // 增強的回應資訊
+      studentInfo: {
+        studentId: studentId,
+        studentName: studentName,
+        updatedField: field,
+        originalValue: originalValue,
+        newValue: value,
+        processTime: new Date().toLocaleString(),
+        operator: Session.getActiveUser().getEmail()
+      }
     };
     
   } catch (error) {
     Logger.log('Dashboard: 學生資料更新失敗 - ' + error.toString());
     return {
       success: false,
-      message: '資料更新失敗：' + error.message
+      message: '資料更新失敗：' + error.message,
+      error: error.toString()
     };
   }
 }

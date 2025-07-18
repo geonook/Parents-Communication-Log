@@ -250,6 +250,145 @@
             background: #3d8bfe;
         }
         
+        /* 載入動畫樣式 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            display: none;
+        }
+        
+        .loading-spinner {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4facfe;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 16px;
+            color: #333;
+            margin-top: 10px;
+        }
+        
+        /* 成功提示樣式 */
+        .success-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 10px;
+            padding: 30px;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -70%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+        
+        .success-popup h3 {
+            color: #155724;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .success-popup p {
+            color: #155724;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .success-popup .btn-success {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .success-popup .btn-success:hover {
+            background: #218838;
+        }
+        
+        /* 錯誤提示樣式 */
+        .error-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 10px;
+            padding: 30px;
+            z-index: 10000;
+            display: none;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        .error-popup h3 {
+            color: #721c24;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .error-popup p {
+            color: #721c24;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .error-popup .btn-danger {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .error-popup .btn-danger:hover {
+            background: #c82333;
+        }
+        
         .search-results {
             margin-top: 15px;
             padding: 15px;
@@ -1195,6 +1334,34 @@
 
         // ============ 學生異動管理 JavaScript 函數 ============
         
+        // 載入動畫和提示控制函數
+        function showLoading(message = '處理中...') {
+            document.getElementById('loadingText').textContent = message;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+        
+        function showSuccess(message) {
+            document.getElementById('successMessage').textContent = message;
+            document.getElementById('successPopup').style.display = 'block';
+        }
+        
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorPopup').style.display = 'block';
+        }
+        
+        function closeSuccessPopup() {
+            document.getElementById('successPopup').style.display = 'none';
+        }
+        
+        function closeErrorPopup() {
+            document.getElementById('errorPopup').style.display = 'none';
+        }
+        
         function searchStudent() {
             const searchInput = document.getElementById('studentSearchInput');
             const searchResults = document.getElementById('studentSearchResults');
@@ -1260,12 +1427,12 @@
             const reason = document.getElementById('transferOutReason').value.trim();
             
             if (!studentId) {
-                alert('請輸入學生ID');
+                showError('請輸入學生ID');
                 return;
             }
             
             if (!reason) {
-                alert('請輸入轉學原因');
+                showError('請輸入轉學原因');
                 return;
             }
             
@@ -1273,18 +1440,23 @@
                 return;
             }
             
+            // 顯示載入動畫
+            showLoading('正在處理學生轉學/移出...');
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    hideLoading();
                     if (result.success) {
-                        alert('✅ 學生轉學處理完成！\n\n異動ID：' + result.changeId);
+                        showSuccess(`學生轉學處理完成！\n\n異動ID：${result.changeId}\n\n詳細資訊：\n- 學生ID：${studentId}\n- 轉學原因：${reason}\n- 處理時間：${new Date().toLocaleString()}`);
                         closeTransferOutModal();
                         updateStats();
                     } else {
-                        alert('❌ 轉學處理失敗：' + result.message);
+                        showError('轉學處理失敗：' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
-                    alert('❌ 轉學處理失敗：' + error.message);
+                    hideLoading();
+                    showError('轉學處理失敗：' + error.message);
                 })
                 .processStudentTransferOutWeb(studentId, reason);
         }
@@ -1304,12 +1476,12 @@
             const newTeacher = document.getElementById('classChangeNewTeacher').value.trim();
             
             if (!studentId) {
-                alert('請輸入學生ID');
+                showError('請輸入學生ID');
                 return;
             }
             
             if (!newTeacher) {
-                alert('請輸入新老師姓名');
+                showError('請輸入新老師姓名');
                 return;
             }
             
@@ -1317,18 +1489,23 @@
                 return;
             }
             
+            // 顯示載入動畫
+            showLoading('正在處理學生轉班...');
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    hideLoading();
                     if (result.success) {
-                        alert('✅ 學生轉班處理完成！\n\n異動ID：' + result.changeId);
+                        showSuccess(`學生轉班處理完成！\n\n異動ID：${result.changeId}\n\n詳細資訊：\n- 學生ID：${studentId}\n- 新老師：${newTeacher}\n- 處理時間：${new Date().toLocaleString()}`);
                         closeClassChangeModal();
                         updateStats();
                     } else {
-                        alert('❌ 轉班處理失敗：' + result.message);
+                        showError('轉班處理失敗：' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
-                    alert('❌ 轉班處理失敗：' + error.message);
+                    hideLoading();
+                    showError('轉班處理失敗：' + error.message);
                 })
                 .processStudentClassChangeWeb(studentId, newTeacher);
         }
@@ -1349,12 +1526,12 @@
             const value = document.getElementById('infoUpdateValue').value.trim();
             
             if (!studentId) {
-                alert('請輸入學生ID');
+                showError('請輸入學生ID');
                 return;
             }
             
             if (!value) {
-                alert('請輸入新值');
+                showError('請輸入新值');
                 return;
             }
             
@@ -1362,18 +1539,23 @@
                 return;
             }
             
+            // 顯示載入動畫
+            showLoading('正在更新學生資料...');
+            
             google.script.run
                 .withSuccessHandler(function(result) {
+                    hideLoading();
                     if (result.success) {
-                        alert('✅ 學生資料更新完成！\n\n異動ID：' + result.changeId);
+                        showSuccess(`學生資料更新完成！\n\n異動ID：${result.changeId}\n\n詳細資訊：\n- 學生ID：${studentId}\n- 更新欄位：${field}\n- 新值：${value}\n- 處理時間：${new Date().toLocaleString()}`);
                         closeInfoUpdateModal();
                         updateStats();
                     } else {
-                        alert('❌ 資料更新失敗：' + result.message);
+                        showError('資料更新失敗：' + result.message);
                     }
                 })
                 .withFailureHandler(function(error) {
-                    alert('❌ 資料更新失敗：' + error.message);
+                    hideLoading();
+                    showError('資料更新失敗：' + error.message);
                 })
                 .processStudentInfoUpdateWeb(studentId, field, value);
         }
@@ -2242,5 +2424,28 @@
                 .getSystemStatsWeb();
         });
     </script>
+    
+    <!-- 載入動畫覆蓋層 -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text" id="loadingText">處理中...</div>
+        </div>
+    </div>
+    
+    <!-- 成功提示彈窗 -->
+    <div id="successPopup" class="success-popup">
+        <h3>✅ 操作成功</h3>
+        <p id="successMessage">操作已成功完成！</p>
+        <button class="btn-success" onclick="closeSuccessPopup()">確定</button>
+    </div>
+    
+    <!-- 錯誤提示彈窗 -->
+    <div id="errorPopup" class="error-popup">
+        <h3>❌ 操作失敗</h3>
+        <p id="errorMessage">操作失敗，請重試。</p>
+        <button class="btn-danger" onclick="closeErrorPopup()">確定</button>
+    </div>
+    
 </body>
 </html>
