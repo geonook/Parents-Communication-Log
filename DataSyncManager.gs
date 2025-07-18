@@ -979,3 +979,387 @@ function updateStudentTeacherInMasterList(studentId, newTeacher) {
     };
   }
 }
+
+// ============ 備份相關輔助函數 ============
+
+/**
+ * 從學生總表備份學生資料
+ * @param {string} studentId 學生ID
+ * @param {Object} masterListLocation 學生總表位置資訊
+ * @returns {Object} 備份資料
+ */
+function backupStudentFromMasterList(studentId, masterListLocation) {
+  try {
+    const masterSheet = SpreadsheetApp.openById(masterListLocation.fileId);
+    const sheet = masterSheet.getActiveSheet();
+    
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const studentRow = data[masterListLocation.rowIndex - 1];
+    
+    const backupData = {
+      source: 'masterList',
+      fileId: masterListLocation.fileId,
+      fileName: masterListLocation.fileName,
+      rowIndex: masterListLocation.rowIndex,
+      studentData: {}
+    };
+    
+    // 備份學生資料
+    headers.forEach((header, index) => {
+      backupData.studentData[header] = studentRow[index];
+    });
+    
+    return backupData;
+    
+  } catch (error) {
+    Logger.log('❌ 從學生總表備份失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 從老師記錄簿備份學生資料
+ * @param {string} studentId 學生ID
+ * @param {Object} teacherRecord 老師記錄資訊
+ * @returns {Object} 備份資料
+ */
+function backupStudentFromTeacherBook(studentId, teacherRecord) {
+  try {
+    const teacherBook = SpreadsheetApp.openById(teacherRecord.fileId);
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    
+    if (!studentSheet) {
+      return null;
+    }
+    
+    const data = studentSheet.getDataRange().getValues();
+    const headers = data[0];
+    const studentRow = data[teacherRecord.studentListRow - 1];
+    
+    const backupData = {
+      source: 'teacherBook',
+      fileId: teacherRecord.fileId,
+      fileName: teacherRecord.fileName,
+      teacherName: teacherRecord.teacherName,
+      studentListRow: teacherRecord.studentListRow,
+      studentData: {}
+    };
+    
+    // 備份學生資料
+    headers.forEach((header, index) => {
+      backupData.studentData[header] = studentRow[index];
+    });
+    
+    return backupData;
+    
+  } catch (error) {
+    Logger.log('❌ 從老師記錄簿備份失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 恢復學生資料到學生總表
+ * @param {string} studentId 學生ID
+ * @param {Object} backupData 備份資料
+ * @returns {Object} 恢復結果
+ */
+function restoreStudentToMasterList(studentId, backupData) {
+  try {
+    const masterSheet = SpreadsheetApp.openById(backupData.fileId);
+    const sheet = masterSheet.getActiveSheet();
+    
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    
+    // 恢復學生資料
+    headers.forEach((header, index) => {
+      const value = backupData.studentData[header];
+      if (value !== undefined) {
+        sheet.getRange(backupData.rowIndex, index + 1).setValue(value);
+      }
+    });
+    
+    return {
+      success: true,
+      message: '學生總表資料恢復成功'
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 恢復學生總表資料失敗：' + error.message);
+    return {
+      success: false,
+      message: '恢復學生總表資料失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 恢復學生資料到老師記錄簿
+ * @param {string} studentId 學生ID
+ * @param {Object} backupData 備份資料
+ * @returns {Object} 恢復結果
+ */
+function restoreStudentToTeacherBook(studentId, backupData) {
+  try {
+    const teacherBook = SpreadsheetApp.openById(backupData.fileId);
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    
+    if (!studentSheet) {
+      return {
+        success: false,
+        message: '找不到學生清單工作表'
+      };
+    }
+    
+    const headers = studentSheet.getRange(1, 1, 1, studentSheet.getLastColumn()).getValues()[0];
+    
+    // 恢復學生資料
+    headers.forEach((header, index) => {
+      const value = backupData.studentData[header];
+      if (value !== undefined) {
+        studentSheet.getRange(backupData.studentListRow, index + 1).setValue(value);
+      }
+    });
+    
+    return {
+      success: true,
+      message: '老師記錄簿資料恢復成功'
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 恢復老師記錄簿資料失敗：' + error.message);
+    return {
+      success: false,
+      message: '恢復老師記錄簿資料失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 恢復電聯記錄
+ * @param {string} studentId 學生ID
+ * @param {Array} contactRecords 電聯記錄備份
+ * @returns {Object} 恢復結果
+ */
+function restoreContactRecords(studentId, contactRecords) {
+  try {
+    let restoredCount = 0;
+    
+    contactRecords.forEach(record => {
+      try {
+        const teacherBook = SpreadsheetApp.openById(record.teacherBookId);
+        const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+        
+        if (contactSheet) {
+          const headers = contactSheet.getRange(1, 1, 1, contactSheet.getLastColumn()).getValues()[0];
+          const newRow = headers.map(header => record[header] || '');
+          contactSheet.appendRow(newRow);
+          restoredCount++;
+        }
+      } catch (error) {
+        Logger.log(`❌ 恢復電聯記錄失敗：${record.teacherName} - ${error.message}`);
+      }
+    });
+    
+    return {
+      success: true,
+      message: `成功恢復 ${restoredCount} 條電聯記錄`
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 恢復電聯記錄失敗：' + error.message);
+    return {
+      success: false,
+      message: '恢復電聯記錄失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 獲取或創建備份資料夾
+ * @param {GoogleAppsScript.Drive.Folder} mainFolder 主資料夾
+ * @returns {GoogleAppsScript.Drive.Folder} 備份資料夾
+ */
+function getOrCreateBackupFolder(mainFolder) {
+  try {
+    const backupFolderName = '學生異動備份';
+    const backupFolders = mainFolder.getFoldersByName(backupFolderName);
+    
+    if (backupFolders.hasNext()) {
+      return backupFolders.next();
+    } else {
+      return mainFolder.createFolder(backupFolderName);
+    }
+    
+  } catch (error) {
+    Logger.log('❌ 創建備份資料夾失敗：' + error.message);
+    return mainFolder; // 返回主資料夾作為後備
+  }
+}
+
+/**
+ * 更新工作表中的行資料
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet 工作表
+ * @param {Object} condition 更新條件
+ * @param {Object} updateData 更新資料
+ * @returns {Object} 更新結果
+ */
+function updateRowInSheet(sheet, condition, updateData) {
+  try {
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    let updatedRows = 0;
+    
+    // 查找符合條件的行
+    for (let i = 1; i < data.length; i++) {
+      let matchCondition = true;
+      
+      Object.keys(condition).forEach(fieldName => {
+        const colIndex = headers.indexOf(fieldName);
+        if (colIndex === -1 || data[i][colIndex] !== condition[fieldName]) {
+          matchCondition = false;
+        }
+      });
+      
+      if (matchCondition) {
+        // 更新資料
+        Object.keys(updateData).forEach(fieldName => {
+          const colIndex = headers.indexOf(fieldName);
+          if (colIndex !== -1) {
+            sheet.getRange(i + 1, colIndex + 1).setValue(updateData[fieldName]);
+          }
+        });
+        updatedRows++;
+      }
+    }
+    
+    return {
+      success: true,
+      updatedRows: updatedRows
+    };
+    
+  } catch (error) {
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
+ * 計算老師記錄簿進度資料
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @returns {Array} 進度資料
+ */
+function calculateProgressForTeacherBook(teacherBook) {
+  try {
+    const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet) {
+      return [['Student ID', 'Student Name', 'Contact Count', 'Last Contact']];
+    }
+    
+    const data = contactSheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return [['Student ID', 'Student Name', 'Contact Count', 'Last Contact']];
+    }
+    
+    const headers = data[0];
+    const studentIdCol = headers.indexOf('Student ID');
+    const contactDateCol = headers.indexOf('Contact Date');
+    
+    const progressData = [['Student ID', 'Student Name', 'Contact Count', 'Last Contact']];
+    const studentStats = {};
+    
+    // 統計每個學生的電聯次數
+    for (let i = 1; i < data.length; i++) {
+      const studentId = data[i][studentIdCol];
+      const contactDate = data[i][contactDateCol];
+      
+      if (studentId) {
+        if (!studentStats[studentId]) {
+          studentStats[studentId] = {
+            count: 0,
+            lastContact: null
+          };
+        }
+        
+        studentStats[studentId].count++;
+        
+        if (contactDate && (!studentStats[studentId].lastContact || contactDate > studentStats[studentId].lastContact)) {
+          studentStats[studentId].lastContact = contactDate;
+        }
+      }
+    }
+    
+    // 生成進度資料
+    Object.keys(studentStats).forEach(studentId => {
+      const studentName = getStudentName(studentId);
+      const stats = studentStats[studentId];
+      
+      progressData.push([
+        studentId,
+        studentName,
+        stats.count,
+        stats.lastContact ? stats.lastContact.toDateString() : ''
+      ]);
+    });
+    
+    return progressData;
+    
+  } catch (error) {
+    Logger.log('❌ 計算老師記錄簿進度失敗：' + error.message);
+    return [['Student ID', 'Student Name', 'Contact Count', 'Last Contact']];
+  }
+}
+
+/**
+ * 計算系統統計資料
+ * @returns {Object} 系統統計
+ */
+function calculateSystemStats() {
+  try {
+    const stats = {
+      totalStudents: 0,
+      totalTeachers: 0,
+      totalContacts: 0,
+      lastUpdated: new Date()
+    };
+    
+    // 統計學生總數
+    const mainFolder = getSystemMainFolder();
+    const masterListFiles = mainFolder.getFilesByName('學生總表');
+    if (masterListFiles.hasNext()) {
+      const masterListFile = masterListFiles.next();
+      const masterSheet = SpreadsheetApp.openById(masterListFile.getId());
+      const sheet = masterSheet.getActiveSheet();
+      stats.totalStudents = sheet.getLastRow() - 1; // 減去標題行
+    }
+    
+    // 統計老師和電聯記錄
+    const teacherBooks = getAllTeacherBooks();
+    stats.totalTeachers = teacherBooks.length;
+    
+    teacherBooks.forEach(book => {
+      try {
+        const contactSheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+        if (contactSheet) {
+          stats.totalContacts += contactSheet.getLastRow() - 1; // 減去標題行
+        }
+      } catch (error) {
+        Logger.log(`❌ 處理老師記錄簿統計失敗：${book.getName()}`);
+      }
+    });
+    
+    return stats;
+    
+  } catch (error) {
+    Logger.log('❌ 計算系統統計失敗：' + error.message);
+    return {
+      totalStudents: 0,
+      totalTeachers: 0,
+      totalContacts: 0,
+      lastUpdated: new Date()
+    };
+  }
+}
