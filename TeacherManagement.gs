@@ -468,13 +468,13 @@ function setupSummaryFormulas(recordBook, teacherInfo) {
 
 /**
  * 創建班級資訊工作表
- * 增強版：自動填入班導師和班級人數資訊
+ * 自動填入班級人數資訊
  */
 function createClassInfoSheet(recordBook, teacherInfo) {
   const sheet = recordBook.insertSheet(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
   
   // 設定標題
-  const headers = [['班級', '班導師', '班級人數', '班級特殊情況說明', '最後更新日期']];
+  const headers = [['班級', '班級人數', '班級特殊情況說明', '最後更新日期']];
   sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
   
   // 如果有學生資料，從中提取班級資訊
@@ -498,7 +498,6 @@ function createClassInfoSheet(recordBook, teacherInfo) {
       if (actualClass) {
         if (!classData[actualClass]) {
           classData[actualClass] = {
-            homeroomTeacher: '', // 將通過其他方式獲取
             studentCount: 0,
             students: []
           };
@@ -518,17 +517,14 @@ function createClassInfoSheet(recordBook, teacherInfo) {
     
     // 填入班級人數
     if (classData[className]) {
-      sheet.getRange(row, 3).setValue(classData[className].studentCount); // 班級人數
+      sheet.getRange(row, 2).setValue(classData[className].studentCount); // 班級人數
       Logger.log(`📊 ${className} 班級人數：${classData[className].studentCount}`);
     } else {
-      sheet.getRange(row, 3).setValue('待確認'); // 無學生資料時的預設值
+      sheet.getRange(row, 2).setValue('待確認'); // 無學生資料時的預設值
     }
     
-    // 班導師欄位 - 目前設為空白，可後續透過其他方式填入
-    sheet.getRange(row, 2).setValue('待填入'); // 班導師 (留待人工填入或後續功能擴充)
-    
     // 最後更新日期
-    sheet.getRange(row, 5).setValue(new Date().toLocaleDateString());
+    sheet.getRange(row, 4).setValue(new Date().toLocaleDateString());
   });
   
   // 新增資料來源說明
@@ -536,8 +532,7 @@ function createClassInfoSheet(recordBook, teacherInfo) {
     const noteRow = 2 + teacherInfo.classes.length + 1;
     sheet.getRange(noteRow, 1).setValue('📝 資料來源說明：');
     sheet.getRange(noteRow + 1, 1).setValue('• 班級人數：從學生清單自動計算');
-    sheet.getRange(noteRow + 2, 1).setValue('• 班導師：需手動填入或透過系統管理員設定');
-    sheet.getRange(noteRow, 1, 3, 1).setFontStyle('italic').setFontColor('#666666');
+    sheet.getRange(noteRow, 1, 2, 1).setFontStyle('italic').setFontColor('#666666');
   }
   
   // 格式設定
@@ -546,12 +541,12 @@ function createClassInfoSheet(recordBook, teacherInfo) {
   // 為班級人數欄位設定數字格式
   const classCount = teacherInfo.classes.length;
   if (classCount > 0) {
-    sheet.getRange(2, 3, classCount, 1).setNumberFormat('0'); // 整數格式
+    sheet.getRange(2, 2, classCount, 1).setNumberFormat('0'); // 整數格式
   }
   
   // 條件式格式設定 - 班級人數
   if (classCount > 0) {
-    const studentCountRange = sheet.getRange(2, 3, classCount, 1);
+    const studentCountRange = sheet.getRange(2, 2, classCount, 1);
     
     // 班級人數 > 30 的班級用紅色背景標示
     const highCountRule = SpreadsheetApp.newConditionalFormatRule()
@@ -614,11 +609,11 @@ function createStudentListSheet(recordBook, teacherInfo) {
   ltRange.setNote('👨‍🏫 本地老師姓名 - 用於系統識別授課老師');
   ltRange.setBackground('#FFF3E0'); // 淺橙背景
   
-  // 電話欄位格式提示
+  // 電話欄位提示 - 無特定格式限制
   const motherPhoneRange = sheet.getRange('L2:L1000');
   const fatherPhoneRange = sheet.getRange('M2:M1000');
-  motherPhoneRange.setNote('📞 母親電話，格式：0912-345-678');
-  fatherPhoneRange.setNote('📞 父親電話，格式：0912-345-678');
+  motherPhoneRange.setNote('📞 母親電話（無特定格式限制，如：927055077）');
+  fatherPhoneRange.setNote('📞 父親電話（無特定格式限制，如：927055077）');
   
   // 設定保護範圍（標題行）
   const protection = sheet.getRange(1, 1, 1, SYSTEM_CONFIG.STUDENT_FIELDS.length).protect();

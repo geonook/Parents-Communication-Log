@@ -511,7 +511,7 @@ function setupMasterListContent(masterListSheet) {
     } else {
       // 只新增一筆範例資料
       const sampleData = [[
-        '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '0912-345-678', '0987-654-321'
+        '001', 'G1', '701', '1', '王小明', 'Ming Wang', 'A1', 'A2', 'Mr. Johnson', 'G1 Trailblazers', 'Ms. Chen', '927055077', '955123456'
       ]];
       sheet.getRange(4, 1, 1, sampleData[0].length).setValues(sampleData);
       sheet.getRange(4, 1, 1, sampleData[0].length).setBackground('#E8F0FE').setFontStyle('italic');
