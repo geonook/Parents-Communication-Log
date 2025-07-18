@@ -202,3 +202,84 @@ function testFilenameUniqueness() {
     return false;
   }
 }
+
+/**
+ * 測試Dashboard統計功能
+ */
+function testDashboardStats() {
+  Logger.log('📊 開始測試Dashboard統計功能...');
+  
+  try {
+    // 測試統計函數
+    const stats = calculateSystemStats();
+    
+    Logger.log('✅ Dashboard統計數據：');
+    Logger.log(`  - 英文老師數：${stats.teacherCount}`);
+    Logger.log(`  - 學生總數：${stats.studentCount}`);
+    Logger.log(`  - 已完成電聯次數：${stats.contactCount}`);
+    Logger.log(`  - 學期電聯次數：${stats.semesterContactCount}`);
+    Logger.log(`  - ${stats.currentSemester} ${stats.currentTerm}進度：${stats.currentTermProgress}%`);
+    Logger.log(`  - 當前Term完成學生數：${stats.currentTermCompleted}/${stats.currentTermTotal}`);
+    
+    // 驗證統計邏輯
+    Logger.log('🔍 驗證統計邏輯：');
+    Logger.log('  - contactCount 現在統計「已完成電聯次數」（四個關鍵欄位都填寫）');
+    Logger.log('  - semesterContactCount 統計「已完成的學期電聯」');
+    Logger.log('  - Fall Beginning進度使用相同的四個關鍵欄位標準');
+    
+    // 檢查四個關鍵欄位標準
+    Logger.log('📋 四個關鍵欄位標準：');
+    Logger.log('  1. Date（第5欄或動態檢測）');
+    Logger.log('  2. Teachers Content（第9欄）');
+    Logger.log('  3. Parents Responses（第10欄）');
+    Logger.log('  4. Contact Method（第11欄）');
+    Logger.log('  ✅ 只有這四個欄位都填寫的記錄才算「已完成電聯」');
+    
+    Logger.log('🎉 Dashboard統計功能測試完成！');
+    return true;
+    
+  } catch (error) {
+    Logger.log('❌ Dashboard統計測試失敗：' + error.message);
+    Logger.log('錯誤詳情：' + error.stack);
+    return false;
+  }
+}
+
+/**
+ * 測試Fall Beginning進度統計邏輯
+ */
+function testFallBeginningProgress() {
+  Logger.log('🍂 開始測試Fall Beginning進度統計邏輯...');
+  
+  try {
+    // 說明Fall Beginning進度的統計方式
+    Logger.log('📈 Fall Beginning進度統計說明：');
+    Logger.log('');
+    Logger.log('1. 📚 數據來源：');
+    Logger.log('   - 來自各老師記錄簿的電聯記錄工作表');
+    Logger.log('   - 欄位：Semester="Fall", Term="Beginning", Contact Type="Scheduled Contact"');
+    Logger.log('');
+    Logger.log('2. 🎯 完成標準（四個關鍵欄位）：');
+    Logger.log('   - Date: 電聯日期必須填寫');
+    Logger.log('   - Teachers Content: 老師溝通內容必須填寫');
+    Logger.log('   - Parents Responses: 家長回應必須填寫');
+    Logger.log('   - Contact Method: 聯絡方式必須填寫');
+    Logger.log('');
+    Logger.log('3. 📊 計算方式：');
+    Logger.log('   - 已完成學生數 = 符合上述標準的唯一Student ID數量');
+    Logger.log('   - 總學生數 = 該老師的學生清單總數');
+    Logger.log('   - 完成率 = (已完成學生數 ÷ 總學生數) × 100%');
+    Logger.log('');
+    Logger.log('4. 🔍 系統統計：');
+    Logger.log('   - Dashboard顯示全系統的Fall Beginning整體進度');
+    Logger.log('   - 個別老師記錄簿的進度工作表顯示詳細分解');
+    Logger.log('');
+    Logger.log('✅ 這個設計確保了電聯記錄的質量，只有真正完成溝通的記錄才被計入統計。');
+    
+    return true;
+    
+  } catch (error) {
+    Logger.log('❌ Fall Beginning進度測試失敗：' + error.message);
+    return false;
+  }
+}

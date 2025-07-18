@@ -380,13 +380,32 @@ function calculateSystemStats() {
                 const contactData = contactSheet.getDataRange().getValues();
                 const contactHeaders = contactData[0];
                 const contacts = contactData.slice(1); // 跳過標題行
-                contactCount += contacts.length;
-                
                 // 確定新欄位的索引（向後相容）
                 const semesterIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('semester'));
                 const termIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('term'));
                 const contactTypeIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('contact type'));
                 const studentIdIndex = 0; // Student ID 通常在第一欄
+                const dateIndex = contactHeaders.findIndex(h => h.toString().toLowerCase().includes('date')) || 4;
+                
+                // 統計已完成電聯次數（四個關鍵欄位都填寫）
+                const completedContactCount = contacts.filter(contact => {
+                  // 四個關鍵欄位：Date(E), Teachers Content(I), Parents Responses(J), Contact Method(K)
+                  const date = contact[dateIndex] || contact[4];
+                  const teachersContent = contact[8]; // Teachers Content 欄位
+                  const parentsResponses = contact[9]; // Parents Responses 欄位
+                  const contactMethod = contact[10]; // Contact Method 欄位
+                  
+                  return date && 
+                         teachersContent && 
+                         parentsResponses && 
+                         contactMethod && 
+                         date.toString().trim() !== '' &&
+                         teachersContent.toString().trim() !== '' &&
+                         parentsResponses.toString().trim() !== '' &&
+                         contactMethod.toString().trim() !== '';
+                }).length;
+                
+                contactCount += completedContactCount;
                 
                 // 統計學期電聯和當前term進度
                 const currentSemester = SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER;
@@ -399,19 +418,36 @@ function calculateSystemStats() {
                   const term = contact[termIndex] || currentTerm;
                   const studentId = contact[studentIdIndex];
                   
-                  // 統計學期電聯
-                  if (contactTypeIndex >= 0 && contactType === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER) {
-                    semesterContactCount++;
-                    
-                    // 統計當前term的完成學生
-                    if (semester === currentSemester && term === currentTerm && studentId) {
-                      completedStudentsInCurrentTerm.add(studentId.toString());
-                    }
-                  } else if (contactTypeIndex < 0) {
-                    // 向後相容：沒有類型欄位時假設都是學期電聯
-                    semesterContactCount++;
-                    if (studentId) {
-                      completedStudentsInCurrentTerm.add(studentId.toString());
+                  // 檢查四個關鍵欄位是否都已填寫
+                  const date = contact[dateIndex] || contact[4];
+                  const teachersContent = contact[8]; // Teachers Content 欄位
+                  const parentsResponses = contact[9]; // Parents Responses 欄位
+                  const contactMethod = contact[10]; // Contact Method 欄位
+                  
+                  const isCompleted = date && 
+                                     teachersContent && 
+                                     parentsResponses && 
+                                     contactMethod && 
+                                     date.toString().trim() !== '' &&
+                                     teachersContent.toString().trim() !== '' &&
+                                     parentsResponses.toString().trim() !== '' &&
+                                     contactMethod.toString().trim() !== '';
+                  
+                  // 只統計已完成的學期電聯
+                  if (isCompleted) {
+                    if (contactTypeIndex >= 0 && contactType === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER) {
+                      semesterContactCount++;
+                      
+                      // 統計當前term的完成學生
+                      if (semester === currentSemester && term === currentTerm && studentId) {
+                        completedStudentsInCurrentTerm.add(studentId.toString());
+                      }
+                    } else if (contactTypeIndex < 0) {
+                      // 向後相容：沒有類型欄位時假設都是學期電聯
+                      semesterContactCount++;
+                      if (studentId) {
+                        completedStudentsInCurrentTerm.add(studentId.toString());
+                      }
                     }
                   }
                 });
