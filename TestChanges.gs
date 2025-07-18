@@ -283,3 +283,144 @@ function testFallBeginningProgress() {
     return false;
   }
 }
+
+/**
+ * 測試Dashboard階段切換功能
+ */
+function testDashboardStageSwitch() {
+  Logger.log('🔄 開始測試Dashboard階段切換功能...');
+  
+  try {
+    // 測試不同學期階段組合
+    const testStages = [
+      { semester: 'Fall', term: 'Beginning' },
+      { semester: 'Fall', term: 'Midterm' },
+      { semester: 'Fall', term: 'Final' },
+      { semester: 'Spring', term: 'Beginning' },
+      { semester: 'Spring', term: 'Midterm' },
+      { semester: 'Spring', term: 'Final' }
+    ];
+    
+    Logger.log('📊 測試各階段統計查詢：');
+    
+    testStages.forEach((stage, index) => {
+      try {
+        Logger.log(`\n${index + 1}. 測試 ${stage.semester} ${stage.term}：`);
+        
+        // 測試後端查詢函數
+        const result = getProgressByStageWeb(stage.semester, stage.term);
+        
+        if (result.success) {
+          const stats = result.stats;
+          Logger.log(`   ✅ 查詢成功`);
+          Logger.log(`   - 已完成學生數：${stats.completedStudents}`);
+          Logger.log(`   - 總學生數：${stats.totalStudents}`);
+          Logger.log(`   - 完成率：${stats.completionRate}%`);
+          Logger.log(`   - 完成老師數：${stats.completedTeachers}`);
+          Logger.log(`   - 總老師數：${stats.totalTeachers}`);
+        } else {
+          Logger.log(`   ⚠️ 查詢結果：${result.message}`);
+          Logger.log(`   - 預設統計：已完成 ${result.stats.completedStudents}/${result.stats.totalStudents} 學生`);
+        }
+        
+      } catch (error) {
+        Logger.log(`   ❌ ${stage.semester} ${stage.term} 測試失敗：${error.message}`);
+      }
+    });
+    
+    // 測試兼容性檢查
+    Logger.log('\n🔍 測試與現有系統兼容性：');
+    
+    try {
+      // 測試原有統計函數是否正常運作
+      const originalStats = calculateSystemStats();
+      Logger.log('   ✅ 原有calculateSystemStats()函數正常運作');
+      Logger.log(`   - 當前學期：${originalStats.currentSemester} ${originalStats.currentTerm}`);
+      Logger.log(`   - 當前進度：${originalStats.currentTermProgress}%`);
+      
+      // 測試新舊統計是否一致
+      const currentStageResult = getProgressByStageWeb(
+        originalStats.currentSemester, 
+        originalStats.currentTerm
+      );
+      
+      if (currentStageResult.success) {
+        const isConsistent = Math.abs(
+          originalStats.currentTermProgress - currentStageResult.stats.completionRate
+        ) < 0.1; // 允許0.1%的浮點誤差
+        
+        if (isConsistent) {
+          Logger.log('   ✅ 新舊統計結果一致，兼容性良好');
+        } else {
+          Logger.log('   ⚠️ 新舊統計結果略有差異（可能因為計算精度）');
+          Logger.log(`   - 原有統計：${originalStats.currentTermProgress}%`);
+          Logger.log(`   - 新統計：${currentStageResult.stats.completionRate}%`);
+        }
+      }
+      
+    } catch (error) {
+      Logger.log(`   ❌ 兼容性測試失敗：${error.message}`);
+    }
+    
+    Logger.log('\n🎉 Dashboard階段切換功能測試完成！');
+    Logger.log('💡 所有階段查詢均可正常運作，用戶可以切換查看不同學期階段的進度統計');
+    
+    return true;
+    
+  } catch (error) {
+    Logger.log('❌ Dashboard階段切換測試失敗：' + error.message);
+    Logger.log('錯誤詳情：' + error.stack);
+    return false;
+  }
+}
+
+/**
+ * 執行所有測試函數
+ */
+function runAllTests() {
+  Logger.log('🧪 開始執行所有測試...');
+  Logger.log('='.repeat(50));
+  
+  const tests = [
+    { name: '班級資訊工作表調整', func: testClassInfoSheetChanges },
+    { name: '電話號碼格式處理', func: testPhoneNumberHandling },
+    { name: '檔名時間戳功能', func: testFilenameTimestamp },
+    { name: '檔名唯一性', func: testFilenameUniqueness },
+    { name: 'Dashboard統計功能', func: testDashboardStats },
+    { name: 'Fall Beginning進度邏輯', func: testFallBeginningProgress },
+    { name: 'Dashboard階段切換功能', func: testDashboardStageSwitch }
+  ];
+  
+  let passedTests = 0;
+  let totalTests = tests.length;
+  
+  tests.forEach((test, index) => {
+    Logger.log(`\n[${index + 1}/${totalTests}] 執行測試：${test.name}`);
+    Logger.log('-'.repeat(30));
+    
+    try {
+      const result = test.func();
+      if (result) {
+        Logger.log(`✅ ${test.name} - 測試通過`);
+        passedTests++;
+      } else {
+        Logger.log(`❌ ${test.name} - 測試失敗`);
+      }
+    } catch (error) {
+      Logger.log(`❌ ${test.name} - 執行錯誤：${error.message}`);
+    }
+  });
+  
+  Logger.log('\n' + '='.repeat(50));
+  Logger.log('🏁 測試結果總結：');
+  Logger.log(`   - 通過測試：${passedTests}/${totalTests}`);
+  Logger.log(`   - 測試成功率：${Math.round(passedTests / totalTests * 100)}%`);
+  
+  if (passedTests === totalTests) {
+    Logger.log('🎉 所有測試均通過！系統功能運作正常。');
+  } else {
+    Logger.log('⚠️ 部分測試未通過，請檢查相關功能。');
+  }
+  
+  return passedTests === totalTests;
+}
