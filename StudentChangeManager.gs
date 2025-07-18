@@ -635,3 +635,44 @@ function getChangeRecord(changeId) {
     return null;
   }
 }
+
+/**
+ * 學生異動記錄函數（測試兼容性別名）
+ * @param {Object} changeRequest 異動請求對象
+ * @returns {Object} 記錄結果
+ */
+function logStudentChange(changeRequest) {
+  try {
+    // 為了向後兼容性，將 changeRequest 轉換為 changeRecord 格式
+    const changeRecord = {
+      'Change ID': changeRequest.changeId || generateChangeId(),
+      'Student ID': changeRequest.studentId,
+      'Student Name': changeRequest.studentName || getStudentName(changeRequest.studentId) || '未知',
+      'Change Type': changeRequest.changeType,
+      'Change Date': new Date().toLocaleString(),
+      'Operator': changeRequest.operator,
+      'From Teacher': changeRequest.fromTeacher || '',
+      'To Teacher': changeRequest.newTeacher || '',
+      'Reason': changeRequest.reason || '',
+      'Status': CHANGE_LOG_CONFIG.STATUS.PENDING,
+      'Backup Data': changeRequest.backupData || '',
+      'Rollback Available': 'Yes'
+    };
+    
+    // 調用實際的記錄函數
+    logChangeRecord(changeRecord);
+    
+    return {
+      success: true,
+      message: '異動記錄已成功記錄',
+      changeId: changeRecord['Change ID']
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 學生異動記錄失敗：' + error.message);
+    return {
+      success: false,
+      message: '記錄失敗：' + error.message
+    };
+  }
+}
