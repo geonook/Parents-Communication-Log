@@ -302,28 +302,10 @@ function setupTeacherRecordBook(recordBook, teacherInfo) {
   // 設定記錄簿為第一個工作表
   recordBook.setActiveSheet(recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY));
   
-  // 自動執行電聯記錄排序（如果已有電聯記錄的話）
-  try {
-    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
-    if (contactLogSheet) {
-      const allData = contactLogSheet.getDataRange().getValues();
-      if (allData.length > 1) { // 除了標題行還有資料
-        Logger.log('🔄 新建記錄簿中檢測到電聯記錄，執行自動排序');
-        const sortResult = sortContactRecordsData(allData);
-        if (sortResult.success) {
-          // 清除並重新寫入排序後的資料
-          contactLogSheet.clear();
-          contactLogSheet.getRange(1, 1, sortResult.data.length, sortResult.data[0].length).setValues(sortResult.data);
-          // 重新設定格式
-          contactLogSheet.getRange(1, 1, 1, sortResult.data[0].length).setFontWeight('bold').setBackground('#E8F4FD');
-          contactLogSheet.autoResizeColumns(1, sortResult.data[0].length);
-          Logger.log('✅ 記錄簿建立時自動排序完成');
-        }
-      }
-    }
-  } catch (sortError) {
-    Logger.log(`⚠️ 自動排序時發生錯誤：${sortError.message}`);
-  }
+  // 註解：移除無效的排序檢查邏輯
+  // 原因：新建記錄簿時電聯記錄工作表為空，排序應該在預建記錄完成後進行
+  // 排序邏輯已整合到 performPrebuildScheduledContacts 函數中
+  Logger.log('✅ 記錄簿建立完成，排序將在學生資料匯入和預建記錄時執行');
 }
 
 /**
@@ -1290,18 +1272,23 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
   ];
   const mockDataWithHeaders = [headers, ...prebuiltRecords];
   
+  // 強化排序邏輯：確保排序成功才繼續寫入
   const sortResult = sortContactRecordsData(mockDataWithHeaders);
   
-  if (sortResult.success) {
-    // 提取排序後的資料（去除標題）
-    prebuiltRecords.length = 0; // 清空原陣列
-    prebuiltRecords.push(...sortResult.data.slice(1)); // 將排序後的資料重新填入
-    Logger.log(`✅ 預建記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
-  } else {
-    Logger.log(`⚠️ 預建記錄排序失敗：${sortResult.error}，使用原始順序`);
+  if (!sortResult.success) {
+    const errorMsg = `預建記錄排序失敗：${sortResult.error}`;
+    Logger.log(`❌ ${errorMsg}`);
+    Logger.log(`📊 排序失敗狀態 - 記錄數：${prebuiltRecords.length}, 學生數：${students.length}`);
+    Logger.log(`🔍 失敗原因排查：請檢查學生資料格式和系統配置`);
+    throw new Error(errorMsg);
   }
   
-  // 寫入預建記錄
+  // 提取排序後的資料（去除標題）
+  prebuiltRecords.length = 0; // 清空原陣列
+  prebuiltRecords.push(...sortResult.data.slice(1)); // 將排序後的資料重新填入
+  Logger.log(`✅ 預建記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
+  
+  // 寫入排序後的預建記錄（原子性操作）
   if (prebuiltRecords.length > 0) {
     const startRow = contactLogSheet.getLastRow() + 1;
     
@@ -1312,15 +1299,24 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
       // 這裡可以添加清理邏輯，但需要小心不要刪除用戶填寫的記錄
     }
     
+    // 寫入排序後的資料
     contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length)
       .setValues(prebuiltRecords);
     
-    // 立即驗證寫入的資料
+    // 立即驗證寫入的資料排序
     const writtenData = contactLogSheet.getRange(startRow, 1, Math.min(5, prebuiltRecords.length), SYSTEM_CONFIG.CONTACT_FIELDS.length).getValues();
-    Logger.log('📊 寫入工作表的資料驗證（前5筆）：');
+    Logger.log('📊 寫入工作表的排序驗證（前5筆）：');
     writtenData.forEach((row, index) => {
       Logger.log(`  ${index + 1}. ID:${row[0]}, Name:${row[1]}, Class:${row[3]}, Semester:${row[5]}, Term:${row[6]}`);
     });
+    
+    // 驗證整體排序正確性
+    const sortValidation = validateContactRecordsSorting(contactLogSheet);
+    if (!sortValidation.isValid) {
+      Logger.log(`⚠️ 排序驗證失敗：${sortValidation.errors.join('; ')}`);
+    } else {
+      Logger.log('✅ 排序驗證通過，記錄已正確排序');
+    }
     
     // 為預建記錄設定特殊格式
     const prebuiltRange = contactLogSheet.getRange(startRow, 1, prebuiltRecords.length, SYSTEM_CONFIG.CONTACT_FIELDS.length);
@@ -1478,7 +1474,9 @@ function sortContactRecordsData(allData) {
     
   } catch (error) {
     Logger.log(`❌ 統一排序函數錯誤：${error.toString()}`);
-    return { success: false, data: allData, recordCount: 0, error: error.toString() };
+    Logger.log(`📍 錯誤堆疊：${error.stack}`);
+    Logger.log(`📊 資料狀態：${allData ? `${allData.length} 行資料` : '無資料'}`);
+    return { success: false, data: allData, recordCount: 0, error: `排序失敗：${error.message}` };
   }
 }
 
@@ -1549,6 +1547,177 @@ function sortContactRecords() {
   } catch (error) {
     Logger.log('排序電聯記錄失敗：' + error.toString());
     safeErrorHandler('排序電聯記錄', error);
+  }
+}
+
+/**
+ * 驗證電聯記錄排序正確性
+ * @param {Sheet} contactLogSheet - 電聯記錄工作表
+ * @returns {Object} - {isValid: boolean, errors: Array}
+ */
+function validateContactRecordsSorting(contactLogSheet) {
+  try {
+    const allData = contactLogSheet.getDataRange().getValues();
+    if (allData.length < 2) {
+      return { isValid: true, errors: [] }; // 無資料或只有標題，視為有效
+    }
+    
+    const records = allData.slice(1); // 跳過標題行
+    const errors = [];
+    
+    Logger.log(`🔍 驗證 ${records.length} 筆電聯記錄的排序正確性...`);
+    
+    // 欄位映射
+    const fieldMapping = {
+      studentId: 0,     // Student ID
+      semester: 5,      // Semester
+      term: 6,          // Term
+      englishClass: 3   // English Class
+    };
+    
+    // 學期和Term順序映射
+    const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+    const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+    
+    // 逐筆檢查排序順序
+    for (let i = 1; i < records.length; i++) {
+      const prev = records[i - 1];
+      const curr = records[i];
+      
+      // 學生ID檢查
+      const prevId = parseInt(prev[fieldMapping.studentId]) || 0;
+      const currId = parseInt(curr[fieldMapping.studentId]) || 0;
+      
+      if (prevId > currId) {
+        errors.push(`第${i+1}筆記錄：學生ID ${prevId} > ${currId} (排序錯誤)`);
+        continue;
+      }
+      
+      // 同學生ID下的學期檢查
+      if (prevId === currId) {
+        const prevSem = semesterOrder[prev[fieldMapping.semester]] || 999;
+        const currSem = semesterOrder[curr[fieldMapping.semester]] || 999;
+        
+        if (prevSem > currSem) {
+          errors.push(`第${i+1}筆記錄：學期順序錯誤 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: ${prevId})`);
+          continue;
+        }
+        
+        // 同學期下的Term檢查
+        if (prevSem === currSem) {
+          const prevTerm = termOrder[prev[fieldMapping.term]] || 999;
+          const currTerm = termOrder[curr[fieldMapping.term]] || 999;
+          
+          if (prevTerm > currTerm) {
+            errors.push(`第${i+1}筆記錄：Term順序錯誤 ${prev[fieldMapping.term]} > ${curr[fieldMapping.term]} (學生ID: ${prevId}, 學期: ${prev[fieldMapping.semester]})`);
+          }
+        }
+      }
+    }
+    
+    const isValid = errors.length === 0;
+    
+    if (isValid) {
+      Logger.log('✅ 電聯記錄排序驗證通過');
+    } else {
+      Logger.log(`❌ 電聯記錄排序驗證失敗，發現 ${errors.length} 個問題`);
+      errors.forEach(error => Logger.log(`  - ${error}`));
+    }
+    
+    return { isValid, errors };
+    
+  } catch (error) {
+    Logger.log(`❌ 排序驗證過程發生錯誤：${error.message}`);
+    return { isValid: false, errors: [`驗證過程錯誤：${error.message}`] };
+  }
+}
+
+/**
+ * 診斷電聯記錄排序問題的工具函數
+ * 用於排查和分析排序失敗的原因
+ */
+function diagnoseSortingIssues() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // 檢查是否在老師記錄簿中
+    const summarySheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      ui.alert('錯誤', '請在老師記錄簿中執行此診斷功能', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactLogSheet) {
+      ui.alert('提醒', '找不到電聯記錄工作表', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const allData = contactLogSheet.getDataRange().getValues();
+    if (allData.length < 2) {
+      ui.alert('提醒', '電聯記錄工作表沒有資料需要診斷', ui.ButtonSet.OK);
+      return;
+    }
+    
+    Logger.log('🔧 ========== 電聯記錄排序診斷開始 ==========');
+    Logger.log(`📊 總資料行數：${allData.length} (包含標題)`);
+    Logger.log(`📋 標題行：${allData[0].join(' | ')}`);
+    
+    const records = allData.slice(1);
+    Logger.log(`📄 實際記錄數：${records.length}`);
+    
+    // 檢查資料完整性
+    let incompleteRecords = 0;
+    records.forEach((record, index) => {
+      if (!record[0] || !record[3] || !record[5] || !record[6]) { // ID, Class, Semester, Term
+        incompleteRecords++;
+        Logger.log(`⚠️ 第${index + 2}行資料不完整：ID=${record[0]}, Class=${record[3]}, Semester=${record[5]}, Term=${record[6]}`);
+      }
+    });
+    
+    Logger.log(`📊 不完整記錄數：${incompleteRecords}`);
+    
+    // 執行排序驗證
+    const sortValidation = validateContactRecordsSorting(contactLogSheet);
+    Logger.log(`✅ 排序驗證結果：${sortValidation.isValid ? '通過' : '失敗'}`);
+    
+    if (!sortValidation.isValid) {
+      Logger.log('❌ 排序問題詳情：');
+      sortValidation.errors.forEach(error => Logger.log(`  - ${error}`));
+    }
+    
+    // 嘗試測試排序功能
+    Logger.log('🧪 測試排序功能...');
+    const sortResult = sortContactRecordsData(allData);
+    Logger.log(`🔧 排序測試結果：${sortResult.success ? '成功' : '失敗'}`);
+    if (!sortResult.success) {
+      Logger.log(`❌ 排序失敗原因：${sortResult.error}`);
+    }
+    
+    Logger.log('🔧 ========== 電聯記錄排序診斷完成 ==========');
+    
+    // 顯示診斷結果
+    const diagnosticMessage = `電聯記錄排序診斷結果：
+
+📊 基本資訊：
+• 總記錄數：${records.length}
+• 不完整記錄：${incompleteRecords}
+
+🔍 排序狀態：
+• 當前排序：${sortValidation.isValid ? '✅ 正確' : '❌ 錯誤'}
+• 排序功能：${sortResult.success ? '✅ 正常' : '❌ 異常'}
+
+${!sortValidation.isValid ? `\n⚠️ 發現問題：\n${sortValidation.errors.slice(0, 3).join('\n')}` : ''}
+
+詳細診斷信息請查看執行日誌。`;
+    
+    ui.alert('排序診斷完成', diagnosticMessage, ui.ButtonSet.OK);
+    
+  } catch (error) {
+    Logger.log(`❌ 排序診斷失敗：${error.toString()}`);
+    Logger.log(`📍 錯誤堆疊：${error.stack}`);
+    safeErrorHandler('排序診斷', error);
   }
 }
 

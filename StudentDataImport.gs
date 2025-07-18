@@ -934,6 +934,31 @@ function importStudentsForTeacher(recordBook, teacherInfo, masterData) {
     
     Logger.log(`✅ 為 ${teacherInfo.name} 老師預建了 ${result.recordCount} 筆Scheduled Contact記錄`);
     Logger.log(`📊 涵蓋 ${result.studentCount} 位學生，每位學生6筆記錄（Fall/Spring × Beginning/Midterm/Final）`);
+    
+    // 額外排序驗證：確保預建記錄已正確排序
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (contactLogSheet && typeof validateContactRecordsSorting === 'function') {
+      const sortValidation = validateContactRecordsSorting(contactLogSheet);
+      if (sortValidation.isValid) {
+        Logger.log('✅ 匯入後排序驗證通過，電聯記錄已正確排序');
+      } else {
+        Logger.log(`⚠️ 匯入後排序驗證失敗：${sortValidation.errors.join('; ')}`);
+        // 嘗試修復排序
+        try {
+          const allData = contactLogSheet.getDataRange().getValues();
+          const sortResult = sortContactRecordsData(allData);
+          if (sortResult.success) {
+            contactLogSheet.clear();
+            contactLogSheet.getRange(1, 1, sortResult.data.length, sortResult.data[0].length).setValues(sortResult.data);
+            contactLogSheet.getRange(1, 1, 1, sortResult.data[0].length).setFontWeight('bold').setBackground('#E8F4FD');
+            contactLogSheet.autoResizeColumns(1, sortResult.data[0].length);
+            Logger.log('✅ 已自動修復排序問題');
+          }
+        } catch (fixError) {
+          Logger.log(`❌ 自動修復排序失敗：${fixError.message}`);
+        }
+      }
+    }
   } catch (prebuildError) {
     Logger.log(`⚠️ 預建Scheduled Contact記錄時發生錯誤：${prebuildError.message}`);
     // 不拋出錯誤，讓匯入繼續完成，只記錄警告
