@@ -118,6 +118,8 @@ function onOpen() {
         .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
         .addItem('📋 更新老師列表', 'updateTeachersList')
         .addSeparator()
+        .addItem('🔄 修復進度追蹤工作表', 'batchFixProgressTrackingSheets')
+        .addSeparator()
         .addItem('✅ 系統驗證', 'runSystemValidation')
         .addSeparator()
         .addItem('📝 顯示系統日誌', 'showSystemLogs')

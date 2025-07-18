@@ -599,34 +599,180 @@ function syncStudentInTeacherBook(studentId, updateData, teacherRecord) {
 
 /**
  * 為指定老師記錄簿重建進度統計
+ * 重要修復：保持原有進度追蹤工作表的學期制結構，只更新計算數據
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
  * @returns {Object} 重建結果
  */
 function rebuildProgressForTeacherBook(teacherBook) {
   try {
-    // 獲取或創建進度追蹤工作表
+    Logger.log(`🔄 開始重建進度統計：${teacherBook.getName()}`);
+    
+    // 獲取進度追蹤工作表
     let progressSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+    
     if (!progressSheet) {
-      progressSheet = teacherBook.insertSheet(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+      Logger.log('⚠️ 進度追蹤工作表不存在，使用標準創建函數重新創建');
+      // 如果不存在，使用 TeacherManagement.gs 的標準函數創建
+      const teacherInfo = extractTeacherInfoFromBook(teacherBook);
+      return createProgressSheetWithTeacherInfo(teacherBook, teacherInfo);
     }
     
-    // 清空現有資料
-    progressSheet.clear();
+    // 檢查工作表是否有正確的學期制結構
+    const hasCorrectStructure = checkProgressSheetStructure(progressSheet);
     
-    // 重新計算進度統計
-    const progressData = calculateProgressForTeacherBook(teacherBook);
-    
-    // 寫入新的進度資料
-    if (progressData && progressData.length > 0) {
-      progressSheet.getRange(1, 1, progressData.length, progressData[0].length).setValues(progressData);
+    if (!hasCorrectStructure) {
+      Logger.log('⚠️ 進度追蹤工作表結構不正確，重新創建標準結構');
+      // 備份現有工作表名稱後刪除
+      const backupName = `${SYSTEM_CONFIG.SHEET_NAMES.PROGRESS}_backup_${new Date().getTime()}`;
+      progressSheet.setName(backupName);
+      
+      // 重新創建正確結構
+      const teacherInfo = extractTeacherInfoFromBook(teacherBook);
+      return createProgressSheetWithTeacherInfo(teacherBook, teacherInfo);
     }
+    
+    Logger.log('✅ 進度追蹤工作表結構正確，僅更新計算數據');
+    
+    // 結構正確，只需要觸發公式重新計算
+    // 強制重新計算所有公式（與 TeacherManagement.gs 中成功模式相同）
+    SpreadsheetApp.flush();
+    Utilities.sleep(1000);
+    
+    // 觸發特定範圍的重新計算
+    const lastRow = progressSheet.getLastRow();
+    if (lastRow > 4) {
+      // 獲取包含公式的範圍（已完成電聯、完成率、狀態欄位）
+      const formulaRange = progressSheet.getRange(5, 4, lastRow - 4, 3); // D5:F列
+      const formulas = formulaRange.getFormulas();
+      
+      // 重新設定公式觸發計算
+      formulaRange.setFormulas(formulas);
+      SpreadsheetApp.flush();
+    }
+    
+    Logger.log('✅ 進度統計重建完成，保持原有結構');
     
     return {
       success: true,
-      recordsProcessed: progressData.length - 1 // 減去標題行
+      action: 'preserved_structure_updated_data',
+      message: '已保持原有學期制結構並更新計算數據'
     };
     
   } catch (error) {
+    Logger.log('❌ 重建進度統計失敗：' + error.message);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
+ * 檢查進度追蹤工作表是否有正確的學期制結構
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} progressSheet 進度追蹤工作表
+ * @returns {boolean} 是否有正確結構
+ */
+function checkProgressSheetStructure(progressSheet) {
+  try {
+    // 檢查標題是否正確
+    const titleCell = progressSheet.getRange('A1').getValue();
+    if (!titleCell || !titleCell.toString().includes('電聯進度追蹤')) {
+      return false;
+    }
+    
+    // 檢查是否有學期制表頭
+    const headerRow = 4;
+    if (progressSheet.getLastRow() < headerRow) {
+      return false;
+    }
+    
+    const headers = progressSheet.getRange(headerRow, 1, 1, 7).getValues()[0];
+    const expectedHeaders = ['學期', 'Term', '學生總數', '已完成電聯', '完成率', '狀態', '備註'];
+    
+    for (let i = 0; i < expectedHeaders.length; i++) {
+      if (headers[i] !== expectedHeaders[i]) {
+        return false;
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    Logger.log('❌ 檢查進度工作表結構失敗：' + error.message);
+    return false;
+  }
+}
+
+/**
+ * 從老師記錄簿中提取老師資訊
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @returns {Object} 老師資訊
+ */
+function extractTeacherInfoFromBook(teacherBook) {
+  try {
+    // 從記錄簿名稱提取老師姓名
+    const bookName = teacherBook.getName();
+    const teacherName = bookName.replace(/[_\-\s]*記錄簿/, '').trim();
+    
+    // 嘗試從班級資訊工作表獲取詳細資訊
+    let studentCount = 0;
+    let classes = [];
+    
+    const classInfoSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+    if (classInfoSheet) {
+      // 從班級資訊工作表讀取
+      try {
+        const classData = classInfoSheet.getRange('B5').getValue(); // English Class
+        if (classData) {
+          classes = [classData.toString()];
+        }
+      } catch (error) {
+        Logger.log('⚠️ 無法從班級資訊讀取詳細資料：' + error.message);
+      }
+    }
+    
+    // 從學生清單工作表計算學生數量
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    if (studentSheet && studentSheet.getLastRow() > 1) {
+      studentCount = studentSheet.getLastRow() - 1; // 減去標題行
+    }
+    
+    return {
+      teacherName: teacherName,
+      studentCount: studentCount,
+      classes: classes.length > 0 ? classes : ['未知班級']
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 提取老師資訊失敗：' + error.message);
+    return {
+      teacherName: '未知老師',
+      studentCount: 0,
+      classes: ['未知班級']
+    };
+  }
+}
+
+/**
+ * 使用標準函數創建進度追蹤工作表
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {Object} teacherInfo 老師資訊
+ * @returns {Object} 創建結果
+ */
+function createProgressSheetWithTeacherInfo(teacherBook, teacherInfo) {
+  try {
+    Logger.log(`📋 為 ${teacherInfo.teacherName} 創建標準進度追蹤工作表`);
+    
+    // 調用 TeacherManagement.gs 中的標準創建函數
+    createProgressSheet(teacherBook, teacherInfo);
+    
+    return {
+      success: true,
+      action: 'created_standard_structure',
+      message: '已創建標準學期制進度追蹤工作表'
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 創建標準進度工作表失敗：' + error.message);
     return {
       success: false,
       message: error.message
@@ -1434,4 +1580,170 @@ function calculateSystemStats() {
       lastUpdated: new Date()
     };
   }
+}
+
+/**
+ * 批量修復所有老師記錄簿的進度追蹤工作表
+ * 修復因為異動管理系統導致的進度表結構問題
+ * @returns {Object} 修復結果
+ */
+function batchFixProgressTrackingSheets() {
+  Logger.log('🔧 開始批量修復進度追蹤工作表');
+  
+  const ui = SpreadsheetApp.getUi();
+  const fixResults = {
+    totalBooks: 0,
+    fixedBooks: 0,
+    skippedBooks: 0,
+    errorBooks: 0,
+    details: []
+  };
+  
+  try {
+    // 獲取所有老師記錄簿
+    const teacherBooks = getAllTeacherBooks();
+    fixResults.totalBooks = teacherBooks.length;
+    
+    if (teacherBooks.length === 0) {
+      const message = '系統中沒有找到任何老師記錄簿';
+      Logger.log(message);
+      ui.alert('提醒', message, ui.ButtonSet.OK);
+      return fixResults;
+    }
+    
+    Logger.log(`📊 找到 ${teacherBooks.length} 個老師記錄簿，開始批量修復`);
+    
+    // 逐一檢查和修復每個記錄簿
+    teacherBooks.forEach((book, index) => {
+      try {
+        Logger.log(`🔄 處理第 ${index + 1}/${teacherBooks.length} 個記錄簿：${book.getName()}`);
+        
+        const progressSheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+        if (!progressSheet) {
+          Logger.log(`⚠️ ${book.getName()} 沒有進度追蹤工作表，跳過`);
+          fixResults.skippedBooks++;
+          fixResults.details.push({
+            teacherName: book.getName(),
+            action: 'skipped',
+            reason: '沒有進度追蹤工作表'
+          });
+          return;
+        }
+        
+        // 檢查結構是否正確
+        const hasCorrectStructure = checkProgressSheetStructure(progressSheet);
+        
+        if (hasCorrectStructure) {
+          Logger.log(`✅ ${book.getName()} 進度追蹤工作表結構正確，跳過`);
+          fixResults.skippedBooks++;
+          fixResults.details.push({
+            teacherName: book.getName(),
+            action: 'skipped',
+            reason: '結構已正確'
+          });
+          return;
+        }
+        
+        Logger.log(`🔧 修復 ${book.getName()} 的進度追蹤工作表`);
+        
+        // 執行修復
+        const fixResult = rebuildProgressForTeacherBook(book);
+        
+        if (fixResult.success) {
+          fixResults.fixedBooks++;
+          fixResults.details.push({
+            teacherName: book.getName(),
+            action: 'fixed',
+            result: fixResult.action || 'success'
+          });
+          Logger.log(`✅ ${book.getName()} 修復成功`);
+        } else {
+          fixResults.errorBooks++;
+          fixResults.details.push({
+            teacherName: book.getName(),
+            action: 'error',
+            error: fixResult.message
+          });
+          Logger.log(`❌ ${book.getName()} 修復失敗：${fixResult.message}`);
+        }
+        
+      } catch (error) {
+        fixResults.errorBooks++;
+        fixResults.details.push({
+          teacherName: book.getName(),
+          action: 'error',
+          error: error.message
+        });
+        Logger.log(`❌ 處理 ${book.getName()} 時發生錯誤：${error.message}`);
+      }
+    });
+    
+    // 生成修復報告
+    const reportMessage = generateFixReport(fixResults);
+    Logger.log('📋 批量修復完成');
+    Logger.log(reportMessage);
+    
+    ui.alert(
+      '進度追蹤工作表批量修復完成！',
+      reportMessage,
+      ui.ButtonSet.OK
+    );
+    
+    return fixResults;
+    
+  } catch (error) {
+    const errorMessage = `批量修復過程發生錯誤：${error.message}`;
+    Logger.log('❌ ' + errorMessage);
+    ui.alert('錯誤', errorMessage, ui.ButtonSet.OK);
+    
+    fixResults.details.push({
+      teacherName: 'System',
+      action: 'error',
+      error: error.message
+    });
+    
+    return fixResults;
+  }
+}
+
+/**
+ * 生成批量修復報告
+ * @param {Object} fixResults 修復結果
+ * @returns {string} 報告文字
+ */
+function generateFixReport(fixResults) {
+  let report = `📊 批量修復結果：\n\n`;
+  report += `總記錄簿數：${fixResults.totalBooks}\n`;
+  report += `成功修復：${fixResults.fixedBooks}\n`;
+  report += `跳過處理：${fixResults.skippedBooks}\n`;
+  report += `修復失敗：${fixResults.errorBooks}\n\n`;
+  
+  if (fixResults.fixedBooks > 0) {
+    report += `✅ 已修復的記錄簿：\n`;
+    fixResults.details
+      .filter(detail => detail.action === 'fixed')
+      .forEach(detail => {
+        report += `• ${detail.teacherName} - ${detail.result}\n`;
+      });
+    report += '\n';
+  }
+  
+  if (fixResults.errorBooks > 0) {
+    report += `❌ 修復失敗的記錄簿：\n`;
+    fixResults.details
+      .filter(detail => detail.action === 'error')
+      .forEach(detail => {
+        report += `• ${detail.teacherName} - ${detail.error}\n`;
+      });
+    report += '\n';
+  }
+  
+  if (fixResults.fixedBooks > 0) {
+    report += `🎉 修復成功！所有受影響的進度追蹤工作表已恢復為標準的學期制結構。\n`;
+    report += `現在您可以看到正確的學期+Term組合進度追蹤表。`;
+  } else if (fixResults.skippedBooks === fixResults.totalBooks) {
+    report += `✅ 所有進度追蹤工作表結構都是正確的，無需修復。`;
+  }
+  
+  return report;
 }
