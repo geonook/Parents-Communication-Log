@@ -94,6 +94,14 @@ function onOpen() {
         .addSeparator()
         .addItem('🔄 重新排序電聯記錄', 'sortContactRecords')
         .addItem('🔧 排序問題診斷', 'diagnoseSortingIssues'))
+      .addSubMenu(ui.createMenu('🔄 學生異動管理')
+        .addItem('📤 學生轉學/移出', 'studentTransferOut')
+        .addItem('🔄 學生轉班', 'studentClassChange')
+        .addItem('✏️ 學生資料更新', 'studentInfoUpdate')
+        .addSeparator()
+        .addItem('📋 查看異動記錄', 'viewChangeHistory')
+        .addItem('📊 異動統計報告', 'generateChangeReport')
+        .addItem('↩️ 異動回滾', 'rollbackStudentChange'))
       .addSeparator()
       .addItem('📊 檢查全體進度', 'checkAllProgress')
       .addItem('📈 生成進度報告', 'generateProgressReport')
@@ -724,4 +732,500 @@ function generateTestStudentData() {
   ];
   
   return testStudents;
+}
+
+// ============ 學生異動管理介面函數 ============
+
+/**
+ * 學生轉學/移出介面
+ */
+function studentTransferOut() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取學生ID
+    const studentIdResponse = ui.prompt(
+      '學生轉學/移出',
+      '請輸入要轉學/移出的學生ID：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (studentIdResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const studentId = studentIdResponse.getResponseText().trim();
+    if (!studentId) {
+      ui.alert('錯誤', '請輸入有效的學生ID', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取轉學原因
+    const reasonResponse = ui.prompt(
+      '轉學原因',
+      '請輸入轉學/移出原因：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (reasonResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const reason = reasonResponse.getResponseText().trim();
+    
+    // 確認操作
+    const confirmResponse = ui.alert(
+      '確認轉學操作',
+      `即將處理學生轉學/移出：\n\n學生ID：${studentId}\n轉學原因：${reason}\n\n此操作將：\n• 從學生總表標記為已轉出\n• 移除所有老師記錄簿中的學生資料\n• 標記相關電聯記錄為已轉出\n\n確定要繼續嗎？`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse !== ui.Button.YES) {
+      return;
+    }
+    
+    // 執行轉學操作
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.TRANSFER_OUT,
+      reason: reason,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    if (result.success) {
+      ui.alert(
+        '轉學處理完成',
+        `學生 ${studentId} 轉學處理成功！\n\n異動ID：${result.changeId}\n移除記錄：${result.details.removedRecords.join(', ')}\n影響老師：${result.details.affectedTeachers.join(', ')}`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('轉學處理失敗', result.message, ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    Logger.log('學生轉學介面錯誤：' + error.message);
+    safeErrorHandler('學生轉學/移出', error);
+  }
+}
+
+/**
+ * 學生轉班介面
+ */
+function studentClassChange() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取學生ID
+    const studentIdResponse = ui.prompt(
+      '學生轉班',
+      '請輸入要轉班的學生ID：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (studentIdResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const studentId = studentIdResponse.getResponseText().trim();
+    if (!studentId) {
+      ui.alert('錯誤', '請輸入有效的學生ID', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取目標老師
+    const teacherResponse = ui.prompt(
+      '目標老師',
+      '請輸入新老師姓名：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (teacherResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const newTeacher = teacherResponse.getResponseText().trim();
+    if (!newTeacher) {
+      ui.alert('錯誤', '請輸入有效的老師姓名', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 確認操作
+    const confirmResponse = ui.alert(
+      '確認轉班操作',
+      `即將處理學生轉班：\n\n學生ID：${studentId}\n新老師：${newTeacher}\n\n此操作將：\n• 從原老師記錄簿移除學生資料\n• 添加學生到新老師記錄簿\n• 標記相關電聯記錄為已轉班\n• 更新學生總表中的老師資訊\n\n確定要繼續嗎？`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse !== ui.Button.YES) {
+      return;
+    }
+    
+    // 執行轉班操作
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE,
+      newTeacher: newTeacher,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    if (result.success) {
+      ui.alert(
+        '轉班處理完成',
+        `學生 ${studentId} 轉班處理成功！\n\n異動ID：${result.changeId}\n從：${result.details.fromTeacher}\n到：${result.details.toTeacher}\n轉班日期：${result.details.transferDate}`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('轉班處理失敗', result.message, ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    Logger.log('學生轉班介面錯誤：' + error.message);
+    safeErrorHandler('學生轉班', error);
+  }
+}
+
+/**
+ * 學生資料更新介面
+ */
+function studentInfoUpdate() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取學生ID
+    const studentIdResponse = ui.prompt(
+      '學生資料更新',
+      '請輸入要更新的學生ID：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (studentIdResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const studentId = studentIdResponse.getResponseText().trim();
+    if (!studentId) {
+      ui.alert('錯誤', '請輸入有效的學生ID', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取更新欄位
+    const fieldResponse = ui.prompt(
+      '更新欄位',
+      '請輸入要更新的欄位名稱（例如：Chinese Name, English Name, English Class）：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (fieldResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const fieldName = fieldResponse.getResponseText().trim();
+    if (!fieldName) {
+      ui.alert('錯誤', '請輸入有效的欄位名稱', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取新值
+    const valueResponse = ui.prompt(
+      '新值',
+      `請輸入 ${fieldName} 的新值：`,
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (valueResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const newValue = valueResponse.getResponseText().trim();
+    
+    // 確認操作
+    const confirmResponse = ui.alert(
+      '確認更新操作',
+      `即將更新學生資料：\n\n學生ID：${studentId}\n更新欄位：${fieldName}\n新值：${newValue}\n\n此操作將同步更新：\n• 學生總表\n• 所有相關老師記錄簿\n\n確定要繼續嗎？`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse !== ui.Button.YES) {
+      return;
+    }
+    
+    // 執行更新操作
+    const updateData = {};
+    updateData[fieldName] = newValue;
+    
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.INFO_UPDATE,
+      updateData: updateData,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    if (result.success) {
+      ui.alert(
+        '資料更新完成',
+        `學生 ${studentId} 資料更新成功！\n\n異動ID：${result.changeId}\n更新欄位：${result.details.updatedFields.join(', ')}\n更新數量：${result.details.updateCount} 個位置`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('資料更新失敗', result.message, ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    Logger.log('學生資料更新介面錯誤：' + error.message);
+    safeErrorHandler('學生資料更新', error);
+  }
+}
+
+/**
+ * 查看異動記錄介面
+ */
+function viewChangeHistory() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取異動記錄檔案
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      ui.alert('提醒', '尚未找到異動記錄檔案', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 開啟異動記錄檔案
+    const logSpreadsheet = logSheet.getParent();
+    const logUrl = logSpreadsheet.getUrl();
+    
+    ui.alert(
+      '異動記錄',
+      `異動記錄檔案已開啟：\n\n${logUrl}\n\n您可以查看所有學生異動的詳細記錄，包括：\n• 異動類型和日期\n• 操作者資訊\n• 異動狀態\n• 備份資料位置`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    Logger.log('查看異動記錄介面錯誤：' + error.message);
+    safeErrorHandler('查看異動記錄', error);
+  }
+}
+
+/**
+ * 異動統計報告介面
+ */
+function generateChangeReport() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取異動記錄
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      ui.alert('提醒', '尚未找到異動記錄檔案', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 生成統計報告
+    const reportData = generateChangeStatistics();
+    
+    // 創建報告檔案
+    const reportName = `異動統計報告_${formatDateTimeForFilename()}`;
+    const reportSheet = SpreadsheetApp.create(reportName);
+    const sheet = reportSheet.getActiveSheet();
+    
+    // 寫入報告內容
+    sheet.setName('異動統計');
+    sheet.getRange('A1').setValue('學生異動統計報告');
+    sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
+    
+    let row = 3;
+    sheet.getRange(row, 1).setValue('報告生成時間：' + new Date().toLocaleString());
+    row += 2;
+    
+    // 基本統計
+    sheet.getRange(row, 1).setValue('基本統計');
+    sheet.getRange(row, 1).setFontWeight('bold');
+    row++;
+    sheet.getRange(row, 1).setValue('總異動次數：' + reportData.totalChanges);
+    row++;
+    sheet.getRange(row, 1).setValue('轉學/移出：' + reportData.transferOutCount);
+    row++;
+    sheet.getRange(row, 1).setValue('轉班：' + reportData.classChangeCount);
+    row++;
+    sheet.getRange(row, 1).setValue('資料更新：' + reportData.infoUpdateCount);
+    row += 2;
+    
+    // 狀態統計
+    sheet.getRange(row, 1).setValue('狀態統計');
+    sheet.getRange(row, 1).setFontWeight('bold');
+    row++;
+    sheet.getRange(row, 1).setValue('已完成：' + reportData.completedCount);
+    row++;
+    sheet.getRange(row, 1).setValue('失敗：' + reportData.failedCount);
+    row++;
+    sheet.getRange(row, 1).setValue('已回滾：' + reportData.rolledBackCount);
+    
+    // 移動到主資料夾
+    const mainFolder = getSystemMainFolder();
+    const reportFile = DriveApp.getFileById(reportSheet.getId());
+    mainFolder.addFile(reportFile);
+    DriveApp.getRootFolder().removeFile(reportFile);
+    
+    ui.alert(
+      '統計報告生成完成',
+      `異動統計報告已生成：\n\n${reportSheet.getUrl()}\n\n報告包含：\n• 基本異動統計\n• 異動狀態分析\n• 時間分布統計`,
+      ui.ButtonSet.OK
+    );
+    
+  } catch (error) {
+    Logger.log('生成異動統計報告介面錯誤：' + error.message);
+    safeErrorHandler('異動統計報告', error);
+  }
+}
+
+/**
+ * 異動回滾介面
+ */
+function rollbackStudentChange() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    
+    // 獲取異動ID
+    const changeIdResponse = ui.prompt(
+      '異動回滾',
+      '請輸入要回滾的異動ID：',
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (changeIdResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const changeId = changeIdResponse.getResponseText().trim();
+    if (!changeId) {
+      ui.alert('錯誤', '請輸入有效的異動ID', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 獲取異動記錄
+    const changeRecord = getChangeRecord(changeId);
+    if (!changeRecord) {
+      ui.alert('錯誤', '找不到指定的異動記錄：' + changeId, ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 確認回滾操作
+    const confirmResponse = ui.alert(
+      '確認回滾操作',
+      `即將回滾異動：\n\n異動ID：${changeId}\n學生ID：${changeRecord['Student ID']}\n異動類型：${changeRecord['Change Type']}\n異動日期：${changeRecord['Change Date']}\n\n此操作將：\n• 恢復異動前的所有資料\n• 將異動狀態標記為已回滾\n• 重建相關統計\n\n確定要繼續嗎？`,
+      ui.ButtonSet.YES_NO
+    );
+    
+    if (confirmResponse !== ui.Button.YES) {
+      return;
+    }
+    
+    // 執行回滾操作
+    const result = rollbackStudentChange(changeId);
+    
+    if (result.success) {
+      ui.alert(
+        '回滾處理完成',
+        `異動 ${changeId} 回滾成功！\n\n所有相關資料已恢復到異動前狀態。`,
+        ui.ButtonSet.OK
+      );
+    } else {
+      ui.alert('回滾處理失敗', result.message, ui.ButtonSet.OK);
+    }
+    
+  } catch (error) {
+    Logger.log('異動回滾介面錯誤：' + error.message);
+    safeErrorHandler('異動回滾', error);
+  }
+}
+
+/**
+ * 生成異動統計資料
+ * @returns {Object} 統計資料
+ */
+function generateChangeStatistics() {
+  try {
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      return {
+        totalChanges: 0,
+        transferOutCount: 0,
+        classChangeCount: 0,
+        infoUpdateCount: 0,
+        completedCount: 0,
+        failedCount: 0,
+        rolledBackCount: 0
+      };
+    }
+    
+    const data = logSheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return {
+        totalChanges: 0,
+        transferOutCount: 0,
+        classChangeCount: 0,
+        infoUpdateCount: 0,
+        completedCount: 0,
+        failedCount: 0,
+        rolledBackCount: 0
+      };
+    }
+    
+    const headers = data[0];
+    const changeTypeCol = headers.indexOf('Change Type');
+    const statusCol = headers.indexOf('Status');
+    
+    const stats = {
+      totalChanges: data.length - 1,
+      transferOutCount: 0,
+      classChangeCount: 0,
+      infoUpdateCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      rolledBackCount: 0
+    };
+    
+    for (let i = 1; i < data.length; i++) {
+      const changeType = data[i][changeTypeCol];
+      const status = data[i][statusCol];
+      
+      // 統計異動類型
+      if (changeType === CHANGE_LOG_CONFIG.CHANGE_TYPES.TRANSFER_OUT) {
+        stats.transferOutCount++;
+      } else if (changeType === CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE) {
+        stats.classChangeCount++;
+      } else if (changeType === CHANGE_LOG_CONFIG.CHANGE_TYPES.INFO_UPDATE) {
+        stats.infoUpdateCount++;
+      }
+      
+      // 統計狀態
+      if (status === CHANGE_LOG_CONFIG.STATUS.COMPLETED) {
+        stats.completedCount++;
+      } else if (status === CHANGE_LOG_CONFIG.STATUS.FAILED) {
+        stats.failedCount++;
+      } else if (status === CHANGE_LOG_CONFIG.STATUS.ROLLED_BACK) {
+        stats.rolledBackCount++;
+      }
+    }
+    
+    return stats;
+    
+  } catch (error) {
+    Logger.log('生成異動統計資料失敗：' + error.message);
+    return {
+      totalChanges: 0,
+      transferOutCount: 0,
+      classChangeCount: 0,
+      infoUpdateCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      rolledBackCount: 0
+    };
+  }
 } 

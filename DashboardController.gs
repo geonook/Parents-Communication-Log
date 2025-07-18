@@ -730,6 +730,375 @@ function checkAllProgressWeb() {
   }
 }
 
+// ============ 學生異動管理 Web API 函數 ============
+
+/**
+ * 學生搜尋 Web API
+ * @param {string} searchTerm 搜尋條件
+ * @returns {Object} 搜尋結果
+ */
+function searchStudentWeb(searchTerm) {
+  try {
+    Logger.log('Dashboard: 搜尋學生 - ' + searchTerm);
+    
+    // 根據搜尋條件判斷搜尋方式
+    let searchResult;
+    
+    if (searchTerm.match(/^[A-Za-z0-9]+$/)) {
+      // 純字母數字組合，視為學生ID
+      searchResult = findStudentByID(searchTerm);
+      if (searchResult.found) {
+        searchResult.students = [searchResult];
+      }
+    } else {
+      // 包含中文或其他字符，視為姓名
+      searchResult = findStudentByName(searchTerm);
+    }
+    
+    return {
+      success: true,
+      students: searchResult.students || [],
+      count: searchResult.count || 0
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 搜尋學生失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '搜尋失敗：' + error.message,
+      students: [],
+      count: 0
+    };
+  }
+}
+
+/**
+ * 學生轉學/移出 Web API
+ * @param {string} studentId 學生ID
+ * @param {string} reason 轉學原因
+ * @returns {Object} 處理結果
+ */
+function processStudentTransferOutWeb(studentId, reason) {
+  try {
+    Logger.log(`Dashboard: 處理學生轉學 - ${studentId}`);
+    
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.TRANSFER_OUT,
+      reason: reason,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    return {
+      success: result.success,
+      message: result.message,
+      changeId: result.changeId,
+      details: result.details
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 學生轉學處理失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '轉學處理失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 學生轉班 Web API
+ * @param {string} studentId 學生ID
+ * @param {string} newTeacher 新老師
+ * @returns {Object} 處理結果
+ */
+function processStudentClassChangeWeb(studentId, newTeacher) {
+  try {
+    Logger.log(`Dashboard: 處理學生轉班 - ${studentId} → ${newTeacher}`);
+    
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE,
+      newTeacher: newTeacher,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    return {
+      success: result.success,
+      message: result.message,
+      changeId: result.changeId,
+      details: result.details
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 學生轉班處理失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '轉班處理失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 學生資料更新 Web API
+ * @param {string} studentId 學生ID
+ * @param {string} field 更新欄位
+ * @param {string} value 新值
+ * @returns {Object} 處理結果
+ */
+function processStudentInfoUpdateWeb(studentId, field, value) {
+  try {
+    Logger.log(`Dashboard: 處理學生資料更新 - ${studentId}, ${field}: ${value}`);
+    
+    const updateData = {};
+    updateData[field] = value;
+    
+    const changeRequest = {
+      studentId: studentId,
+      changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.INFO_UPDATE,
+      updateData: updateData,
+      operator: Session.getActiveUser().getEmail()
+    };
+    
+    const result = processStudentChange(changeRequest);
+    
+    return {
+      success: result.success,
+      message: result.message,
+      changeId: result.changeId,
+      details: result.details
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 學生資料更新失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '資料更新失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 獲取異動記錄URL Web API
+ * @returns {Object} 異動記錄檔案URL
+ */
+function getChangeHistoryUrlWeb() {
+  try {
+    Logger.log('Dashboard: 獲取異動記錄URL');
+    
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      return {
+        success: false,
+        message: '尚未找到異動記錄檔案'
+      };
+    }
+    
+    const logSpreadsheet = logSheet.getParent();
+    const logUrl = logSpreadsheet.getUrl();
+    
+    return {
+      success: true,
+      url: logUrl
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 獲取異動記錄URL失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '獲取異動記錄失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 生成異動統計報告 Web API
+ * @returns {Object} 報告生成結果
+ */
+function generateChangeReportWeb() {
+  try {
+    Logger.log('Dashboard: 生成異動統計報告');
+    
+    // 獲取異動記錄
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      return {
+        success: false,
+        message: '尚未找到異動記錄檔案'
+      };
+    }
+    
+    // 生成統計報告
+    const reportData = generateChangeStatistics();
+    
+    // 創建報告檔案
+    const reportName = `異動統計報告_${formatDateTimeForFilename()}`;
+    const reportSheet = SpreadsheetApp.create(reportName);
+    const sheet = reportSheet.getActiveSheet();
+    
+    // 寫入報告內容
+    sheet.setName('異動統計');
+    sheet.getRange('A1').setValue('學生異動統計報告');
+    sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
+    
+    let row = 3;
+    sheet.getRange(row, 1).setValue('報告生成時間：' + new Date().toLocaleString());
+    row += 2;
+    
+    // 基本統計
+    sheet.getRange(row, 1).setValue('基本統計');
+    sheet.getRange(row, 1).setFontWeight('bold');
+    row++;
+    sheet.getRange(row, 1).setValue('總異動次數：' + reportData.totalChanges);
+    row++;
+    sheet.getRange(row, 1).setValue('轉學/移出：' + reportData.transferOutCount);
+    row++;
+    sheet.getRange(row, 1).setValue('轉班：' + reportData.classChangeCount);
+    row++;
+    sheet.getRange(row, 1).setValue('資料更新：' + reportData.infoUpdateCount);
+    row += 2;
+    
+    // 狀態統計
+    sheet.getRange(row, 1).setValue('狀態統計');
+    sheet.getRange(row, 1).setFontWeight('bold');
+    row++;
+    sheet.getRange(row, 1).setValue('已完成：' + reportData.completedCount);
+    row++;
+    sheet.getRange(row, 1).setValue('失敗：' + reportData.failedCount);
+    row++;
+    sheet.getRange(row, 1).setValue('已回滾：' + reportData.rolledBackCount);
+    
+    // 移動到主資料夾
+    const mainFolder = getSystemMainFolder();
+    const reportFile = DriveApp.getFileById(reportSheet.getId());
+    mainFolder.addFile(reportFile);
+    DriveApp.getRootFolder().removeFile(reportFile);
+    
+    return {
+      success: true,
+      message: '異動統計報告生成完成',
+      reportUrl: reportSheet.getUrl()
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 生成異動統計報告失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '報告生成失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 異動回滾 Web API
+ * @param {string} changeId 異動ID
+ * @returns {Object} 回滾結果
+ */
+function processStudentRollbackWeb(changeId) {
+  try {
+    Logger.log(`Dashboard: 處理異動回滾 - ${changeId}`);
+    
+    const result = rollbackStudentChange(changeId);
+    
+    return {
+      success: result.success,
+      message: result.message
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 異動回滾失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '異動回滾失敗：' + error.message
+    };
+  }
+}
+
+/**
+ * 獲取異動統計摘要 Web API
+ * @returns {Object} 統計摘要
+ */
+function getChangeStatsSummaryWeb() {
+  try {
+    Logger.log('Dashboard: 獲取異動統計摘要');
+    
+    const logSheet = getChangeLogSheet();
+    if (!logSheet) {
+      return {
+        success: true,
+        stats: {
+          totalChanges: 0,
+          recentChanges: 0,
+          pendingChanges: 0,
+          message: '尚未有異動記錄'
+        }
+      };
+    }
+    
+    const data = logSheet.getDataRange().getValues();
+    if (data.length <= 1) {
+      return {
+        success: true,
+        stats: {
+          totalChanges: 0,
+          recentChanges: 0,
+          pendingChanges: 0,
+          message: '尚未有異動記錄'
+        }
+      };
+    }
+    
+    const headers = data[0];
+    const statusCol = headers.indexOf('Status');
+    const dateCol = headers.indexOf('Change Date');
+    
+    const stats = {
+      totalChanges: data.length - 1,
+      recentChanges: 0,
+      pendingChanges: 0,
+      completedChanges: 0,
+      failedChanges: 0
+    };
+    
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    for (let i = 1; i < data.length; i++) {
+      const status = data[i][statusCol];
+      const changeDate = new Date(data[i][dateCol]);
+      
+      // 統計最近24小時的異動
+      if (changeDate > oneDayAgo) {
+        stats.recentChanges++;
+      }
+      
+      // 統計各狀態的異動
+      if (status === CHANGE_LOG_CONFIG.STATUS.PENDING) {
+        stats.pendingChanges++;
+      } else if (status === CHANGE_LOG_CONFIG.STATUS.COMPLETED) {
+        stats.completedChanges++;
+      } else if (status === CHANGE_LOG_CONFIG.STATUS.FAILED) {
+        stats.failedChanges++;
+      }
+    }
+    
+    return {
+      success: true,
+      stats: stats
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 獲取異動統計摘要失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '獲取統計摘要失敗：' + error.message
+    };
+  }
+}
+
 /**
  * 計算學期制進度摘要統計
  */

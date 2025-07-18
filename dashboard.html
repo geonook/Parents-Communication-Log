@@ -219,6 +219,182 @@
             min-height: 100px;
         }
         
+        /* 學生異動管理樣式 */
+        .student-search-container {
+            margin-bottom: 20px;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 10px;
+            align-items: end;
+        }
+        
+        .search-form .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+        
+        .search-button {
+            padding: 12px 20px;
+            background: #4facfe;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s;
+        }
+        
+        .search-button:hover {
+            background: #3d8bfe;
+        }
+        
+        .search-results {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            display: none;
+        }
+        
+        .search-results.show {
+            display: block;
+        }
+        
+        .student-card {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .student-card h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .student-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .change-operations, .change-history {
+            margin-bottom: 20px;
+        }
+        
+        .change-operations h3, .change-history h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .action-button.danger {
+            background: #dc3545;
+        }
+        
+        .action-button.danger:hover {
+            background: #c82333;
+        }
+        
+        .action-button.warning {
+            background: #fd7e14;
+        }
+        
+        .action-button.warning:hover {
+            background: #e8610e;
+        }
+        
+        /* 異動表單模態框 */
+        .change-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .change-modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: none;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+        }
+        
+        .change-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .change-modal-header h3 {
+            margin: 0;
+            color: #495057;
+        }
+        
+        .change-modal-close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .change-modal-close:hover {
+            color: #000;
+        }
+        
+        .change-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .change-form-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+        
+        .change-form-actions button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        
+        .change-form-actions .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .change-form-actions .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .change-form-actions .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .change-form-actions .btn-secondary:hover {
+            background: #545b62;
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2em;
@@ -427,6 +603,74 @@
                 </div>
             </div>
             
+            <!-- 學生異動管理 -->
+            <div class="section">
+                <h2>🔄 學生異動管理</h2>
+                
+                <!-- 學生搜尋器 -->
+                <div class="student-search-container">
+                    <div class="search-form">
+                        <div class="form-group">
+                            <label for="studentSearchInput">🔍 學生搜尋：</label>
+                            <input type="text" id="studentSearchInput" placeholder="輸入學生ID或姓名..." />
+                            <button class="search-button" onclick="searchStudent()">搜尋</button>
+                        </div>
+                    </div>
+                    
+                    <div id="studentSearchResults" class="search-results">
+                        <!-- 搜尋結果將顯示在這裡 -->
+                    </div>
+                </div>
+                
+                <!-- 異動操作區 -->
+                <div class="change-operations">
+                    <h3>📋 異動操作</h3>
+                    <div class="button-grid">
+                        <button class="action-button danger" onclick="showTransferOutForm()">
+                            📤 學生轉學/移出
+                        </button>
+                        <button class="action-button warning" onclick="showClassChangeForm()">
+                            🔄 學生轉班
+                        </button>
+                        <button class="action-button secondary" onclick="showInfoUpdateForm()">
+                            ✏️ 學生資料更新
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 異動記錄查看 -->
+                <div class="change-history">
+                    <h3>📋 異動記錄</h3>
+                    <div class="button-grid">
+                        <button class="action-button secondary" onclick="viewChangeHistory()">
+                            📋 查看異動記錄
+                        </button>
+                        <button class="action-button secondary" onclick="generateChangeReport()">
+                            📊 異動統計報告
+                        </button>
+                        <button class="action-button warning" onclick="showRollbackForm()">
+                            ↩️ 異動回滾
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="instructions" style="margin-top: 20px;">
+                    <h3>📚 使用說明：</h3>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; line-height: 1.6;">
+                        <p><strong>🔄 異動操作：</strong></p>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            <li><strong>學生轉學/移出：</strong>完全移除學生的所有電聯記錄</li>
+                            <li><strong>學生轉班：</strong>將學生從原老師轉移到新老師記錄簿</li>
+                            <li><strong>學生資料更新：</strong>更新學生個人資訊並同步到所有相關記錄</li>
+                            <li><strong>異動回滾：</strong>恢復異動前的資料狀態</li>
+                        </ul>
+                        <p style="color: #666; font-style: italic; margin-top: 10px;">
+                            ⚠️ 注意：所有異動操作都會自動備份原始資料，支援回滾功能。
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
             <!-- 系統監控 -->
             <div class="section">
                 <h2>📊 系統監控</h2>
@@ -490,6 +734,110 @@
         
         <div class="footer">
             <p>© 2024 電聯記錄簿系統 - 專為中師英文科設計</p>
+        </div>
+    </div>
+
+    <!-- 學生異動管理模態框 -->
+    
+    <!-- 學生轉學/移出模態框 -->
+    <div id="transferOutModal" class="change-modal">
+        <div class="change-modal-content">
+            <div class="change-modal-header">
+                <h3>📤 學生轉學/移出</h3>
+                <span class="change-modal-close">&times;</span>
+            </div>
+            <div class="change-form">
+                <div class="form-group">
+                    <label for="transferOutStudentId">學生ID：</label>
+                    <input type="text" id="transferOutStudentId" placeholder="請輸入學生ID" />
+                </div>
+                <div class="form-group">
+                    <label for="transferOutReason">轉學原因：</label>
+                    <textarea id="transferOutReason" placeholder="請輸入轉學/移出原因"></textarea>
+                </div>
+                <div class="change-form-actions">
+                    <button class="btn-secondary" onclick="closeTransferOutModal()">取消</button>
+                    <button class="btn-primary" onclick="processTransferOut()">確認轉學</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 學生轉班模態框 -->
+    <div id="classChangeModal" class="change-modal">
+        <div class="change-modal-content">
+            <div class="change-modal-header">
+                <h3>🔄 學生轉班</h3>
+                <span class="change-modal-close">&times;</span>
+            </div>
+            <div class="change-form">
+                <div class="form-group">
+                    <label for="classChangeStudentId">學生ID：</label>
+                    <input type="text" id="classChangeStudentId" placeholder="請輸入學生ID" />
+                </div>
+                <div class="form-group">
+                    <label for="classChangeNewTeacher">新老師：</label>
+                    <input type="text" id="classChangeNewTeacher" placeholder="請輸入新老師姓名" />
+                </div>
+                <div class="change-form-actions">
+                    <button class="btn-secondary" onclick="closeClassChangeModal()">取消</button>
+                    <button class="btn-primary" onclick="processClassChange()">確認轉班</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 學生資料更新模態框 -->
+    <div id="infoUpdateModal" class="change-modal">
+        <div class="change-modal-content">
+            <div class="change-modal-header">
+                <h3>✏️ 學生資料更新</h3>
+                <span class="change-modal-close">&times;</span>
+            </div>
+            <div class="change-form">
+                <div class="form-group">
+                    <label for="infoUpdateStudentId">學生ID：</label>
+                    <input type="text" id="infoUpdateStudentId" placeholder="請輸入學生ID" />
+                </div>
+                <div class="form-group">
+                    <label for="infoUpdateField">更新欄位：</label>
+                    <select id="infoUpdateField">
+                        <option value="Chinese Name">中文姓名</option>
+                        <option value="English Name">英文姓名</option>
+                        <option value="English Class">英文班級</option>
+                        <option value="Mother's Phone">母親電話</option>
+                        <option value="Father's Phone">父親電話</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="infoUpdateValue">新值：</label>
+                    <input type="text" id="infoUpdateValue" placeholder="請輸入新值" />
+                </div>
+                <div class="change-form-actions">
+                    <button class="btn-secondary" onclick="closeInfoUpdateModal()">取消</button>
+                    <button class="btn-primary" onclick="processInfoUpdate()">確認更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 異動回滾模態框 -->
+    <div id="rollbackModal" class="change-modal">
+        <div class="change-modal-content">
+            <div class="change-modal-header">
+                <h3>↩️ 異動回滾</h3>
+                <span class="change-modal-close">&times;</span>
+            </div>
+            <div class="change-form">
+                <div class="form-group">
+                    <label for="rollbackChangeId">異動ID：</label>
+                    <input type="text" id="rollbackChangeId" placeholder="請輸入異動ID" />
+                </div>
+                <div class="change-form-actions">
+                    <button class="btn-secondary" onclick="closeRollbackModal()">取消</button>
+                    <button class="btn-primary" onclick="processRollback()">確認回滾</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -844,6 +1192,290 @@
                 })
                 .executeSystemFunction('updateTeachersList');
         }
+
+        // ============ 學生異動管理 JavaScript 函數 ============
+        
+        function searchStudent() {
+            const searchInput = document.getElementById('studentSearchInput');
+            const searchResults = document.getElementById('studentSearchResults');
+            const searchTerm = searchInput.value.trim();
+            
+            if (!searchTerm) {
+                alert('請輸入學生ID或姓名');
+                return;
+            }
+            
+            searchResults.innerHTML = '🔍 搜尋中...';
+            searchResults.classList.add('show');
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success && result.students.length > 0) {
+                        displaySearchResults(result.students);
+                    } else {
+                        searchResults.innerHTML = '😞 未找到符合條件的學生';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    searchResults.innerHTML = '❌ 搜尋失敗：' + error.message;
+                })
+                .searchStudentWeb(searchTerm);
+        }
+        
+        function displaySearchResults(students) {
+            const searchResults = document.getElementById('studentSearchResults');
+            let html = '<h4>🔍 搜尋結果：</h4>';
+            
+            students.forEach(student => {
+                html += `
+                    <div class="student-card">
+                        <h4>${student.student['Chinese Name'] || student.student['English Name'] || '未知'}</h4>
+                        <div class="student-info">
+                            <div><strong>ID:</strong> ${student.student.ID || student.student['Student ID']}</div>
+                            <div><strong>中文姓名:</strong> ${student.student['Chinese Name'] || '未填寫'}</div>
+                            <div><strong>英文姓名:</strong> ${student.student['English Name'] || '未填寫'}</div>
+                            <div><strong>英文班級:</strong> ${student.student['English Class'] || '未填寫'}</div>
+                            <div><strong>年級:</strong> ${student.student.Grade || '未填寫'}</div>
+                            <div><strong>班級:</strong> ${student.student.HR || '未填寫'}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            searchResults.innerHTML = html;
+        }
+        
+        function showTransferOutForm() {
+            document.getElementById('transferOutModal').style.display = 'block';
+        }
+        
+        function closeTransferOutModal() {
+            document.getElementById('transferOutModal').style.display = 'none';
+            document.getElementById('transferOutStudentId').value = '';
+            document.getElementById('transferOutReason').value = '';
+        }
+        
+        function processTransferOut() {
+            const studentId = document.getElementById('transferOutStudentId').value.trim();
+            const reason = document.getElementById('transferOutReason').value.trim();
+            
+            if (!studentId) {
+                alert('請輸入學生ID');
+                return;
+            }
+            
+            if (!reason) {
+                alert('請輸入轉學原因');
+                return;
+            }
+            
+            if (!confirm(`確定要將學生 ${studentId} 轉學/移出嗎？\n\n原因：${reason}\n\n此操作無法直接復原，但可以透過異動回滾功能恢復。`)) {
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        alert('✅ 學生轉學處理完成！\n\n異動ID：' + result.changeId);
+                        closeTransferOutModal();
+                        updateStats();
+                    } else {
+                        alert('❌ 轉學處理失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    alert('❌ 轉學處理失敗：' + error.message);
+                })
+                .processStudentTransferOutWeb(studentId, reason);
+        }
+        
+        function showClassChangeForm() {
+            document.getElementById('classChangeModal').style.display = 'block';
+        }
+        
+        function closeClassChangeModal() {
+            document.getElementById('classChangeModal').style.display = 'none';
+            document.getElementById('classChangeStudentId').value = '';
+            document.getElementById('classChangeNewTeacher').value = '';
+        }
+        
+        function processClassChange() {
+            const studentId = document.getElementById('classChangeStudentId').value.trim();
+            const newTeacher = document.getElementById('classChangeNewTeacher').value.trim();
+            
+            if (!studentId) {
+                alert('請輸入學生ID');
+                return;
+            }
+            
+            if (!newTeacher) {
+                alert('請輸入新老師姓名');
+                return;
+            }
+            
+            if (!confirm(`確定要將學生 ${studentId} 轉班到 ${newTeacher} 嗎？\n\n此操作會將學生從原老師記錄簿轉移到新老師記錄簿。`)) {
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        alert('✅ 學生轉班處理完成！\n\n異動ID：' + result.changeId);
+                        closeClassChangeModal();
+                        updateStats();
+                    } else {
+                        alert('❌ 轉班處理失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    alert('❌ 轉班處理失敗：' + error.message);
+                })
+                .processStudentClassChangeWeb(studentId, newTeacher);
+        }
+        
+        function showInfoUpdateForm() {
+            document.getElementById('infoUpdateModal').style.display = 'block';
+        }
+        
+        function closeInfoUpdateModal() {
+            document.getElementById('infoUpdateModal').style.display = 'none';
+            document.getElementById('infoUpdateStudentId').value = '';
+            document.getElementById('infoUpdateValue').value = '';
+        }
+        
+        function processInfoUpdate() {
+            const studentId = document.getElementById('infoUpdateStudentId').value.trim();
+            const field = document.getElementById('infoUpdateField').value;
+            const value = document.getElementById('infoUpdateValue').value.trim();
+            
+            if (!studentId) {
+                alert('請輸入學生ID');
+                return;
+            }
+            
+            if (!value) {
+                alert('請輸入新值');
+                return;
+            }
+            
+            if (!confirm(`確定要更新學生 ${studentId} 的資料嗎？\n\n欄位：${field}\n新值：${value}\n\n此操作會同步更新所有相關記錄。`)) {
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        alert('✅ 學生資料更新完成！\n\n異動ID：' + result.changeId);
+                        closeInfoUpdateModal();
+                        updateStats();
+                    } else {
+                        alert('❌ 資料更新失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    alert('❌ 資料更新失敗：' + error.message);
+                })
+                .processStudentInfoUpdateWeb(studentId, field, value);
+        }
+        
+        function viewChangeHistory() {
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        window.open(result.url, '_blank');
+                    } else {
+                        alert('❌ 無法開啟異動記錄：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    alert('❌ 開啟異動記錄失敗：' + error.message);
+                })
+                .getChangeHistoryUrlWeb();
+        }
+        
+        function generateChangeReport() {
+            const originalText = event.target.textContent;
+            event.target.textContent = '生成中...';
+            event.target.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    event.target.textContent = originalText;
+                    event.target.disabled = false;
+                    
+                    if (result.success) {
+                        if (confirm('✅ 異動統計報告生成完成！\n\n是否要開啟報告？')) {
+                            window.open(result.reportUrl, '_blank');
+                        }
+                    } else {
+                        alert('❌ 報告生成失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    event.target.textContent = originalText;
+                    event.target.disabled = false;
+                    alert('❌ 報告生成失敗：' + error.message);
+                })
+                .generateChangeReportWeb();
+        }
+        
+        function showRollbackForm() {
+            document.getElementById('rollbackModal').style.display = 'block';
+        }
+        
+        function closeRollbackModal() {
+            document.getElementById('rollbackModal').style.display = 'none';
+            document.getElementById('rollbackChangeId').value = '';
+        }
+        
+        function processRollback() {
+            const changeId = document.getElementById('rollbackChangeId').value.trim();
+            
+            if (!changeId) {
+                alert('請輸入異動ID');
+                return;
+            }
+            
+            if (!confirm(`確定要回滾異動 ${changeId} 嗎？\n\n此操作會將所有相關資料恢復到異動前狀態。`)) {
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        alert('✅ 異動回滾完成！\n\n所有資料已恢復到異動前狀態。');
+                        closeRollbackModal();
+                        updateStats();
+                    } else {
+                        alert('❌ 異動回滾失敗：' + result.message);
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    alert('❌ 異動回滾失敗：' + error.message);
+                })
+                .processStudentRollbackWeb(changeId);
+        }
+        
+        // 模態框關閉事件處理
+        document.addEventListener('DOMContentLoaded', function() {
+            // 現有的 DOMContentLoaded 事件處理...
+            
+            // 異動管理模態框關閉事件
+            document.querySelectorAll('.change-modal-close').forEach(closeBtn => {
+                closeBtn.addEventListener('click', function() {
+                    this.closest('.change-modal').style.display = 'none';
+                });
+            });
+            
+            // 點擊模態框外部關閉
+            document.querySelectorAll('.change-modal').forEach(modal => {
+                modal.addEventListener('click', function(event) {
+                    if (event.target === this) {
+                        this.style.display = 'none';
+                    }
+                });
+            });
+        });
 
         function checkAllProgress() {
             const button = event.target;
