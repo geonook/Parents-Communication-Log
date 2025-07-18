@@ -1241,7 +1241,8 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
       return;
     }
     
-    // 為每個學期和term建立記錄
+    // 為每個學期和term建立記錄（確保順序：Fall->Spring, Beginning->Midterm->Final）
+    Logger.log(`🔄 為學生 ${studentId}(${chineseName}) 建立預建記錄...`);
     SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.forEach(semester => {
       SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.forEach(term => {
         const record = [
@@ -1257,10 +1258,21 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
           '',                                          // Parents Responses (空白，由老師填寫)
           ''                                           // Contact Method (空白，由老師填寫)
         ];
+        
+        // 記錄預建記錄的詳細信息
+        if (prebuiltRecords.length < 12) { // 只記錄前12筆（2個學生的完整記錄）
+          Logger.log(`  👤 預建記錄 #${prebuiltRecords.length + 1}: ID=${studentId}, Semester="${semester}", Term="${term}"`);
+        }
+        
         prebuiltRecords.push(record);
       });
     });
   });
+  
+  // 驗證系統配置順序
+  Logger.log(`🔍 系統配置驗證：`);
+  Logger.log(`  Semesters: ${SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.join(' → ')}`);
+  Logger.log(`  Terms: ${SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.join(' → ')}`);
   
   // 使用統一排序函數進行排序
   Logger.log(`🔄 開始排序 ${prebuiltRecords.length} 筆Scheduled Contact記錄...`);
@@ -1361,32 +1373,69 @@ function sortContactRecordsData(allData) {
     
     Logger.log(`🔄 開始統一排序函數，處理 ${records.length} 筆電聯記錄...`);
     
-    // 動態欄位映射（避免硬編碼索引）
-    const fieldMapping = {
-      studentId: 0,     // Student ID
-      name: 1,          // Name  
-      englishName: 2,   // English Name
-      englishClass: 3,  // English Class
-      date: 4,          // Date
-      semester: 5,      // Semester
-      term: 6,          // Term
-      contactType: 7,   // Contact Type
-      teachersContent: 8,   // Teachers Content
-      parentsResponses: 9,  // Parents Responses
-      contactMethod: 10     // Contact Method
-    };
+    // 動態欄位映射（基於實際標題行，避免硬編碼索引）
+    const fieldMapping = {};
+    const expectedFields = ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method'];
     
-    // 排序前記錄樣本數據
-    if (records.length > 0) {
-      Logger.log(`📊 排序前樣本數據（前5筆）：`);
-      for (let i = 0; i < Math.min(5, records.length); i++) {
-        const record = records[i];
-        Logger.log(`  ${i+1}. ID:${record[fieldMapping.studentId]}, Semester:${record[fieldMapping.semester]}, Term:${record[fieldMapping.term]}`);
+    // 根據實際標題行動態映射欄位索引
+    expectedFields.forEach(field => {
+      const index = headers.indexOf(field);
+      if (index === -1) {
+        Logger.log(`⚠️ 警告：找不到欄位 "${field}" 在標題行中`);
       }
+      switch(field) {
+        case 'Student ID': fieldMapping.studentId = index; break;
+        case 'Name': fieldMapping.name = index; break;
+        case 'English Name': fieldMapping.englishName = index; break;
+        case 'English Class': fieldMapping.englishClass = index; break;
+        case 'Date': fieldMapping.date = index; break;
+        case 'Semester': fieldMapping.semester = index; break;
+        case 'Term': fieldMapping.term = index; break;
+        case 'Contact Type': fieldMapping.contactType = index; break;
+        case 'Teachers Content': fieldMapping.teachersContent = index; break;
+        case 'Parents Responses': fieldMapping.parentsResponses = index; break;
+        case 'Contact Method': fieldMapping.contactMethod = index; break;
+      }
+    });
+    
+    Logger.log(`🔍 動態欄位映射結果：${JSON.stringify(fieldMapping)}`);
+    
+    // 驗證關鍵排序欄位是否存在
+    const criticalFields = ['studentId', 'semester', 'term', 'englishClass'];
+    const missingFields = criticalFields.filter(field => fieldMapping[field] === -1 || fieldMapping[field] === undefined);
+    
+    if (missingFields.length > 0) {
+      const errorMsg = `排序失敗：缺少關鍵欄位 ${missingFields.join(', ')}`;
+      Logger.log(`❌ ${errorMsg}`);
+      return { success: false, data: allData, recordCount: 0, error: errorMsg };
+    }
+    
+    // 排序前記錄樣本數據和欄位驗證
+    if (records.length > 0) {
+      Logger.log(`📊 排序前資料分析：`);
+      Logger.log(`🔍 欄位映射驗證：Student ID=${fieldMapping.studentId}, Semester=${fieldMapping.semester}, Term=${fieldMapping.term}, English Class=${fieldMapping.englishClass}`);
+      Logger.log(`📋 標題行：${headers.join(' | ')}`);
+      
+      Logger.log(`📊 排序前樣本數據（前10筆）：`);
+      for (let i = 0; i < Math.min(10, records.length); i++) {
+        const record = records[i];
+        Logger.log(`  ${i+1}. ID=${record[fieldMapping.studentId]}, Semester="${record[fieldMapping.semester]}", Term="${record[fieldMapping.term]}", Class="${record[fieldMapping.englishClass]}"`);
+      }
+      
+      // 檢查所有不重複的 Semester 和 Term 值
+      const uniqueSemesters = [...new Set(records.map(r => r[fieldMapping.semester]))];
+      const uniqueTerms = [...new Set(records.map(r => r[fieldMapping.term]))];
+      Logger.log(`🔍 發現的 Semester 值：${uniqueSemesters.join(', ')}`);
+      Logger.log(`🔍 發現的 Term 值：${uniqueTerms.join(', ')}`);
     }
     
     // 執行四層排序：學生ID → 學期(Fall→Spring) → Term(Beginning→Midterm→Final) → English Class
+    Logger.log(`🔄 開始執行排序...`);
+    let sortDebugCount = 0;
+    
     records.sort((a, b) => {
+      sortDebugCount++;
+      
       // 第一優先：學生ID（數字排序，小到大）
       const studentIdA = parseInt(a[fieldMapping.studentId]) || 0;
       const studentIdB = parseInt(b[fieldMapping.studentId]) || 0;
@@ -1398,7 +1447,18 @@ function sortContactRecordsData(allData) {
       const semesterA = a[fieldMapping.semester];
       const semesterB = b[fieldMapping.semester];
       const semesterOrder = { 'Fall': 0, 'Spring': 1 };
-      const semesterCompare = (semesterOrder[semesterA] || 999) - (semesterOrder[semesterB] || 999);
+      const semesterAOrder = semesterOrder[semesterA];
+      const semesterBOrder = semesterOrder[semesterB];
+      
+      // 調試學期排序邏輯
+      if (sortDebugCount <= 10) {
+        Logger.log(`🔍 排序比較 #${sortDebugCount}: ID ${studentIdA} vs ${studentIdB}, Semester "${semesterA}"(${semesterAOrder}) vs "${semesterB}"(${semesterBOrder})`);
+        // 檢查資料類型和值
+        Logger.log(`    📊 資料類型檢查: semesterA type=${typeof semesterA}, semesterB type=${typeof semesterB}`);
+        Logger.log(`    📊 映射檢查: semesterOrder=${JSON.stringify(semesterOrder)}`);
+      }
+      
+      const semesterCompare = (semesterAOrder || 999) - (semesterBOrder || 999);
       if (semesterCompare !== 0) {
         return semesterCompare;
       }
@@ -1407,7 +1467,17 @@ function sortContactRecordsData(allData) {
       const termA = a[fieldMapping.term];
       const termB = b[fieldMapping.term];
       const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
-      const termCompare = (termOrder[termA] || 999) - (termOrder[termB] || 999);
+      const termAOrder = termOrder[termA];
+      const termBOrder = termOrder[termB];
+      
+      // 調試Term排序邏輯
+      if (sortDebugCount <= 10 && studentIdA === studentIdB && semesterA === semesterB) {
+        Logger.log(`🔍 Term排序比較: "${termA}"(${termAOrder}) vs "${termB}"(${termBOrder})`);
+        Logger.log(`    📊 Term資料類型: termA type=${typeof termA}, termB type=${typeof termB}`);
+        Logger.log(`    📊 Term映射: termOrder=${JSON.stringify(termOrder)}`);
+      }
+      
+      const termCompare = (termAOrder || 999) - (termBOrder || 999);
       if (termCompare !== 0) {
         return termCompare;
       }
@@ -1418,13 +1488,21 @@ function sortContactRecordsData(allData) {
       return englishClassA.localeCompare(englishClassB);
     });
     
-    // 排序後記錄樣本數據
+    Logger.log(`✅ 排序完成，總比較次數：${sortDebugCount}`);
+    
+    // 排序後記錄樣本數據 - 詳細分析
     if (records.length > 0) {
-      Logger.log(`📊 排序後樣本數據（前5筆）：`);
-      for (let i = 0; i < Math.min(5, records.length); i++) {
+      Logger.log(`📊 排序後詳細分析（前10筆）：`);
+      for (let i = 0; i < Math.min(10, records.length); i++) {
         const record = records[i];
-        Logger.log(`  ${i+1}. ID:${record[fieldMapping.studentId]}, Semester:${record[fieldMapping.semester]}, Term:${record[fieldMapping.term]}`);
+        Logger.log(`  ${i+1}. ID=${record[fieldMapping.studentId]}, Semester="${record[fieldMapping.semester]}", Term="${record[fieldMapping.term]}", Class="${record[fieldMapping.englishClass]}"`);
       }
+      
+      // 檢查排序後的 Semester 和 Term 值分佈
+      const postSortSemesters = records.slice(0, 10).map(r => r[fieldMapping.semester]);
+      const postSortTerms = records.slice(0, 10).map(r => r[fieldMapping.term]);
+      Logger.log(`📊 排序後前10筆 Semester 順序：${postSortSemesters.join(' → ')}`);
+      Logger.log(`📊 排序後前10筆 Term 順序：${postSortTerms.join(' → ')}`);
     }
     
     // 最終排序驗證
@@ -1587,6 +1665,13 @@ function validateContactRecordsSorting(contactLogSheet) {
     const isQuietMode = typeof arguments[1] === 'boolean' ? arguments[1] : false;
     if (!isQuietMode) {
       Logger.log(`🔍 驗證 ${records.length} 筆電聯記錄的排序正確性...`);
+      
+      // 顯示前10筆記錄的實際順序
+      Logger.log(`📊 實際記錄順序檢查（前10筆）：`);
+      for (let i = 0; i < Math.min(10, records.length); i++) {
+        const record = records[i];
+        Logger.log(`  ${i+1}. ID=${record[0]}, Semester="${record[5]}", Term="${record[6]}", Class="${record[3]}"`);
+      }
     }
     
     // 欄位映射
@@ -1777,6 +1862,58 @@ ${!sortResult.success ? `\n❌ 排序功能錯誤：${sortResult.error}` : ''}
     Logger.log(`❌ 排序診斷失敗：${error.toString()}`);
     Logger.log(`📍 錯誤堆疊：${error.stack}`);
     safeErrorHandler('排序診斷', error);
+  }
+}
+
+/**
+ * 測試排序問題修復 - 專門用於排序調試
+ */
+function testSortingLogic() {
+  try {
+    Logger.log('🧪 ========== 開始測試排序邏輯修復 ==========');
+    
+    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    
+    if (!contactLogSheet) {
+      Logger.log('❌ 找不到電聯記錄工作表');
+      return { success: false, message: '找不到電聯記錄工作表' };
+    }
+    
+    const allData = contactLogSheet.getDataRange().getValues();
+    if (allData.length < 2) {
+      Logger.log('⚠️ 電聯記錄工作表沒有資料');
+      return { success: false, message: '沒有資料可測試' };
+    }
+    
+    Logger.log('🔍 測試排序函數...');
+    const sortResult = sortContactRecordsData(allData);
+    
+    Logger.log(`✅ 排序測試結果：${sortResult.success ? '成功' : '失敗'}`);
+    if (!sortResult.success) {
+      Logger.log(`❌ 排序失敗原因：${sortResult.error}`);
+    }
+    
+    Logger.log('🔍 測試驗證函數...');
+    const validation = validateContactRecordsSorting(contactLogSheet, false); // 非靜默模式
+    
+    Logger.log(`✅ 驗證測試結果：${validation.isValid ? '通過' : '失敗'}`);
+    if (!validation.isValid) {
+      Logger.log(`❌ 驗證問題：${validation.errors.slice(0, 5).join('; ')}`);
+    }
+    
+    Logger.log('🧪 ========== 排序邏輯測試完成 ==========');
+    return { 
+      success: true, 
+      sortResult: sortResult.success,
+      validationResult: validation.isValid,
+      message: '測試完成，請查看日誌了解詳細信息' 
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 排序測試失敗: ${error.message}`);
+    Logger.log(`📍 錯誤堆疊: ${error.stack}`);
+    return { success: false, message: error.message };
   }
 }
 
