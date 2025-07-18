@@ -1458,9 +1458,14 @@ function sortContactRecordsData(allData) {
         Logger.log(`    📊 映射檢查: semesterOrder=${JSON.stringify(semesterOrder)}`);
       }
       
-      const semesterCompare = (semesterAOrder || 999) - (semesterBOrder || 999);
-      if (semesterCompare !== 0) {
-        return semesterCompare;
+      if (semesterAOrder !== undefined && semesterBOrder !== undefined) {
+        const semesterCompare = semesterAOrder - semesterBOrder;
+        if (semesterCompare !== 0) {
+          if (sortDebugCount <= 10) {
+            Logger.log(`    📊 學期比較結果: ${semesterA}(${semesterAOrder}) vs ${semesterB}(${semesterBOrder}) = ${semesterCompare}`);
+          }
+          return semesterCompare;
+        }
       }
       
       // 第三優先：Term（Beginning → Midterm → Final）
@@ -1477,9 +1482,14 @@ function sortContactRecordsData(allData) {
         Logger.log(`    📊 Term映射: termOrder=${JSON.stringify(termOrder)}`);
       }
       
-      const termCompare = (termAOrder || 999) - (termBOrder || 999);
-      if (termCompare !== 0) {
-        return termCompare;
+      if (termAOrder !== undefined && termBOrder !== undefined) {
+        const termCompare = termAOrder - termBOrder;
+        if (termCompare !== 0) {
+          if (sortDebugCount <= 10 && studentIdA === studentIdB && semesterA === semesterB) {
+            Logger.log(`    📊 Term比較結果: ${termA}(${termAOrder}) vs ${termB}(${termBOrder}) = ${termCompare}`);
+          }
+          return termCompare;
+        }
       }
       
       // 第四優先：English Class（字串排序，小到大）
@@ -1520,16 +1530,57 @@ function sortContactRecordsData(allData) {
         break;
       }
       
+      // 調試學期驗證條件
+      Logger.log(`🔍 學期驗證檢查: prevId=${prevId}, currId=${currId}, 相等=${prevId === currId}`);
+      
       if (prevId === currId) {
-        const semOrder = { 'Fall': 0, 'Spring': 1 };
-        const prevSem = semOrder[prev[fieldMapping.semester]] || 999;
-        const currSem = semOrder[curr[fieldMapping.semester]] || 999;
+        // 使用 switch-case 確保學期映射穩定性，避免對象屬性訪問問題
+        const getSemesterOrder = (semester) => {
+          switch (semester) {
+            case 'Fall': return 0;
+            case 'Spring': return 1;
+            default: return 999;
+          }
+        };
+        
+        const prevSem = getSemesterOrder(prev[fieldMapping.semester]);
+        const currSem = getSemesterOrder(curr[fieldMapping.semester]);
+        
+        Logger.log(`🔍 同一學生學期比較: ${prev[fieldMapping.semester]}(${prevSem}) vs ${curr[fieldMapping.semester]}(${currSem})`);
         
         if (prevSem > currSem) {
           sortValid = false;
           Logger.log(`❌ 排序驗證失敗: 學期 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: ${prevId})`);
           break;
         }
+        
+        // 同一學生同一學期時，檢查 Term 順序
+        if (prevSem === currSem) {
+          // 使用 switch-case 確保映射穩定性，避免對象屬性訪問問題
+          const getTermOrder = (term) => {
+            switch (term) {
+              case 'Beginning': return 0;
+              case 'Midterm': return 1;
+              case 'Final': return 2;
+              default: return 999;
+            }
+          };
+          
+          const prevTerm = getTermOrder(prev[fieldMapping.term]);
+          const currTerm = getTermOrder(curr[fieldMapping.term]);
+          
+          // 調試輸出（使用新的映射方法）
+          Logger.log(`🔍 Term驗證: ${prev[fieldMapping.term]}(${prevTerm}) vs ${curr[fieldMapping.term]}(${currTerm})`);
+          Logger.log(`    檢查: ${prevTerm} > ${currTerm} = ${prevTerm > currTerm}`);
+          
+          if (prevTerm > currTerm) {
+            sortValid = false;
+            Logger.log(`❌ 排序驗證失敗: Term ${prev[fieldMapping.term]}(${prevTerm}) > ${curr[fieldMapping.term]}(${currTerm}) (學生ID: ${prevId}, 學期: ${prev[fieldMapping.semester]})`);
+            break;
+          }
+        }
+      } else {
+        Logger.log(`ℹ️ 不同學生，跳過學期比較`);
       }
     }
     
@@ -1866,48 +1917,90 @@ ${!sortResult.success ? `\n❌ 排序功能錯誤：${sortResult.error}` : ''}
 }
 
 /**
- * 測試排序問題修復 - 專門用於排序調試
+ * 測試排序問題修復 - 使用模擬資料進行排序邏輯測試（適用於主 GAS 專案）
  */
 function testSortingLogic() {
   try {
-    Logger.log('🧪 ========== 開始測試排序邏輯修復 ==========');
+    Logger.log('🧪 ========== 開始測試排序邏輯修復（模擬資料） ==========');
     
-    const recordBook = SpreadsheetApp.getActiveSpreadsheet();
-    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    // 創建測試資料 - 包含已知順序問題的資料
+    const testHeaders = ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method'];
     
-    if (!contactLogSheet) {
-      Logger.log('❌ 找不到電聯記錄工作表');
-      return { success: false, message: '找不到電聯記錄工作表' };
-    }
+    const testRecords = [
+      // 故意使用錯誤順序來測試排序邏輯 - 包含完整的測試組合
+      ['1002', '王小明', 'Ming Wang', 'G1-A', '', 'Spring', 'Final', 'Scheduled Contact', '', '', ''],
+      ['1001', '張小華', 'Hua Zhang', 'G1-A', '', 'Fall', 'Midterm', 'Scheduled Contact', '', '', ''],
+      ['1002', '王小明', 'Ming Wang', 'G1-A', '', 'Fall', 'Beginning', 'Scheduled Contact', '', '', ''],
+      ['1001', '張小華', 'Hua Zhang', 'G1-A', '', 'Spring', 'Beginning', 'Scheduled Contact', '', '', ''],
+      ['1001', '張小華', 'Hua Zhang', 'G1-A', '', 'Fall', 'Final', 'Scheduled Contact', '', '', ''],
+      ['1002', '王小明', 'Ming Wang', 'G1-A', '', 'Spring', 'Midterm', 'Scheduled Contact', '', '', ''],
+      ['1001', '張小華', 'Hua Zhang', 'G1-A', '', 'Fall', 'Beginning', 'Scheduled Contact', '', '', ''] // 添加缺失的記錄
+    ];
     
-    const allData = contactLogSheet.getDataRange().getValues();
-    if (allData.length < 2) {
-      Logger.log('⚠️ 電聯記錄工作表沒有資料');
-      return { success: false, message: '沒有資料可測試' };
-    }
+    const testData = [testHeaders, ...testRecords];
     
-    Logger.log('🔍 測試排序函數...');
-    const sortResult = sortContactRecordsData(allData);
+    Logger.log('📊 測試資料概覽：');
+    Logger.log(`  總記錄數：${testRecords.length}`);
+    Logger.log(`  測試學生：1001(張小華), 1002(王小明)`);
+    Logger.log(`  測試學期：Fall, Spring`);
+    Logger.log(`  測試階段：Beginning, Midterm, Final`);
+    
+    Logger.log('📋 排序前的測試資料順序：');
+    testRecords.forEach((record, index) => {
+      Logger.log(`  ${index+1}. ID=${record[0]}, Semester="${record[5]}", Term="${record[6]}"`);
+    });
+    
+    Logger.log('🔍 執行排序測試...');
+    const sortResult = sortContactRecordsData(testData);
     
     Logger.log(`✅ 排序測試結果：${sortResult.success ? '成功' : '失敗'}`);
-    if (!sortResult.success) {
+    
+    if (sortResult.success) {
+      Logger.log('📋 排序後的資料順序：');
+      const sortedRecords = sortResult.data.slice(1); // 跳過標題
+      sortedRecords.forEach((record, index) => {
+        Logger.log(`  ${index+1}. ID=${record[0]}, Semester="${record[5]}", Term="${record[6]}"`);
+      });
+      
+      // 驗證排序正確性
+      Logger.log('🔍 驗證排序正確性...');
+      const expectedOrder = [
+        ['1001', 'Fall', 'Beginning'],
+        ['1001', 'Fall', 'Midterm'], 
+        ['1001', 'Fall', 'Final'],
+        ['1001', 'Spring', 'Beginning'],
+        ['1002', 'Fall', 'Beginning'],
+        ['1002', 'Spring', 'Midterm'],
+        ['1002', 'Spring', 'Final']
+      ];
+      
+      let isCorrect = true;
+      const actualOrder = sortedRecords.map(r => [r[0], r[5], r[6]]);
+      
+      Logger.log('📊 預期順序 vs 實際順序比較：');
+      for (let i = 0; i < Math.min(expectedOrder.length, actualOrder.length); i++) {
+        const expected = expectedOrder[i];
+        const actual = actualOrder[i];
+        const match = expected[0] === actual[0] && expected[1] === actual[1] && expected[2] === actual[2];
+        
+        Logger.log(`  ${i+1}. 預期: ID=${expected[0]}, ${expected[1]}, ${expected[2]} | 實際: ID=${actual[0]}, ${actual[1]}, ${actual[2]} ${match ? '✅' : '❌'}`);
+        
+        if (!match) {
+          isCorrect = false;
+        }
+      }
+      
+      Logger.log(`🔍 整體排序驗證：${isCorrect ? '✅ 正確' : '❌ 錯誤'}`);
+      
+    } else {
       Logger.log(`❌ 排序失敗原因：${sortResult.error}`);
-    }
-    
-    Logger.log('🔍 測試驗證函數...');
-    const validation = validateContactRecordsSorting(contactLogSheet, false); // 非靜默模式
-    
-    Logger.log(`✅ 驗證測試結果：${validation.isValid ? '通過' : '失敗'}`);
-    if (!validation.isValid) {
-      Logger.log(`❌ 驗證問題：${validation.errors.slice(0, 5).join('; ')}`);
     }
     
     Logger.log('🧪 ========== 排序邏輯測試完成 ==========');
     return { 
       success: true, 
       sortResult: sortResult.success,
-      validationResult: validation.isValid,
-      message: '測試完成，請查看日誌了解詳細信息' 
+      message: '測試完成，請查看日誌了解詳細排序過程' 
     };
     
   } catch (error) {
