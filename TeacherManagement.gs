@@ -1530,9 +1530,6 @@ function sortContactRecordsData(allData) {
         break;
       }
       
-      // 調試學期驗證條件
-      Logger.log(`🔍 學期驗證檢查: prevId=${prevId}, currId=${currId}, 相等=${prevId === currId}`);
-      
       if (prevId === currId) {
         // 使用 switch-case 確保學期映射穩定性，避免對象屬性訪問問題
         const getSemesterOrder = (semester) => {
@@ -1545,8 +1542,6 @@ function sortContactRecordsData(allData) {
         
         const prevSem = getSemesterOrder(prev[fieldMapping.semester]);
         const currSem = getSemesterOrder(curr[fieldMapping.semester]);
-        
-        Logger.log(`🔍 同一學生學期比較: ${prev[fieldMapping.semester]}(${prevSem}) vs ${curr[fieldMapping.semester]}(${currSem})`);
         
         if (prevSem > currSem) {
           sortValid = false;
@@ -1569,18 +1564,12 @@ function sortContactRecordsData(allData) {
           const prevTerm = getTermOrder(prev[fieldMapping.term]);
           const currTerm = getTermOrder(curr[fieldMapping.term]);
           
-          // 調試輸出（使用新的映射方法）
-          Logger.log(`🔍 Term驗證: ${prev[fieldMapping.term]}(${prevTerm}) vs ${curr[fieldMapping.term]}(${currTerm})`);
-          Logger.log(`    檢查: ${prevTerm} > ${currTerm} = ${prevTerm > currTerm}`);
-          
           if (prevTerm > currTerm) {
             sortValid = false;
             Logger.log(`❌ 排序驗證失敗: Term ${prev[fieldMapping.term]}(${prevTerm}) > ${curr[fieldMapping.term]}(${currTerm}) (學生ID: ${prevId}, 學期: ${prev[fieldMapping.semester]})`);
             break;
           }
         }
-      } else {
-        Logger.log(`ℹ️ 不同學生，跳過學期比較`);
       }
     }
     

@@ -183,7 +183,7 @@ function createSingleTeacherWeb(params) {
     
     return {
       success: true,
-      message: `${teacherInfo.name} 老師的記錄簿建立成功！`,
+      message: `${teacherInfo.name} 老師的記錄簿建立成功！\n\n📝 下一步：\n• 匯入學生資料以自動建立電聯記錄\n• 系統會自動按照正確順序排列所有記錄\n• 排序規則：學生ID → Fall/Spring → Beginning/Midterm/Final`,
       recordBookUrl: recordBook.getUrl()
     };
   } catch (error) {
@@ -1479,5 +1479,75 @@ function showSystemSettingsWeb() {
 /**
  * Web 版本的重新排序電聯記錄功能
  */
-// 移除手動排序功能 - 用戶要求排序在建立時就自動完成，不需要手動操作
+/**
+ * Web 版本的手動排序電聯記錄功能
+ * 提供給特定情況下需要手動觸發排序的場景
+ */
+function sortContactRecordsWeb(spreadsheetId) {
+  try {
+    if (!spreadsheetId) {
+      return {
+        success: false,
+        message: '請提供要排序的記錄簿 ID'
+      };
+    }
+    
+    // 開啟指定的記錄簿
+    const recordBook = SpreadsheetApp.openById(spreadsheetId);
+    const contactLogSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    
+    if (!contactLogSheet) {
+      return {
+        success: false,
+        message: '找不到電聯記錄工作表'
+      };
+    }
+    
+    // 檢查是否有資料
+    const dataRange = contactLogSheet.getDataRange();
+    if (dataRange.getNumRows() < 2) {
+      return {
+        success: false,
+        message: '電聯記錄工作表沒有資料可排序'
+      };
+    }
+    
+    // 執行排序
+    const allData = dataRange.getValues();
+    const sortResult = sortContactRecordsData(allData);
+    
+    if (!sortResult.success) {
+      return {
+        success: false,
+        message: `排序失敗：${sortResult.error}`
+      };
+    }
+    
+    // 更新工作表
+    contactLogSheet.clear();
+    contactLogSheet.getRange(1, 1, sortResult.data.length, sortResult.data[0].length).setValues(sortResult.data);
+    
+    // 設定標題格式
+    contactLogSheet.getRange(1, 1, 1, sortResult.data[0].length)
+      .setFontWeight('bold')
+      .setBackground('#E8F4FD');
+    
+    // 自動調整欄寬
+    contactLogSheet.autoResizeColumns(1, sortResult.data[0].length);
+    
+    Logger.log(`✅ Web版本排序完成：${sortResult.recordCount} 筆記錄`);
+    
+    return {
+      success: true,
+      message: `排序完成！\n\n已重新排序 ${sortResult.recordCount} 筆電聯記錄\n\n排序規則：\n• 學生ID (小→大)\n• 學期 (Fall→Spring)\n• 階段 (Beginning→Midterm→Final)\n• 英語班級 (小→大)`
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ Web版本排序失敗：${error.message}`);
+    return {
+      success: false,
+      message: `排序執行失敗：${error.message}`
+    };
+  }
+}
 // 原 sortContactRecordsWeb 函數已移除，排序邏輯已整合到記錄簿建立過程中
