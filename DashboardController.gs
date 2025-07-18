@@ -690,7 +690,7 @@ function exportStudentDataWeb(parameters) {
     }
     
     // 創建匯出檔案
-    const exportSheet = SpreadsheetApp.create('學生資料匯出_' + new Date().toLocaleDateString('zh-TW'));
+    const exportSheet = SpreadsheetApp.create('學生資料匯出_' + formatDateTimeForFilename());
     const mainFolder = getSystemMainFolder();
     const exportFile = DriveApp.getFileById(exportSheet.getId());
     mainFolder.addFile(exportFile);

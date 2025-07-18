@@ -1407,4 +1407,38 @@ function calculateSchoolYear() {
   Logger.log(`📅 計算學年：${schoolYearStart}-${schoolYearEnd} → ${schoolYear}`);
   
   return schoolYear;
+}
+
+/**
+ * 格式化日期時間為檔名安全格式
+ * @returns {string} 格式化的日期時間字串 (YYYY-MM-DD_HHMM)
+ */
+function formatDateTimeForFilename() {
+  const now = new Date();
+  
+  // 格式化日期為 YYYY-MM-DD
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const date = `${year}-${month}-${day}`;
+  
+  // 格式化時間為 HHMM
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const time = `${hours}${minutes}`;
+  
+  return `${date}_${time}`;
+}
+
+/**
+ * 格式化日期為檔名安全格式（僅日期）
+ * @returns {string} 格式化的日期字串 (YYYY-MM-DD)
+ */
+function formatDateForFilename() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}`;
 } 

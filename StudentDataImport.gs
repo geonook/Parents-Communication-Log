@@ -338,7 +338,7 @@ function exportStudentData() {
     const teacherName = summarySheet.getRange('B3').getValue();
     
     // 建立匯出檔案
-    const exportSheet = SpreadsheetApp.create(`${teacherName}_學生資料匯出_${new Date().toLocaleDateString()}`);
+    const exportSheet = SpreadsheetApp.create(`${teacherName}_學生資料匯出_${formatDateTimeForFilename()}`);
     const exportFile = DriveApp.getFileById(exportSheet.getId());
     
     // 移動到主資料夾

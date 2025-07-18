@@ -343,7 +343,7 @@ function createProgressReportSheet() {
   const mainFolder = getSystemMainFolder();
   const reportsFolder = mainFolder.getFoldersByName('進度報告').next();
   
-  const reportName = `電聯進度報告_${new Date().toLocaleDateString().replace(/\//g, '-')}`;
+  const reportName = `電聯進度報告_${formatDateTimeForFilename()}`;
   const reportSheet = SpreadsheetApp.create(reportName);
   const reportFile = DriveApp.getFileById(reportSheet.getId());
   
@@ -522,7 +522,7 @@ function displayProgressSummary(progressResults) {
  */
 function generateDetailedProgressReport(progressResults) {
   try {
-    const reportSheet = SpreadsheetApp.create(`電聯進度報告_${new Date().toLocaleDateString()}`);
+    const reportSheet = SpreadsheetApp.create(`電聯進度報告_${formatDateTimeForFilename()}`);
     const sheet = reportSheet.getActiveSheet();
     sheet.setName('進度報告');
     

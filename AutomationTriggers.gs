@@ -406,7 +406,7 @@ function backupSystemSettings(backupFolder) {
       BACKUP_DATE: new Date().toISOString()
     };
     
-    const settingsSheet = SpreadsheetApp.create(`系統設定備份_${new Date().toLocaleDateString()}`);
+    const settingsSheet = SpreadsheetApp.create(`系統設定備份_${formatDateTimeForFilename()}`);
     const settingsFile = DriveApp.getFileById(settingsSheet.getId());
     
     backupFolder.addFile(settingsFile);
