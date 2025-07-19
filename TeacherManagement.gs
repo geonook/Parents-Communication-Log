@@ -1506,22 +1506,22 @@ function sortContactRecordsData(allData) {
       Logger.log(`📊 排序後前10筆 Term 順序：${postSortTerms.join(' → ')}`);
     }
     
-    // 最終排序驗證
+    // 最終排序驗證 (使用統一的 compareStudentIds 邏輯)
     let sortValid = true;
     for (let i = 1; i < records.length; i++) {
       const prev = records[i - 1];
       const curr = records[i];
       
-      const prevId = parseInt(prev[fieldMapping.studentId]) || 0;
-      const currId = parseInt(curr[fieldMapping.studentId]) || 0;
+      // 使用統一的ID比較邏輯，而非parseInt
+      const idComparison = compareStudentIds(prev[fieldMapping.studentId], curr[fieldMapping.studentId]);
       
-      if (prevId > currId) {
+      if (idComparison > 0) {
         sortValid = false;
-        Logger.log(`❌ 排序驗證失敗: 學生ID ${prevId} > ${currId}`);
+        Logger.log(`❌ 排序驗證失敗: 學生ID "${prev[fieldMapping.studentId]}" > "${curr[fieldMapping.studentId]}"`);
         break;
       }
       
-      if (prevId === currId) {
+      if (idComparison === 0) {
         // 使用 switch-case 確保學期映射穩定性，避免對象屬性訪問問題
         const getSemesterOrder = (semester) => {
           switch (semester) {
@@ -1536,7 +1536,7 @@ function sortContactRecordsData(allData) {
         
         if (prevSem > currSem) {
           sortValid = false;
-          Logger.log(`❌ 排序驗證失敗: 學期 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: ${prevId})`);
+          Logger.log(`❌ 排序驗證失敗: 學期 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: "${prev[fieldMapping.studentId]}")`);
           break;
         }
         
@@ -1557,7 +1557,7 @@ function sortContactRecordsData(allData) {
           
           if (prevTerm > currTerm) {
             sortValid = false;
-            Logger.log(`❌ 排序驗證失敗: Term ${prev[fieldMapping.term]}(${prevTerm}) > ${curr[fieldMapping.term]}(${currTerm}) (學生ID: ${prevId}, 學期: ${prev[fieldMapping.semester]})`);
+            Logger.log(`❌ 排序驗證失敗: Term ${prev[fieldMapping.term]}(${prevTerm}) > ${curr[fieldMapping.term]}(${currTerm}) (學生ID: "${prev[fieldMapping.studentId]}", 學期: ${prev[fieldMapping.semester]})`);
             break;
           }
         }
