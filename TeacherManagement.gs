@@ -1276,21 +1276,35 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
   ];
   const mockDataWithHeaders = [headers, ...prebuiltRecords];
   
-  // 強化排序邏輯：確保排序成功才繼續寫入
+  // 🔧 修復排序邏輯：即使排序失敗也要確保資料能寫入
   const sortResult = sortContactRecordsData(mockDataWithHeaders);
   
   if (!sortResult.success) {
     const errorMsg = `預建記錄排序失敗：${sortResult.error}`;
-    Logger.log(`❌ ${errorMsg}`);
+    Logger.log(`⚠️ ${errorMsg}`);
     Logger.log(`📊 排序失敗狀態 - 記錄數：${prebuiltRecords.length}, 學生數：${students.length}`);
-    Logger.log(`🔍 失敗原因排查：請檢查學生資料格式和系統配置`);
-    throw new Error(errorMsg);
+    Logger.log(`🔄 改用基本排序繼續預建流程，稍後可手動重新排序`);
+    
+    // 🔧 關鍵修復：不拋出錯誤，改用基本排序確保資料寫入
+    try {
+      // 基本排序：只按 Student ID 排序
+      prebuiltRecords.sort((a, b) => {
+        const idComparison = compareStudentIds(a[0], b[0]);
+        if (idComparison !== 0) return idComparison;
+        // 如果 Student ID 相同，按 Semester 排序
+        return a[5] === 'Fall' && b[5] === 'Spring' ? -1 : (a[5] === 'Spring' && b[5] === 'Fall' ? 1 : 0);
+      });
+      Logger.log(`✅ 使用基本排序完成預建記錄整理`);
+    } catch (basicSortError) {
+      Logger.log(`⚠️ 基本排序也失敗，使用原始順序繼續：${basicSortError.message}`);
+      // 即使基本排序失敗，也要繼續寫入資料
+    }
+  } else {
+    // 提取排序後的資料（去除標題）
+    prebuiltRecords.length = 0; // 清空原陣列
+    prebuiltRecords.push(...sortResult.data.slice(1)); // 將排序後的資料重新填入
+    Logger.log(`✅ 預建記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
   }
-  
-  // 提取排序後的資料（去除標題）
-  prebuiltRecords.length = 0; // 清空原陣列
-  prebuiltRecords.push(...sortResult.data.slice(1)); // 將排序後的資料重新填入
-  Logger.log(`✅ 預建記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
   
   // 寫入排序後的預建記錄（原子性操作）
   if (prebuiltRecords.length > 0) {
@@ -1347,6 +1361,262 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     studentCount: students.length,
     recordCount: prebuiltRecords.length
   };
+}
+
+/**
+ * 診斷老師記錄簿的電聯記錄狀態
+ * 緊急修復：找出空白記錄簿的原因
+ */
+function diagnoseTeacherRecordBooksContactStatus() {
+  Logger.log('🔍 開始診斷老師記錄簿電聯記錄狀態...');
+  
+  const results = {
+    totalBooks: 0,
+    emptyContactBooks: [],
+    normalBooks: [],
+    issues: []
+  };
+  
+  try {
+    // 搜尋所有符合命名規則的老師記錄簿
+    const allFiles = DriveApp.searchFiles('title contains "老師記錄簿" and mimeType = "application/vnd.google-apps.spreadsheet"');
+    
+    while (allFiles.hasNext()) {
+      const file = allFiles.next();
+      results.totalBooks++;
+      
+      try {
+        const spreadsheet = SpreadsheetApp.openById(file.getId());
+        const contactLogSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+        const studentListSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+        
+        if (!contactLogSheet) {
+          results.issues.push(`${file.getName()}: 找不到電聯記錄工作表`);
+          continue;
+        }
+        
+        if (!studentListSheet) {
+          results.issues.push(`${file.getName()}: 找不到學生清單工作表`);
+          continue;
+        }
+        
+        // 檢查學生清單
+        const studentData = studentListSheet.getDataRange().getValues();
+        const studentCount = studentData.length > 1 ? studentData.length - 1 : 0; // 減去標題行
+        
+        // 檢查電聯記錄
+        const contactData = contactLogSheet.getDataRange().getValues();
+        const contactRecordCount = contactData.length > 1 ? contactData.length - 1 : 0; // 減去標題行
+        
+        const bookInfo = {
+          name: file.getName(),
+          id: file.getId(),
+          url: file.getUrl(),
+          studentCount: studentCount,
+          contactRecordCount: contactRecordCount,
+          expectedContactRecords: studentCount * 6 // 每位學生應有6筆記錄
+        };
+        
+        if (contactRecordCount === 0 && studentCount > 0) {
+          // 有學生但沒有電聯記錄 = 問題記錄簿
+          results.emptyContactBooks.push(bookInfo);
+          Logger.log(`❌ 發現問題：${file.getName()} - 學生數：${studentCount}，電聯記錄：${contactRecordCount}`);
+        } else {
+          // 正常記錄簿
+          results.normalBooks.push(bookInfo);
+          Logger.log(`✅ 正常狀態：${file.getName()} - 學生數：${studentCount}，電聯記錄：${contactRecordCount}`);
+        }
+        
+      } catch (bookError) {
+        results.issues.push(`${file.getName()}: ${bookError.message}`);
+      }
+    }
+    
+    // 輸出診斷結果
+    Logger.log('\n📊 診斷結果摘要：');
+    Logger.log(`總計記錄簿數量：${results.totalBooks}`);
+    Logger.log(`空白電聯記錄簿：${results.emptyContactBooks.length}`);
+    Logger.log(`正常記錄簿：${results.normalBooks.length}`);
+    Logger.log(`問題記錄簿：${results.issues.length}`);
+    
+    if (results.emptyContactBooks.length > 0) {
+      Logger.log('\n❌ 需要修復的空白電聯記錄簿：');
+      results.emptyContactBooks.forEach((book, index) => {
+        Logger.log(`  ${index + 1}. ${book.name} (學生數：${book.studentCount})`);
+      });
+    }
+    
+    if (results.issues.length > 0) {
+      Logger.log('\n⚠️ 其他問題：');
+      results.issues.forEach((issue, index) => {
+        Logger.log(`  ${index + 1}. ${issue}`);
+      });
+    }
+    
+    return results;
+    
+  } catch (error) {
+    Logger.log(`❌ 診斷過程發生錯誤：${error.message}`);
+    results.issues.push(`診斷錯誤：${error.message}`);
+    return results;
+  }
+}
+
+/**
+ * 批量修復空白電聯記錄的老師記錄簿
+ * 緊急修復函數：為所有缺少電聯記錄的記錄簿重新執行預建
+ */
+function batchFixEmptyContactRecordBooks() {
+  Logger.log('🔧 開始批量修復空白電聯記錄的老師記錄簿...');
+  
+  // 先診斷問題
+  const diagnosis = diagnoseTeacherRecordBooksContactStatus();
+  
+  if (diagnosis.emptyContactBooks.length === 0) {
+    Logger.log('✅ 未發現需要修復的空白電聯記錄簿');
+    return {
+      success: true,
+      message: '所有記錄簿電聯記錄狀態正常',
+      fixedCount: 0
+    };
+  }
+  
+  Logger.log(`🔄 發現 ${diagnosis.emptyContactBooks.length} 個需要修復的記錄簿，開始修復...`);
+  
+  const results = {
+    totalToFix: diagnosis.emptyContactBooks.length,
+    successCount: 0,
+    failureCount: 0,
+    failures: []
+  };
+  
+  for (let i = 0; i < diagnosis.emptyContactBooks.length; i++) {
+    const book = diagnosis.emptyContactBooks[i];
+    const bookNum = i + 1;
+    
+    Logger.log(`\n🔧 修復記錄簿 ${bookNum}/${diagnosis.emptyContactBooks.length}: ${book.name}`);
+    
+    try {
+      const spreadsheet = SpreadsheetApp.openById(book.id);
+      const studentListSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+      
+      if (!studentListSheet) {
+        throw new Error('找不到學生清單工作表');
+      }
+      
+      // 獲取學生資料
+      const studentData = studentListSheet.getDataRange().getValues();
+      
+      if (studentData.length <= 1) {
+        throw new Error('學生清單為空');
+      }
+      
+      Logger.log(`📚 學生清單確認：${studentData.length - 1} 位學生`);
+      
+      // 執行預建 Scheduled Contact 記錄
+      const prebuildResult = performPrebuildScheduledContacts(spreadsheet, studentData);
+      
+      Logger.log(`✅ 成功為 ${book.name} 預建 ${prebuildResult.recordCount} 筆電聯記錄`);
+      results.successCount++;
+      
+      // 短暫等待避免API限制
+      if (bookNum < diagnosis.emptyContactBooks.length) {
+        Utilities.sleep(500); // 等待0.5秒
+      }
+      
+    } catch (error) {
+      Logger.log(`❌ 修復 ${book.name} 失敗：${error.message}`);
+      results.failureCount++;
+      results.failures.push({
+        name: book.name,
+        error: error.message
+      });
+    }
+  }
+  
+  // 輸出修復結果摘要
+  Logger.log('\n📊 批量修復結果摘要：');
+  Logger.log(`需要修復的記錄簿：${results.totalToFix}`);
+  Logger.log(`修復成功：${results.successCount}`);
+  Logger.log(`修復失敗：${results.failureCount}`);
+  
+  if (results.failures.length > 0) {
+    Logger.log('\n❌ 修復失敗的記錄簿：');
+    results.failures.forEach((failure, index) => {
+      Logger.log(`  ${index + 1}. ${failure.name}: ${failure.error}`);
+    });
+  }
+  
+  const finalResult = {
+    success: results.failureCount === 0,
+    totalFixed: results.successCount,
+    totalFailed: results.failureCount,
+    details: results
+  };
+  
+  if (finalResult.success) {
+    Logger.log('🎉 所有記錄簿修復完成！');
+  } else {
+    Logger.log(`⚠️ 修復完成，但有 ${results.failureCount} 個記錄簿修復失敗`);
+  }
+  
+  return finalResult;
+}
+
+/**
+ * 測試電聯記錄修復功能
+ * 用於驗證修復後的記錄簿狀態
+ */
+function testContactRecordFix() {
+  Logger.log('🧪 開始測試電聯記錄修復功能...');
+  
+  try {
+    // 1. 執行診斷
+    Logger.log('\n📋 Step 1: 執行診斷檢查...');
+    const diagnosisBefore = diagnoseTeacherRecordBooksContactStatus();
+    
+    if (diagnosisBefore.emptyContactBooks.length === 0) {
+      Logger.log('✅ 目前沒有需要修復的空白電聯記錄簿');
+      return { success: true, message: '系統狀態正常' };
+    }
+    
+    // 2. 執行修復
+    Logger.log('\n🔧 Step 2: 執行批量修復...');
+    const fixResult = batchFixEmptyContactRecordBooks();
+    
+    // 3. 再次診斷驗證
+    Logger.log('\n🔍 Step 3: 修復後驗證...');
+    const diagnosisAfter = diagnoseTeacherRecordBooksContactStatus();
+    
+    // 4. 輸出測試結果
+    Logger.log('\n📊 測試結果摘要：');
+    Logger.log(`修復前空白記錄簿：${diagnosisBefore.emptyContactBooks.length}`);
+    Logger.log(`修復成功數量：${fixResult.totalFixed}`);
+    Logger.log(`修復失敗數量：${fixResult.totalFailed}`);
+    Logger.log(`修復後空白記錄簿：${diagnosisAfter.emptyContactBooks.length}`);
+    
+    const testSuccess = diagnosisAfter.emptyContactBooks.length === 0;
+    
+    if (testSuccess) {
+      Logger.log('🎉 測試成功！所有空白電聯記錄已修復');
+    } else {
+      Logger.log('⚠️ 測試部分成功，仍有記錄簿需要手動檢查');
+    }
+    
+    return {
+      success: testSuccess,
+      beforeFix: diagnosisBefore.emptyContactBooks.length,
+      afterFix: diagnosisAfter.emptyContactBooks.length,
+      fixResult: fixResult
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 測試過程發生錯誤：${error.message}`);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
 
 /**
