@@ -124,6 +124,7 @@ function onOpen() {
         .addSeparator()
         .addItem('🧪 測試轉班記錄同步', 'runAllScheduledContactTransferTests')
         .addItem('🔍 驗證系統配置', 'runCompleteSystemValidation')
+        .addItem('📊 驗證記錄格式一致性', 'runCompleteRecordFormatValidation')
         .addSeparator()
         .addItem('📝 顯示系統日誌', 'showSystemLogs')
         .addItem('🗑️ 清除系統日誌', 'clearSystemLogs'))

@@ -1223,7 +1223,7 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
   const students = studentData.slice(1);
   const prebuiltRecords = [];
   
-  // 為每位學生建立6筆Scheduled Contact記錄
+  // 🔄 Phase 1 修改：使用統一的 generateScheduledContactsForStudent 函數
   students.forEach(student => {
     const studentId = student[0];       // ID
     const chineseName = student[4];     // Chinese Name  
@@ -1236,32 +1236,29 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
       return;
     }
     
-    // 為每個學期和term建立記錄（確保順序：Fall->Spring, Beginning->Midterm->Final）
-    Logger.log(`🔄 為學生 ${studentId}(${chineseName}) 建立預建記錄...`);
-    SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.forEach(semester => {
-      SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.forEach(term => {
-        const record = [
-          studentId,                                    // Student ID
-          chineseName,                                  // Name
-          englishName || '',                           // English Name
-          englishClass,                                // English Class
-          '',                                          // Date (空白，由老師填寫)
-          semester,                                    // Semester
-          term,                                        // Term
-          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // Contact Type (Scheduled Contact)
-          '',                                          // Teachers Content (空白，由老師填寫)
-          '',                                          // Parents Responses (空白，由老師填寫)
-          ''                                           // Contact Method (空白，由老師填寫)
-        ];
-        
-        // 記錄預建記錄的詳細信息
-        if (prebuiltRecords.length < 12) { // 只記錄前12筆（2個學生的完整記錄）
-          Logger.log(`  👤 預建記錄 #${prebuiltRecords.length + 1}: ID=${studentId}, Semester="${semester}", Term="${term}"`);
+    // 🆕 統一邏輯：將學生資料轉換為標準格式，然後使用統一函數
+    const studentDataObject = {
+      'ID': studentId,
+      'Chinese Name': chineseName,
+      'English Name': englishName || '',
+      'English Class': englishClass
+    };
+    
+    // 🆕 使用統一的 generateScheduledContactsForStudent 函數
+    Logger.log(`🔄 為學生 ${studentId}(${chineseName}) 使用統一函數建立預建記錄...`);
+    const studentScheduledContacts = generateScheduledContactsForStudent(studentDataObject);
+    
+    // 記錄預建記錄的詳細信息
+    if (prebuiltRecords.length < 12) { // 只記錄前12筆（2個學生的完整記錄）
+      studentScheduledContacts.forEach((record, index) => {
+        if (prebuiltRecords.length + index < 12) {
+          Logger.log(`  👤 預建記錄 #${prebuiltRecords.length + index + 1}: ID=${record[0]}, Semester="${record[5]}", Term="${record[6]}"`);
         }
-        
-        prebuiltRecords.push(record);
       });
-    });
+    }
+    
+    // 將該學生的所有記錄添加到總記錄中
+    prebuiltRecords.push(...studentScheduledContacts);
   });
   
   // 驗證系統配置順序
