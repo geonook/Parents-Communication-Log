@@ -1129,6 +1129,20 @@ function addStudentToTeacher(studentData, newTeacher) {
     // 🔧 修復問題5：更新新老師記錄簿的學生人數統計
     updateStudentCountInNewTeacherBook(targetBook);
     
+    // 🆕 新增：同步轉移學生的 Scheduled Contact 記錄
+    Logger.log(`📋 開始為轉班學生 ${updatedStudentData.ID || updatedStudentData['Student ID']} 同步 Scheduled Contact 記錄`);
+    try {
+      const contactTransferResult = transferScheduledContactRecords(updatedStudentData, targetBook, newTeacher);
+      if (contactTransferResult.success) {
+        Logger.log(`✅ 成功轉移 ${contactTransferResult.recordCount} 筆 Scheduled Contact 記錄`);
+      } else {
+        Logger.log(`⚠️ Scheduled Contact 記錄轉移失敗：${contactTransferResult.message}`);
+      }
+    } catch (contactError) {
+      Logger.log(`❌ Scheduled Contact 記錄轉移發生錯誤：${contactError.message}`);
+      // 不影響整體轉班操作，繼續執行
+    }
+    
     return {
       success: true,
       teacherName: newTeacher,
@@ -1801,5 +1815,125 @@ function updateStudentCountInNewTeacherBook(teacherBook) {
     
   } catch (error) {
     Logger.log(`❌ 更新新老師記錄簿學生人數統計失敗：${error.message}`);
+  }
+}
+
+/**
+ * 階段2：轉移學生的 Scheduled Contact 記錄到新老師記錄簿
+ * @param {Object} studentData 學生資料（已更新班級資訊）
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 新老師記錄簿
+ * @param {string} newTeacher 新老師名稱
+ * @returns {Object} 轉移結果
+ */
+function transferScheduledContactRecords(studentData, targetBook, newTeacher) {
+  try {
+    Logger.log(`📋 開始為學生 ${studentData.ID || studentData['Student ID']} 轉移 Scheduled Contact 記錄到 ${newTeacher}`);
+    
+    // 獲取或創建電聯記錄工作表
+    let contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet) {
+      Logger.log('⚠️ 目標記錄簿沒有電聯記錄工作表，嘗試創建...');
+      // 如果沒有電聯記錄工作表，調用創建函數
+      if (typeof createContactLogSheet === 'function') {
+        createContactLogSheet(targetBook, { name: newTeacher, studentCount: 0, classes: [] });
+        contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+      }
+      
+      if (!contactSheet) {
+        return {
+          success: false,
+          message: '無法創建或找到電聯記錄工作表'
+        };
+      }
+    }
+    
+    // 生成該學生的完整 Scheduled Contact 記錄
+    const scheduledContacts = generateScheduledContactsForStudent(studentData);
+    
+    if (scheduledContacts.length === 0) {
+      return {
+        success: false,
+        message: '無法生成 Scheduled Contact 記錄'
+      };
+    }
+    
+    // 將記錄添加到電聯記錄工作表
+    const startRow = contactSheet.getLastRow() + 1;
+    const numCols = scheduledContacts[0].length;
+    
+    contactSheet.getRange(startRow, 1, scheduledContacts.length, numCols)
+               .setValues(scheduledContacts);
+    
+    Logger.log(`📝 成功添加 ${scheduledContacts.length} 筆 Scheduled Contact 記錄到第 ${startRow} 行開始`);
+    
+    // 執行排序以確保記錄順序正確
+    if (typeof ensureContactRecordsSorting === 'function') {
+      ensureContactRecordsSorting(targetBook);
+      Logger.log('✅ 電聯記錄排序完成');
+    }
+    
+    return {
+      success: true,
+      recordCount: scheduledContacts.length,
+      message: `成功為學生 ${studentData.ID || studentData['Student ID']} 添加 ${scheduledContacts.length} 筆 Scheduled Contact 記錄`
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 轉移 Scheduled Contact 記錄失敗：${error.message}`);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+}
+
+/**
+ * 階段3：為單一學生生成完整的 Scheduled Contact 記錄
+ * @param {Object} studentData 學生資料（包含更新後的班級資訊）
+ * @returns {Array} Scheduled Contact 記錄陣列
+ */
+function generateScheduledContactsForStudent(studentData) {
+  try {
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    const englishName = studentData['English Name'] || '未知英文名';
+    const englishClass = studentData['English Class'] || '未知班級';
+    
+    Logger.log(`📝 為學生 ${studentId} (${studentName}) 生成 Scheduled Contact 記錄，班級：${englishClass}`);
+    
+    const scheduledContacts = [];
+    
+    // 根據學期制結構創建記錄：Fall/Spring × Beginning/Midterm/Final = 6筆
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS; // ['Fall', 'Spring']
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS; // ['Beginning', 'Midterm', 'Final']
+    
+    semesters.forEach(semester => {
+      terms.forEach(term => {
+        // 創建一筆 Scheduled Contact 記錄 (11欄位格式)
+        const contactRecord = [
+          studentId,                                    // A: Student ID
+          studentName,                                  // B: Name  
+          englishName,                                  // C: English Name
+          englishClass,                                // D: English Class
+          '',                                          // E: Date (留空待填)
+          semester,                                    // F: Semester
+          term,                                        // G: Term
+          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // H: Contact Type = "Scheduled Contact"
+          '',                                          // I: Teachers Content (留空待填)
+          '',                                          // J: Parents Responses (留空待填)
+          ''                                           // K: Contact Method (留空待填)
+        ];
+        
+        scheduledContacts.push(contactRecord);
+      });
+    });
+    
+    Logger.log(`✅ 成功生成 ${scheduledContacts.length} 筆 Scheduled Contact 記錄 (${semesters.length} 學期 × ${terms.length} Terms)`);
+    
+    return scheduledContacts;
+    
+  } catch (error) {
+    Logger.log(`❌ 生成 Scheduled Contact 記錄失敗：${error.message}`);
+    return [];
   }
 }
