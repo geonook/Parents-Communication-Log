@@ -1441,4 +1441,190 @@ function formatDateForFilename() {
   const day = String(now.getDate()).padStart(2, '0');
   
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * 通用Student ID解析和比較系統
+ * 支援各種ID格式：T001, LE12001, MS12345等
+ */
+
+/**
+ * 解析Student ID為可比較的格式
+ * @param {string} studentId - 學生ID (如：T001, LE12001, MS12345)
+ * @returns {Object} { prefix: string, number: number, original: string }
+ */
+function parseStudentId(studentId) {
+  const idStr = String(studentId || '').trim();
+  
+  if (!idStr) {
+    return { prefix: '', number: 0, original: idStr };
+  }
+  
+  // 使用正則表達式分離前綴和數字
+  const match = idStr.match(/^([A-Za-z]*)(\d+)$/);
+  
+  if (match) {
+    return {
+      prefix: match[1].toUpperCase(), // 統一為大寫
+      number: parseInt(match[2], 10),
+      original: idStr
+    };
+  }
+  
+  // 如果無法解析，嘗試純數字
+  const numMatch = idStr.match(/^\d+$/);
+  if (numMatch) {
+    return {
+      prefix: '',
+      number: parseInt(idStr, 10),
+      original: idStr
+    };
+  }
+  
+  // 無法解析時，保持原樣並設定為最低優先級
+  return {
+    prefix: idStr,
+    number: 0,
+    original: idStr
+  };
+}
+
+/**
+ * 比較兩個Student ID的大小
+ * @param {string} idA - 第一個學生ID
+ * @param {string} idB - 第二個學生ID
+ * @returns {number} -1(A<B), 0(A=B), 1(A>B)
+ */
+function compareStudentIds(idA, idB) {
+  const parsedA = parseStudentId(idA);
+  const parsedB = parseStudentId(idB);
+  
+  // 先按前綴排序
+  if (parsedA.prefix < parsedB.prefix) return -1;
+  if (parsedA.prefix > parsedB.prefix) return 1;
+  
+  // 前綴相同時，按數字排序
+  if (parsedA.number < parsedB.number) return -1;
+  if (parsedA.number > parsedB.number) return 1;
+  
+  // 完全相同
+  return 0;
+}
+
+/**
+ * 驗證Student ID格式是否有效
+ * @param {string} studentId - 學生ID
+ * @returns {boolean} 是否為有效格式
+ */
+function isValidStudentId(studentId) {
+  const idStr = String(studentId || '').trim();
+  
+  // 空值無效
+  if (!idStr) return false;
+  
+  // 檢查是否符合預期格式：字母+數字 或 純數字
+  return /^([A-Za-z]*\d+|\d+)$/.test(idStr);
+}
+
+/**
+ * 取得Student ID的數字部分（用於向後兼容）
+ * @param {string} studentId - 學生ID
+ * @returns {number} 數字部分
+ */
+function getStudentIdNumber(studentId) {
+  const parsed = parseStudentId(studentId);
+  return parsed.number;
+}
+
+/**
+ * 測試Student ID解析系統的相容性
+ * @returns {Object} 測試結果
+ */
+function testStudentIdCompatibility() {
+  const testCases = [
+    // 測試格式
+    'T001', 'T002', 'T008',
+    // 真實格式
+    'LE12001', 'LE12002', 'LE11999',
+    'MS12345', 'MS12346',
+    // 邊界情況
+    '001', '123',
+    '', null, undefined
+  ];
+  
+  const results = {
+    parsing: [],
+    sorting: [],
+    compatibility: true
+  };
+  
+  // 測試解析
+  testCases.forEach(id => {
+    try {
+      const parsed = parseStudentId(id);
+      results.parsing.push({
+        input: id,
+        prefix: parsed.prefix,
+        number: parsed.number,
+        original: parsed.original
+      });
+    } catch (error) {
+      results.parsing.push({
+        input: id,
+        error: error.message
+      });
+      results.compatibility = false;
+    }
+  });
+  
+  // 測試排序
+  const sortTestPairs = [
+    ['T001', 'T002'], // 同前綴，數字比較
+    ['LE11999', 'LE12001'], // 同前綴，跨年比較
+    ['LE12001', 'MS12001'], // 不同前綴，字母順序
+    ['T001', 'LE12001'], // 測試格式 vs 真實格式
+    ['001', 'T001'] // 純數字 vs 前綴格式
+  ];
+  
+  sortTestPairs.forEach(([idA, idB]) => {
+    try {
+      const comparison = compareStudentIds(idA, idB);
+      results.sorting.push({
+        idA: idA,
+        idB: idB,
+        comparison: comparison,
+        result: comparison < 0 ? `${idA} < ${idB}` : 
+                comparison > 0 ? `${idA} > ${idB}` : 
+                `${idA} = ${idB}`
+      });
+    } catch (error) {
+      results.sorting.push({
+        idA: idA,
+        idB: idB,
+        error: error.message
+      });
+      results.compatibility = false;
+    }
+  });
+  
+  Logger.log('🧪 Student ID解析系統相容性測試結果：');
+  Logger.log(`📊 整體相容性：${results.compatibility ? '✅ 通過' : '❌ 失敗'}`);
+  Logger.log('📋 解析測試：');
+  results.parsing.forEach(result => {
+    if (result.error) {
+      Logger.log(`  ❌ "${result.input}" → 錯誤: ${result.error}`);
+    } else {
+      Logger.log(`  ✅ "${result.input}" → 前綴:"${result.prefix}", 數字:${result.number}`);
+    }
+  });
+  Logger.log('🔄 排序測試：');
+  results.sorting.forEach(result => {
+    if (result.error) {
+      Logger.log(`  ❌ "${result.idA}" vs "${result.idB}" → 錯誤: ${result.error}`);
+    } else {
+      Logger.log(`  ✅ ${result.result}`);
+    }
+  });
+  
+  return results;
 } 

@@ -1428,11 +1428,10 @@ function sortContactRecordsData(allData) {
     records.sort((a, b) => {
       sortDebugCount++;
       
-      // 第一優先：學生ID（數字排序，小到大）
-      const studentIdA = parseInt(a[fieldMapping.studentId]) || 0;
-      const studentIdB = parseInt(b[fieldMapping.studentId]) || 0;
-      if (studentIdA !== studentIdB) {
-        return studentIdA - studentIdB;
+      // 第一優先：學生ID（使用通用ID比較函數）
+      const studentIdComparison = compareStudentIds(a[fieldMapping.studentId], b[fieldMapping.studentId]);
+      if (studentIdComparison !== 0) {
+        return studentIdComparison;
       }
       
       // 第二優先：學期（Fall → Spring）
@@ -1444,7 +1443,7 @@ function sortContactRecordsData(allData) {
       
       // 調試學期排序邏輯
       if (sortDebugCount <= 10) {
-        Logger.log(`🔍 排序比較 #${sortDebugCount}: ID ${studentIdA} vs ${studentIdB}, Semester "${semesterA}"(${semesterAOrder}) vs "${semesterB}"(${semesterBOrder})`);
+        Logger.log(`🔍 排序比較 #${sortDebugCount}: ID "${a[fieldMapping.studentId]}" vs "${b[fieldMapping.studentId]}", Semester "${semesterA}"(${semesterAOrder}) vs "${semesterB}"(${semesterBOrder})`);
         // 檢查資料類型和值
         Logger.log(`    📊 資料類型檢查: semesterA type=${typeof semesterA}, semesterB type=${typeof semesterB}`);
         Logger.log(`    📊 映射檢查: semesterOrder=${JSON.stringify(semesterOrder)}`);
@@ -1723,22 +1722,21 @@ function validateContactRecordsSorting(contactLogSheet) {
       const prev = records[i - 1];
       const curr = records[i];
       
-      // 學生ID檢查
-      const prevId = parseInt(prev[fieldMapping.studentId]) || 0;
-      const currId = parseInt(curr[fieldMapping.studentId]) || 0;
+      // 學生ID檢查 (使用通用ID比較函數)
+      const idComparison = compareStudentIds(prev[fieldMapping.studentId], curr[fieldMapping.studentId]);
       
-      if (prevId > currId) {
-        errors.push(`第${i+1}筆記錄：學生ID ${prevId} > ${currId} (排序錯誤)`);
+      if (idComparison > 0) {
+        errors.push(`第${i+1}筆記錄：學生ID "${prev[fieldMapping.studentId]}" > "${curr[fieldMapping.studentId]}" (排序錯誤)`);
         continue;
       }
       
       // 同學生ID下的學期檢查
-      if (prevId === currId) {
+      if (idComparison === 0) {
         const prevSem = semesterOrder[prev[fieldMapping.semester]] || 999;
         const currSem = semesterOrder[curr[fieldMapping.semester]] || 999;
         
         if (prevSem > currSem) {
-          errors.push(`第${i+1}筆記錄：學期順序錯誤 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: ${prevId})`);
+          errors.push(`第${i+1}筆記錄：學期順序錯誤 ${prev[fieldMapping.semester]} > ${curr[fieldMapping.semester]} (學生ID: "${prev[fieldMapping.studentId]}")`);
           continue;
         }
         
@@ -1748,7 +1746,7 @@ function validateContactRecordsSorting(contactLogSheet) {
           const currTerm = termOrder[curr[fieldMapping.term]] || 999;
           
           if (prevTerm > currTerm) {
-            errors.push(`第${i+1}筆記錄：Term順序錯誤 ${prev[fieldMapping.term]} > ${curr[fieldMapping.term]} (學生ID: ${prevId}, 學期: ${prev[fieldMapping.semester]})`);
+            errors.push(`第${i+1}筆記錄：Term順序錯誤 ${prev[fieldMapping.term]} > ${curr[fieldMapping.term]} (學生ID: "${prev[fieldMapping.studentId]}", 學期: ${prev[fieldMapping.semester]})`);
           }
         }
       }
