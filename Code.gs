@@ -115,6 +115,8 @@ function onOpen() {
         .addItem('🔄 設定自動化', 'setupAutomationTriggers')
         .addItem('💾 手動備份', 'autoBackup')
         .addItem('🔍 檢查檔案完整性', 'checkFileIntegrity')
+        .addItem('📋 檢查學生建置完整性', 'runMasterListIntegrityCheck')
+        .addItem('⚡ 快速學生建置檢查', 'quickMasterListIntegrityCheck')
         .addItem('🔧 自動修復系統', 'autoFixSystemIssues')
         .addItem('📋 更新老師列表', 'updateTeachersList')
         .addSeparator()
