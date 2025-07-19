@@ -1283,17 +1283,13 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     const errorMsg = `預建記錄排序失敗：${sortResult.error}`;
     Logger.log(`⚠️ ${errorMsg}`);
     Logger.log(`📊 排序失敗狀態 - 記錄數：${prebuiltRecords.length}, 學生數：${students.length}`);
-    Logger.log(`🔄 改用基本排序繼續預建流程，稍後可手動重新排序`);
+    Logger.log(`🔄 改用新順序的備用排序繼續預建流程`);
     
     // 🔧 關鍵修復：不拋出錯誤，改用完整備用排序確保資料寫入
     try {
-      // 🆕 完整四層備用排序：Student ID → Semester → Term → English Class
+      // 🆕 完整四層備用排序：Semester → Term → English Class → Student ID
       prebuiltRecords.sort((a, b) => {
-        // 第一優先：學生ID（使用通用ID比較函數）
-        const idComparison = compareStudentIds(a[0], b[0]);
-        if (idComparison !== 0) return idComparison;
-        
-        // 第二優先：學期（Fall → Spring）
+        // 🥇 第一優先：學期（Fall → Spring）
         const semesterA = a[5]; // Semester 欄位
         const semesterB = b[5];
         const semesterOrder = { 'Fall': 0, 'Spring': 1 };
@@ -1305,7 +1301,7 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
           if (semesterCompare !== 0) return semesterCompare;
         }
         
-        // 第三優先：Term（Beginning → Midterm → Final）
+        // 🥈 第二優先：Term（Beginning → Midterm → Final）
         const termA = a[6]; // Term 欄位
         const termB = b[6];
         const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
@@ -1317,13 +1313,18 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
           if (termCompare !== 0) return termCompare;
         }
         
-        // 第四優先：English Class（字串排序，小到大）
+        // 🥉 第三優先：English Class（字串排序，小到大）
         const englishClassA = a[3] || ''; // English Class 欄位
         const englishClassB = b[3] || '';
-        return englishClassA.localeCompare(englishClassB);
+        const classCompare = englishClassA.localeCompare(englishClassB);
+        if (classCompare !== 0) return classCompare;
+        
+        // 🏅 第四優先：學生ID（使用通用ID比較函數）
+        const idComparison = compareStudentIds(a[0], b[0]);
+        return idComparison;
       });
       Logger.log(`✅ 使用完整四層備用排序完成預建記錄整理`);
-      Logger.log(`📊 排序層級：Student ID → Semester (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class`);
+      Logger.log(`📊 新排序層級：Semester (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class → Student ID`);
     } catch (basicSortError) {
       Logger.log(`⚠️ 備用排序也失敗，使用原始順序繼續：${basicSortError.message}`);
       // 即使備用排序失敗，也要繼續寫入資料
@@ -1332,7 +1333,7 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     // 提取排序後的資料（去除標題）
     prebuiltRecords.length = 0; // 清空原陣列
     prebuiltRecords.push(...sortResult.data.slice(1)); // 將排序後的資料重新填入
-    Logger.log(`✅ 預建記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
+    Logger.log(`✅ 預建記錄排序完成，新順序：學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大) → 學生ID (小→大)`);
   }
   
   // 寫入排序後的預建記錄（原子性操作）
@@ -1830,18 +1831,25 @@ function testSortingFix() {
         ['T001', 'Student A', 'Alice', 'Class A', '', 'Fall', 'Beginning', 'Scheduled Contact', '', '', '']
       ];
       
-      // 模擬備用排序邏輯
+      // 模擬新的備用排序邏輯：Semester → Term → English Class → Student ID
       testArray.sort((a, b) => {
-        const idComparison = compareStudentIds(a[0], b[0]);
-        if (idComparison !== 0) return idComparison;
-        
+        // 1. 學期優先
         const semesterOrder = { 'Fall': 0, 'Spring': 1 };
         const semesterCompare = (semesterOrder[a[5]] || 0) - (semesterOrder[b[5]] || 0);
         if (semesterCompare !== 0) return semesterCompare;
         
+        // 2. Term 其次
         const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
         const termCompare = (termOrder[a[6]] || 0) - (termOrder[b[6]] || 0);
-        return termCompare;
+        if (termCompare !== 0) return termCompare;
+        
+        // 3. English Class 第三
+        const classCompare = (a[3] || '').localeCompare(b[3] || '');
+        if (classCompare !== 0) return classCompare;
+        
+        // 4. Student ID 最後
+        const idComparison = compareStudentIds(a[0], b[0]);
+        return idComparison;
       });
       
       testResults.fallbackSortingTest = { success: true };
@@ -1871,15 +1879,17 @@ function testSortingFix() {
     testResults.overall.success = mainSortOk && fallbackSortOk;
     
     if (testResults.overall.success) {
-      testResults.overall.message = '🎉 排序修復測試全部通過！';
-      Logger.log('\n🎉 綜合測試結果：所有排序功能正常');
+      testResults.overall.message = '🎉 新排序邏輯測試全部通過！';
+      Logger.log('\n🎉 綜合測試結果：新排序功能正常運作');
+      Logger.log('📊 新排序順序：學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class → 學生ID');
       
       if (!recordBooksOk) {
         Logger.log(`💡 建議：仍有 ${diagnosis.emptyContactBooks.length} 個空白記錄簿，可執行 batchFixEmptyContactRecordBooks() 修復`);
+        Logger.log(`💡 提示：修復後的記錄簿將使用新的排序邏輯`);
       }
     } else {
       testResults.overall.message = '⚠️ 部分測試失敗，需要進一步檢查';
-      Logger.log('\n⚠️ 綜合測試結果：仍有問題需要解決');
+      Logger.log('\n⚠️ 綜合測試結果：新排序邏輯仍有問題需要解決');
     }
     
     return testResults;
@@ -1966,20 +1976,14 @@ function sortContactRecordsData(allData) {
       Logger.log(`🔍 發現的 Term 值：${uniqueTerms.join(', ')}`);
     }
     
-    // 執行四層排序：學生ID → 學期(Fall→Spring) → Term(Beginning→Midterm→Final) → English Class
-    Logger.log(`🔄 開始執行排序...`);
+    // 🆕 執行四層排序：學期(Fall→Spring) → Term(Beginning→Midterm→Final) → English Class → 學生ID
+    Logger.log(`🔄 開始執行新排序邏輯...`);
     let sortDebugCount = 0;
     
     records.sort((a, b) => {
       sortDebugCount++;
       
-      // 第一優先：學生ID（使用通用ID比較函數）
-      const studentIdComparison = compareStudentIds(a[fieldMapping.studentId], b[fieldMapping.studentId]);
-      if (studentIdComparison !== 0) {
-        return studentIdComparison;
-      }
-      
-      // 第二優先：學期（Fall → Spring）
+      // 🥇 第一優先：學期（Fall → Spring）
       const semesterA = a[fieldMapping.semester];
       const semesterB = b[fieldMapping.semester];
       const semesterOrder = { 'Fall': 0, 'Spring': 1 };
@@ -1988,7 +1992,7 @@ function sortContactRecordsData(allData) {
       
       // 調試學期排序邏輯
       if (sortDebugCount <= 10) {
-        Logger.log(`🔍 排序比較 #${sortDebugCount}: ID "${a[fieldMapping.studentId]}" vs "${b[fieldMapping.studentId]}", Semester "${semesterA}"(${semesterAOrder}) vs "${semesterB}"(${semesterBOrder})`);
+        Logger.log(`🔍 排序比較 #${sortDebugCount}: Semester "${semesterA}"(${semesterAOrder}) vs "${semesterB}"(${semesterBOrder})`);
         // 檢查資料類型和值
         Logger.log(`    📊 資料類型檢查: semesterA type=${typeof semesterA}, semesterB type=${typeof semesterB}`);
         Logger.log(`    📊 映射檢查: semesterOrder=${JSON.stringify(semesterOrder)}`);
@@ -2004,7 +2008,7 @@ function sortContactRecordsData(allData) {
         }
       }
       
-      // 第三優先：Term（Beginning → Midterm → Final）
+      // 🥈 第二優先：Term（Beginning → Midterm → Final）
       const termA = a[fieldMapping.term];
       const termB = b[fieldMapping.term];
       const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
@@ -2012,7 +2016,7 @@ function sortContactRecordsData(allData) {
       const termBOrder = termOrder[termB];
       
       // 調試Term排序邏輯
-      if (sortDebugCount <= 10 && a[fieldMapping.studentId] === b[fieldMapping.studentId] && semesterA === semesterB) {
+      if (sortDebugCount <= 10 && semesterA === semesterB) {
         Logger.log(`🔍 Term排序比較: "${termA}"(${termAOrder}) vs "${termB}"(${termBOrder})`);
         Logger.log(`    📊 Term資料類型: termA type=${typeof termA}, termB type=${typeof termB}`);
         Logger.log(`    📊 Term映射: termOrder=${JSON.stringify(termOrder)}`);
@@ -2021,17 +2025,30 @@ function sortContactRecordsData(allData) {
       if (termAOrder !== undefined && termBOrder !== undefined) {
         const termCompare = termAOrder - termBOrder;
         if (termCompare !== 0) {
-          if (sortDebugCount <= 10 && a[fieldMapping.studentId] === b[fieldMapping.studentId] && semesterA === semesterB) {
+          if (sortDebugCount <= 10 && semesterA === semesterB) {
             Logger.log(`    📊 Term比較結果: ${termA}(${termAOrder}) vs ${termB}(${termBOrder}) = ${termCompare}`);
           }
           return termCompare;
         }
       }
       
-      // 第四優先：English Class（字串排序，小到大）
+      // 🥉 第三優先：English Class（字串排序，小到大）
       const englishClassA = a[fieldMapping.englishClass] || '';
       const englishClassB = b[fieldMapping.englishClass] || '';
-      return englishClassA.localeCompare(englishClassB);
+      const classCompare = englishClassA.localeCompare(englishClassB);
+      if (classCompare !== 0) {
+        if (sortDebugCount <= 10 && semesterA === semesterB && termA === termB) {
+          Logger.log(`🔍 Class排序比較: "${englishClassA}" vs "${englishClassB}" = ${classCompare}`);
+        }
+        return classCompare;
+      }
+      
+      // 🏅 第四優先：學生ID（使用通用ID比較函數）
+      const studentIdComparison = compareStudentIds(a[fieldMapping.studentId], b[fieldMapping.studentId]);
+      if (sortDebugCount <= 10 && semesterA === semesterB && termA === termB && englishClassA === englishClassB) {
+        Logger.log(`🔍 Student ID排序比較: "${a[fieldMapping.studentId]}" vs "${b[fieldMapping.studentId]}" = ${studentIdComparison}`);
+      }
+      return studentIdComparison;
     });
     
     Logger.log(`✅ 排序完成，總比較次數：${sortDebugCount}`);
@@ -2115,7 +2132,7 @@ function sortContactRecordsData(allData) {
       return { success: false, data: allData, recordCount: records.length, error: '排序驗證失敗' };
     }
     
-    Logger.log(`✅ 記錄排序完成，順序：學生ID (小→大) → 學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大)`);
+    Logger.log(`✅ 記錄排序完成，新順序：學期 (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class (小→大) → 學生ID (小→大)`);
     
     // 返回包含標題和排序後資料的完整陣列
     const sortedData = [headers, ...records];
