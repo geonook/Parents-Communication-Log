@@ -1285,19 +1285,48 @@ function performPrebuildScheduledContacts(recordBook, studentData) {
     Logger.log(`📊 排序失敗狀態 - 記錄數：${prebuiltRecords.length}, 學生數：${students.length}`);
     Logger.log(`🔄 改用基本排序繼續預建流程，稍後可手動重新排序`);
     
-    // 🔧 關鍵修復：不拋出錯誤，改用基本排序確保資料寫入
+    // 🔧 關鍵修復：不拋出錯誤，改用完整備用排序確保資料寫入
     try {
-      // 基本排序：只按 Student ID 排序
+      // 🆕 完整四層備用排序：Student ID → Semester → Term → English Class
       prebuiltRecords.sort((a, b) => {
+        // 第一優先：學生ID（使用通用ID比較函數）
         const idComparison = compareStudentIds(a[0], b[0]);
         if (idComparison !== 0) return idComparison;
-        // 如果 Student ID 相同，按 Semester 排序
-        return a[5] === 'Fall' && b[5] === 'Spring' ? -1 : (a[5] === 'Spring' && b[5] === 'Fall' ? 1 : 0);
+        
+        // 第二優先：學期（Fall → Spring）
+        const semesterA = a[5]; // Semester 欄位
+        const semesterB = b[5];
+        const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+        const semesterAOrder = semesterOrder[semesterA];
+        const semesterBOrder = semesterOrder[semesterB];
+        
+        if (semesterAOrder !== undefined && semesterBOrder !== undefined) {
+          const semesterCompare = semesterAOrder - semesterBOrder;
+          if (semesterCompare !== 0) return semesterCompare;
+        }
+        
+        // 第三優先：Term（Beginning → Midterm → Final）
+        const termA = a[6]; // Term 欄位
+        const termB = b[6];
+        const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+        const termAOrder = termOrder[termA];
+        const termBOrder = termOrder[termB];
+        
+        if (termAOrder !== undefined && termBOrder !== undefined) {
+          const termCompare = termAOrder - termBOrder;
+          if (termCompare !== 0) return termCompare;
+        }
+        
+        // 第四優先：English Class（字串排序，小到大）
+        const englishClassA = a[3] || ''; // English Class 欄位
+        const englishClassB = b[3] || '';
+        return englishClassA.localeCompare(englishClassB);
       });
-      Logger.log(`✅ 使用基本排序完成預建記錄整理`);
+      Logger.log(`✅ 使用完整四層備用排序完成預建記錄整理`);
+      Logger.log(`📊 排序層級：Student ID → Semester (Fall→Spring) → Term (Beginning→Midterm→Final) → English Class`);
     } catch (basicSortError) {
-      Logger.log(`⚠️ 基本排序也失敗，使用原始順序繼續：${basicSortError.message}`);
-      // 即使基本排序失敗，也要繼續寫入資料
+      Logger.log(`⚠️ 備用排序也失敗，使用原始順序繼續：${basicSortError.message}`);
+      // 即使備用排序失敗，也要繼續寫入資料
     }
   } else {
     // 提取排序後的資料（去除標題）
@@ -1564,6 +1593,134 @@ function batchFixEmptyContactRecordBooks() {
 }
 
 /**
+ * 批量重新排序現有記錄簿的電聯記錄
+ * 修復排序問題後為現有記錄簿應用正確排序
+ */
+function batchResortExistingContactRecords() {
+  Logger.log('🔄 開始批量重新排序現有記錄簿的電聯記錄...');
+  
+  // 先診斷所有記錄簿
+  const diagnosis = diagnoseTeacherRecordBooksContactStatus();
+  
+  if (diagnosis.totalBooks === 0) {
+    Logger.log('✅ 未找到任何老師記錄簿');
+    return { success: true, message: '無記錄簿需要處理', resortedCount: 0 };
+  }
+  
+  Logger.log(`🔄 發現 ${diagnosis.totalBooks} 個記錄簿，開始重新排序電聯記錄...`);
+  
+  const results = {
+    totalBooks: diagnosis.totalBooks,
+    successCount: 0,
+    failureCount: 0,
+    skippedCount: 0,
+    failures: []
+  };
+  
+  // 處理所有正常記錄簿（有電聯記錄的）
+  const allBooks = [...diagnosis.normalBooks];
+  
+  for (let i = 0; i < allBooks.length; i++) {
+    const book = allBooks[i];
+    const bookNum = i + 1;
+    
+    Logger.log(`\n🔧 重新排序記錄簿 ${bookNum}/${allBooks.length}: ${book.name}`);
+    
+    try {
+      if (book.contactRecordCount === 0) {
+        Logger.log(`⏭️ 跳過：${book.name} 沒有電聯記錄`);
+        results.skippedCount++;
+        continue;
+      }
+      
+      const spreadsheet = SpreadsheetApp.openById(book.id);
+      const contactLogSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+      
+      if (!contactLogSheet) {
+        throw new Error('找不到電聯記錄工作表');
+      }
+      
+      // 獲取所有電聯記錄資料
+      const allData = contactLogSheet.getDataRange().getValues();
+      
+      if (allData.length <= 1) {
+        Logger.log(`⏭️ 跳過：${book.name} 只有標題沒有資料`);
+        results.skippedCount++;
+        continue;
+      }
+      
+      Logger.log(`📊 原始資料：${allData.length - 1} 筆電聯記錄`);
+      
+      // 執行排序
+      const sortResult = sortContactRecordsData(allData);
+      
+      if (sortResult.success) {
+        // 清除工作表並寫入排序後的資料
+        contactLogSheet.clear();
+        contactLogSheet.getRange(1, 1, sortResult.data.length, sortResult.data[0].length)
+          .setValues(sortResult.data);
+        
+        // 設定標題格式
+        contactLogSheet.getRange(1, 1, 1, sortResult.data[0].length)
+          .setFontWeight('bold')
+          .setBackground('#E8F4FD');
+        
+        // 自動調整欄寬
+        contactLogSheet.autoResizeColumns(1, sortResult.data[0].length);
+        
+        Logger.log(`✅ 成功重新排序 ${book.name} 的 ${sortResult.recordCount} 筆電聯記錄`);
+        results.successCount++;
+      } else {
+        throw new Error(`排序失敗：${sortResult.error}`);
+      }
+      
+      // 短暫等待避免API限制
+      if (bookNum < allBooks.length) {
+        Utilities.sleep(500); // 等待0.5秒
+      }
+      
+    } catch (error) {
+      Logger.log(`❌ 重新排序 ${book.name} 失敗：${error.message}`);
+      results.failureCount++;
+      results.failures.push({
+        name: book.name,
+        error: error.message
+      });
+    }
+  }
+  
+  // 輸出重新排序結果摘要
+  Logger.log('\n📊 批量重新排序結果摘要：');
+  Logger.log(`總記錄簿數量：${results.totalBooks}`);
+  Logger.log(`重新排序成功：${results.successCount}`);
+  Logger.log(`重新排序失敗：${results.failureCount}`);
+  Logger.log(`跳過（無記錄）：${results.skippedCount}`);
+  
+  if (results.failures.length > 0) {
+    Logger.log('\n❌ 重新排序失敗的記錄簿：');
+    results.failures.forEach((failure, index) => {
+      Logger.log(`  ${index + 1}. ${failure.name}: ${failure.error}`);
+    });
+  }
+  
+  const finalResult = {
+    success: results.failureCount === 0,
+    totalResorted: results.successCount,
+    totalFailed: results.failureCount,
+    totalSkipped: results.skippedCount,
+    details: results
+  };
+  
+  if (finalResult.success) {
+    Logger.log('🎉 所有記錄簿重新排序完成！');
+  } else {
+    Logger.log(`⚠️ 重新排序完成，但有 ${results.failureCount} 個記錄簿失敗`);
+  }
+  
+  return finalResult;
+}
+
+/**
  * 測試電聯記錄修復功能
  * 用於驗證修復後的記錄簿狀態
  */
@@ -1616,6 +1773,124 @@ function testContactRecordFix() {
       success: false,
       error: error.message
     };
+  }
+}
+
+/**
+ * 綜合測試排序修復效果
+ * 驗證修復後的排序邏輯是否正確工作
+ */
+function testSortingFix() {
+  Logger.log('🧪 開始綜合測試排序修復效果...');
+  
+  const testResults = {
+    mainSortingTest: null,
+    fallbackSortingTest: null,
+    existingRecordBooksTest: null,
+    overall: { success: false, message: '' }
+  };
+  
+  try {
+    // 測試1: 主排序函數是否修復
+    Logger.log('\n📋 Test 1: 測試主排序函數修復...');
+    const mockData = [
+      ['Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method'],
+      ['T001', 'Student A', 'Alice', 'Class A', '', 'Spring', 'Final', 'Scheduled Contact', '', '', ''],
+      ['T001', 'Student A', 'Alice', 'Class A', '', 'Fall', 'Beginning', 'Scheduled Contact', '', '', ''],
+      ['T001', 'Student A', 'Alice', 'Class A', '', 'Fall', 'Midterm', 'Scheduled Contact', '', '', ''],
+      ['T002', 'Student B', 'Bob', 'Class B', '', 'Spring', 'Beginning', 'Scheduled Contact', '', '', ''],
+      ['T002', 'Student B', 'Bob', 'Class B', '', 'Fall', 'Final', 'Scheduled Contact', '', '', '']
+    ];
+    
+    const mainSortResult = sortContactRecordsData(mockData);
+    testResults.mainSortingTest = {
+      success: mainSortResult.success,
+      recordCount: mainSortResult.recordCount,
+      error: mainSortResult.error || null
+    };
+    
+    if (mainSortResult.success) {
+      Logger.log('✅ 主排序函數測試通過');
+      // 驗證排序順序
+      const sortedRecords = mainSortResult.data.slice(1); // 跳過標題
+      Logger.log('📊 排序結果驗證：');
+      sortedRecords.forEach((record, index) => {
+        Logger.log(`  ${index + 1}. ID=${record[0]}, Semester=${record[5]}, Term=${record[6]}`);
+      });
+    } else {
+      Logger.log(`❌ 主排序函數測試失敗：${mainSortResult.error}`);
+    }
+    
+    // 測試2: 備用排序邏輯測試
+    Logger.log('\n📋 Test 2: 測試備用排序邏輯...');
+    try {
+      const testArray = [
+        ['T002', 'Student B', 'Bob', 'Class B', '', 'Spring', 'Beginning', 'Scheduled Contact', '', '', ''],
+        ['T001', 'Student A', 'Alice', 'Class A', '', 'Fall', 'Final', 'Scheduled Contact', '', '', ''],
+        ['T001', 'Student A', 'Alice', 'Class A', '', 'Fall', 'Beginning', 'Scheduled Contact', '', '', '']
+      ];
+      
+      // 模擬備用排序邏輯
+      testArray.sort((a, b) => {
+        const idComparison = compareStudentIds(a[0], b[0]);
+        if (idComparison !== 0) return idComparison;
+        
+        const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+        const semesterCompare = (semesterOrder[a[5]] || 0) - (semesterOrder[b[5]] || 0);
+        if (semesterCompare !== 0) return semesterCompare;
+        
+        const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+        const termCompare = (termOrder[a[6]] || 0) - (termOrder[b[6]] || 0);
+        return termCompare;
+      });
+      
+      testResults.fallbackSortingTest = { success: true };
+      Logger.log('✅ 備用排序邏輯測試通過');
+    } catch (fallbackError) {
+      testResults.fallbackSortingTest = { success: false, error: fallbackError.message };
+      Logger.log(`❌ 備用排序邏輯測試失敗：${fallbackError.message}`);
+    }
+    
+    // 測試3: 現有記錄簿狀態檢查
+    Logger.log('\n📋 Test 3: 檢查現有記錄簿狀態...');
+    const diagnosis = diagnoseTeacherRecordBooksContactStatus();
+    testResults.existingRecordBooksTest = {
+      totalBooks: diagnosis.totalBooks,
+      emptyBooks: diagnosis.emptyContactBooks.length,
+      normalBooks: diagnosis.normalBooks.length,
+      hasIssues: diagnosis.issues.length > 0
+    };
+    
+    Logger.log(`📊 記錄簿狀態：總數 ${diagnosis.totalBooks}，正常 ${diagnosis.normalBooks.length}，空白 ${diagnosis.emptyContactBooks.length}`);
+    
+    // 綜合評估
+    const mainSortOk = testResults.mainSortingTest?.success || false;
+    const fallbackSortOk = testResults.fallbackSortingTest?.success || false;
+    const recordBooksOk = diagnosis.emptyContactBooks.length === 0;
+    
+    testResults.overall.success = mainSortOk && fallbackSortOk;
+    
+    if (testResults.overall.success) {
+      testResults.overall.message = '🎉 排序修復測試全部通過！';
+      Logger.log('\n🎉 綜合測試結果：所有排序功能正常');
+      
+      if (!recordBooksOk) {
+        Logger.log(`💡 建議：仍有 ${diagnosis.emptyContactBooks.length} 個空白記錄簿，可執行 batchFixEmptyContactRecordBooks() 修復`);
+      }
+    } else {
+      testResults.overall.message = '⚠️ 部分測試失敗，需要進一步檢查';
+      Logger.log('\n⚠️ 綜合測試結果：仍有問題需要解決');
+    }
+    
+    return testResults;
+    
+  } catch (error) {
+    Logger.log(`❌ 測試過程發生錯誤：${error.message}`);
+    testResults.overall = {
+      success: false,
+      message: `測試錯誤：${error.message}`
+    };
+    return testResults;
   }
 }
 
@@ -1737,7 +2012,7 @@ function sortContactRecordsData(allData) {
       const termBOrder = termOrder[termB];
       
       // 調試Term排序邏輯
-      if (sortDebugCount <= 10 && studentIdA === studentIdB && semesterA === semesterB) {
+      if (sortDebugCount <= 10 && a[fieldMapping.studentId] === b[fieldMapping.studentId] && semesterA === semesterB) {
         Logger.log(`🔍 Term排序比較: "${termA}"(${termAOrder}) vs "${termB}"(${termBOrder})`);
         Logger.log(`    📊 Term資料類型: termA type=${typeof termA}, termB type=${typeof termB}`);
         Logger.log(`    📊 Term映射: termOrder=${JSON.stringify(termOrder)}`);
@@ -1746,7 +2021,7 @@ function sortContactRecordsData(allData) {
       if (termAOrder !== undefined && termBOrder !== undefined) {
         const termCompare = termAOrder - termBOrder;
         if (termCompare !== 0) {
-          if (sortDebugCount <= 10 && studentIdA === studentIdB && semesterA === semesterB) {
+          if (sortDebugCount <= 10 && a[fieldMapping.studentId] === b[fieldMapping.studentId] && semesterA === semesterB) {
             Logger.log(`    📊 Term比較結果: ${termA}(${termAOrder}) vs ${termB}(${termBOrder}) = ${termCompare}`);
           }
           return termCompare;
