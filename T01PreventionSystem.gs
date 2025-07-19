@@ -47,8 +47,8 @@ function verifyT01StudentInMasterData(masterData) {
       return { exists: false, reason: '主名單資料格式錯誤' };
     }
     
-    // 跳過標題行，搜索 T01 學生
-    const studentData = masterData.data.slice(1);
+    // masterData.data 已經不含標題行
+    const studentData = masterData.data;
     
     for (let i = 0; i < studentData.length; i++) {
       const row = studentData[i];
@@ -99,7 +99,7 @@ function executeOriginalExtractionWithMonitoring(masterData, t01PreCheck) {
   Logger.log(`🔍 開始執行原始提取邏輯，特別監控 T01 學生 "${t01PreCheck.studentInfo.name}"`);
   
   const headers = masterData.headers;
-  const data = masterData.data.slice(1);
+  const data = masterData.data; // masterData.data 已經不含標題列
   
   // 找到老師欄位索引
   const possibleTeacherFields = ['LT', 'Local Teacher', 'English Teacher', 'Teacher', '老師', '本地老師', '英文老師'];

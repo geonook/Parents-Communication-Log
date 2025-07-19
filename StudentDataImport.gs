@@ -612,7 +612,7 @@ function extractTeachersFromMasterList(masterData) {
   }
   
   const headers = masterData.headers;
-  const data = masterData.data.slice(1); // 跳過標題列
+  const data = masterData.data; // masterData.data 已經不含標題列
   
   Logger.log(`📋 標題欄位數量：${headers.length}`);
   Logger.log(`👥 學生資料行數：${data.length}`);
