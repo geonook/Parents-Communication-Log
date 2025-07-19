@@ -1,69 +1,105 @@
 /**
- * 備份恢復功能測試模組
+ * 備份恢復功能測試模組 (優化版本)
  * 專門測試學生異動管理系統的備份和恢復功能
+ * 
+ * 版本: v2.0 - 優化版本
+ * 更新: 2025-07-19
+ * 變更: 移除與其他測試模組重複的功能檢查，專注於備份恢復特有功能
  */
 
 /**
- * 測試備份恢復功能
+ * 主要備份恢復測試入口
+ * @param {string} testType - 測試類型: 'all'|'backup'|'restore'|'workflow'
+ * @returns {Object} 測試結果
+ */
+function runBackupRestoreTest(testType = 'all') {
+  try {
+    Logger.log('🚀 啟動備份恢復測試套件...');
+    Logger.log(`📋 測試類型: ${testType}`);
+    Logger.log('═'.repeat(60));
+    
+    let testResult;
+    
+    switch (testType.toLowerCase()) {
+      case 'all':
+      case 'complete':
+        testResult = testBackupRestoreFunctionality();
+        break;
+      case 'backup':
+        testResult = testBackupFunctions();
+        break;
+      case 'restore':
+        testResult = testRestoreFunctions();
+        break;
+      case 'workflow':
+        testResult = testBackupRestoreWorkflow();
+        break;
+      default:
+        Logger.log(`⚠️ 未知測試類型: ${testType}，使用預設的 all 模式`);
+        testResult = testBackupRestoreFunctionality();
+    }
+    
+    return testResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 備份恢復測試失敗：${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      testType: testType
+    };
+  }
+}
+
+/**
+ * 完整的備份恢復功能測試
  * @returns {Object} 測試結果
  */
 function testBackupRestoreFunctionality() {
-  Logger.log('🧪 開始測試備份恢復功能');
+  Logger.log('🔍 執行完整的備份恢復功能測試...');
   
   const testResult = {
     success: true,
+    testType: 'complete',
     totalTests: 0,
     passedTests: 0,
     failedTests: 0,
-    testResults: []
+    testSuites: []
   };
   
   try {
-    // 測試函數列表
-    const testFunctions = [
-      { name: '測試 backupStudentFromMasterList', testFunc: testBackupStudentFromMasterList },
-      { name: '測試 backupStudentFromTeacherBook', testFunc: testBackupStudentFromTeacherBook },
-      { name: '測試 restoreStudentToMasterList', testFunc: testRestoreStudentToMasterList },
-      { name: '測試 restoreStudentToTeacherBook', testFunc: testRestoreStudentToTeacherBook },
-      { name: '測試 restoreContactRecords', testFunc: testRestoreContactRecords },
-      { name: '測試 getOrCreateBackupFolder', testFunc: testGetOrCreateBackupFolder },
-      { name: '測試 updateRowInSheet', testFunc: testUpdateRowInSheet },
-      { name: '測試 calculateProgressForTeacherBook', testFunc: testCalculateProgressForTeacherBook },
-      { name: '測試 calculateSystemStats', testFunc: testCalculateSystemStats }
-    ];
-    
-    // 執行所有測試
-    testFunctions.forEach(test => {
-      testResult.totalTests++;
-      Logger.log(`🔍 執行測試：${test.name}`);
-      
-      try {
-        const result = test.testFunc();
-        if (result.success) {
-          testResult.passedTests++;
-          Logger.log(`✅ ${test.name} - 通過`);
-        } else {
-          testResult.failedTests++;
-          testResult.success = false;
-          Logger.log(`❌ ${test.name} - 失敗：${result.message}`);
-        }
-        testResult.testResults.push({
-          name: test.name,
-          result: result
-        });
-      } catch (error) {
-        testResult.failedTests++;
-        testResult.success = false;
-        Logger.log(`❌ ${test.name} - 錯誤：${error.message}`);
-        testResult.testResults.push({
-          name: test.name,
-          result: { success: false, message: error.message }
-        });
-      }
+    // 測試套件1：備份功能測試
+    Logger.log('\n📋 測試套件1：備份功能測試');
+    Logger.log('-'.repeat(50));
+    const backupResult = testBackupFunctions();
+    testResult.testSuites.push({
+      name: '備份功能測試',
+      result: backupResult
     });
+    updateTestResults(testResult, backupResult);
     
-    // 輸出測試總結
-    Logger.log(`📊 測試完成 - 總計：${testResult.totalTests}，通過：${testResult.passedTests}，失敗：${testResult.failedTests}`);
+    // 測試套件2：恢復功能測試
+    Logger.log('\n📋 測試套件2：恢復功能測試');
+    Logger.log('-'.repeat(50));
+    const restoreResult = testRestoreFunctions();
+    testResult.testSuites.push({
+      name: '恢復功能測試',
+      result: restoreResult
+    });
+    updateTestResults(testResult, restoreResult);
+    
+    // 測試套件3：備份恢復工作流程測試
+    Logger.log('\n📋 測試套件3：備份恢復工作流程測試');
+    Logger.log('-'.repeat(50));
+    const workflowResult = testBackupRestoreWorkflow();
+    testResult.testSuites.push({
+      name: '備份恢復工作流程測試',
+      result: workflowResult
+    });
+    updateTestResults(testResult, workflowResult);
+    
+    // 生成測試報告
+    generateBackupRestoreTestReport(testResult);
     
     return testResult;
     
@@ -71,6 +107,7 @@ function testBackupRestoreFunctionality() {
     Logger.log('❌ 測試執行失敗：' + error.message);
     return {
       success: false,
+      testType: 'complete',
       message: '測試執行過程發生錯誤：' + error.message
     };
   }
