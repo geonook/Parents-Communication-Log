@@ -83,6 +83,40 @@ This file provides essential guidance to Claude Code (claude.ai/code) when worki
 
 > **⚠️ DO NOT PROCEED until all checkboxes are explicitly verified**
 
+### 📋 COMPLIANCE VERIFICATION TEMPLATE
+**Copy and paste this template for each task:**
+
+```
+### 🔍 MANDATORY PRE-TASK COMPLIANCE CHECK
+
+**Step 1: Rule Acknowledgment**
+- [x] ✅ I acknowledge all critical rules in CLAUDE.md and will follow them
+
+**Step 2: Task Analysis**  
+- [ ] Will this take >30 seconds? → [YES/NO] → [Action if YES]
+- [ ] Is this 3+ steps? → [YES/NO] → [Action if YES]
+- [ ] Am I about to use grep/find/cat? → [YES/NO] → [Action if YES]
+
+**Step 3: Technical Debt Prevention**
+- [ ] **SEARCH FIRST**: [Results of search]
+- [ ] **CHECK EXISTING**: [Files reviewed]
+- [ ] Does similar functionality already exist? → [YES/NO] → [Decision]
+- [ ] Am I creating a duplicate? → [YES/NO] → [Alternative approach]
+- [ ] Will this create multiple sources of truth? → [YES/NO] → [Mitigation]
+
+**Step 4: Google Apps Script Considerations**
+- [ ] Does this need to be a .gs file? → [YES/NO]
+- [ ] Can I extend existing .gs files? → [YES/NO] → [Which files]
+- [ ] Will this work with GAS runtime? → [YES/NO]
+- [ ] Need clasp push? → [YES/NO]
+
+**Step 5: Session Management**
+- [ ] Is this a long/complex task? → [YES/NO] → [Checkpoint plan]
+- [ ] Have I been working >1 hour? → [YES/NO] → [Break consideration]
+
+✅ **ALL CHECKS VERIFIED - PROCEEDING WITH TASK**
+```
+
 ## 🏗️ PROJECT OVERVIEW
 
 This is a Google Apps Script-based educational management system with the following components:
@@ -169,6 +203,20 @@ Before starting ANY task, verify:
 - [ ] TodoWrite for 3+ step tasks
 - [ ] Commit after each completed task
 - [ ] **CLASP PUSH** after .gs file changes - EQUALLY IMPORTANT as GitHub backup
+
+## 📈 CONTINUOUS IMPROVEMENT AREAS
+
+### 🔍 Known Compliance Gaps (for future enhancement)
+1. **Pre-Task Check Automation**: Need automated verification of compliance checklist
+2. **Task Agent Priority**: Strengthen preference for Task agents over Bash commands
+3. **Context Management**: Better tracking of session length and complexity
+4. **Compliance Metrics**: Implement systematic compliance scoring system
+
+### 💡 Best Practices Learned
+- Always use the compliance verification template before starting tasks
+- Prioritize technical debt prevention through systematic searching
+- Maintain dual backup workflow (GitHub + clasp) consistently
+- Document compliance decisions for future reference
 
 ---
 
