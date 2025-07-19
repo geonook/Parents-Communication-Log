@@ -192,6 +192,12 @@ function handleTransferOut(studentId, reason, operator) {
           reason: reason || '學生轉出'
         });
         
+        // 🔧 修復問題2：重新排序電聯記錄，維持正確的Student ID順序
+        ensureContactRecordsSorting(teacherBook);
+        
+        // 🔧 修復問題1：更新學生人數統計
+        updateStudentCountInSheets(teacherBook);
+        
       } catch (error) {
         Logger.log(`❌ 處理老師記錄簿失敗 ${record.teacherName}：${error.message}`);
       }
@@ -285,6 +291,12 @@ function handleClassChange(studentId, newTeacher, operator) {
           changeDate: new Date().toLocaleString(),
           reason: '學生轉班'
         });
+        
+        // 🔧 修復問題2：重新排序電聯記錄，維持正確的Student ID順序
+        ensureContactRecordsSorting(teacherBook);
+        
+        // 🔧 修復問題1：更新學生人數統計
+        updateStudentCountInSheets(teacherBook);
         
       } catch (error) {
         Logger.log(`❌ 從原老師記錄簿移除失敗：${error.message}`);
@@ -805,5 +817,174 @@ function addStudentChangeToClassInfo(teacherBook, changeInfo) {
     
   } catch (error) {
     Logger.log('❌ 添加學生異動記錄到班級資訊失敗：' + error.message);
+  }
+}
+
+/**
+ * 🔧 修復問題2：確保電聯記錄正確排序
+ * 在學生異動操作後重新排序電聯記錄，維持Student ID的正確遞增順序
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ */
+function ensureContactRecordsSorting(teacherBook) {
+  try {
+    Logger.log(`🔄 為 ${teacherBook.getName()} 重新排序電聯記錄`);
+    
+    const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet || contactSheet.getLastRow() <= 1) {
+      Logger.log('⚠️ 電聯記錄工作表為空或只有標題行，跳過排序');
+      return;
+    }
+    
+    // 獲取所有資料
+    const allData = contactSheet.getDataRange().getValues();
+    
+    // 調用現有的排序函數
+    if (typeof sortContactRecordsData === 'function') {
+      const sortResult = sortContactRecordsData(allData);
+      
+      if (sortResult.success && sortResult.sortedData.length > 0) {
+        // 清空現有資料並寫入排序後的資料
+        contactSheet.clear();
+        contactSheet.getRange(1, 1, sortResult.sortedData.length, sortResult.sortedData[0].length)
+                   .setValues(sortResult.sortedData);
+        
+        Logger.log(`✅ 電聯記錄重新排序完成，處理了 ${sortResult.sortedData.length - 1} 筆記錄`);
+      } else {
+        Logger.log('⚠️ 排序函數未能成功排序資料');
+      }
+    } else {
+      Logger.log('⚠️ sortContactRecordsData 函數不存在，跳過排序');
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 重新排序電聯記錄失敗：${error.message}`);
+  }
+}
+
+/**
+ * 🔧 修復問題1：更新工作表中的學生人數統計
+ * 重新計算並更新班級資訊和進度追蹤工作表中的學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ */
+function updateStudentCountInSheets(teacherBook) {
+  try {
+    Logger.log(`📊 更新 ${teacherBook.getName()} 的學生人數統計`);
+    
+    // 從學生清單工作表計算實際學生人數
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    let actualStudentCount = 0;
+    
+    if (studentSheet && studentSheet.getLastRow() > 1) {
+      actualStudentCount = studentSheet.getLastRow() - 1; // 減去標題行
+    }
+    
+    Logger.log(`📊 實際學生人數：${actualStudentCount}`);
+    
+    // 更新班級資訊工作表
+    updateClassInfoStudentCount(teacherBook, actualStudentCount);
+    
+    // 更新進度追蹤工作表
+    updateProgressTrackingStudentCount(teacherBook, actualStudentCount);
+    
+    Logger.log(`✅ 學生人數統計更新完成：${actualStudentCount} 人`);
+    
+  } catch (error) {
+    Logger.log(`❌ 更新學生人數統計失敗：${error.message}`);
+  }
+}
+
+/**
+ * 更新班級資訊工作表中的學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} studentCount 實際學生人數
+ */
+function updateClassInfoStudentCount(teacherBook, studentCount) {
+  try {
+    const classInfoSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+    if (!classInfoSheet) {
+      Logger.log('⚠️ 班級資訊工作表不存在');
+      return;
+    }
+    
+    // 查找學生人數的位置（通常在B7或附近）
+    // 先嘗試常見位置
+    const commonPositions = [
+      { row: 7, col: 2 }, // B7
+      { row: 6, col: 2 }, // B6  
+      { row: 8, col: 2 }  // B8
+    ];
+    
+    let updated = false;
+    for (const pos of commonPositions) {
+      try {
+        const cellValue = classInfoSheet.getRange(pos.row, pos.col - 1).getValue(); // 檢查A欄的標籤
+        if (cellValue && cellValue.toString().includes('學生人數')) {
+          classInfoSheet.getRange(pos.row, pos.col).setValue(studentCount);
+          Logger.log(`📊 更新班級資訊工作表學生人數：${studentCount} (位置: ${pos.row}, ${pos.col})`);
+          updated = true;
+          break;
+        }
+      } catch (e) {
+        // 繼續嘗試下一個位置
+      }
+    }
+    
+    if (!updated) {
+      Logger.log('⚠️ 未找到班級資訊工作表中的學生人數欄位');
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 更新班級資訊工作表學生人數失敗：${error.message}`);
+  }
+}
+
+/**
+ * 更新進度追蹤工作表中的學生總數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿  
+ * @param {number} studentCount 實際學生人數
+ */
+function updateProgressTrackingStudentCount(teacherBook, studentCount) {
+  try {
+    const progressSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+    if (!progressSheet) {
+      Logger.log('⚠️ 進度追蹤工作表不存在');
+      return;
+    }
+    
+    // 檢查是否為學期制進度追蹤結構
+    const hasCorrectStructure = checkProgressSheetStructure ? checkProgressSheetStructure(progressSheet) : false;
+    
+    if (hasCorrectStructure) {
+      // 學期制結構：更新每個學期term行的學生總數（第3欄）
+      const lastRow = progressSheet.getLastRow();
+      let updatedRows = 0;
+      
+      for (let row = 5; row <= lastRow; row++) {
+        const semesterValue = progressSheet.getRange(row, 1).getValue();
+        const termValue = progressSheet.getRange(row, 2).getValue();
+        
+        // 如果這一行有學期和Term值，更新學生總數
+        if (semesterValue && termValue) {
+          progressSheet.getRange(row, 3).setValue(studentCount);
+          updatedRows++;
+        }
+      }
+      
+      // 更新學年總結區域的總學生數
+      for (let row = lastRow; row >= 5; row--) {
+        const itemValue = progressSheet.getRange(row, 1).getValue();
+        if (itemValue && itemValue.toString().includes('總學生數')) {
+          progressSheet.getRange(row, 2).setValue(studentCount);
+          break;
+        }
+      }
+      
+      Logger.log(`📊 更新進度追蹤工作表學生總數：${studentCount} (更新了 ${updatedRows} 個學期term行)`);
+    } else {
+      Logger.log('⚠️ 進度追蹤工作表結構不是標準學期制，跳過更新');
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 更新進度追蹤工作表學生人數失敗：${error.message}`);
   }
 }

@@ -1058,18 +1058,38 @@ function addStudentToTeacher(studentData, newTeacher) {
       };
     }
     
-    // 獲取新老師的 English Class 資訊
+    // 🔧 修復問題4：獲取新老師的班級資訊 (English Class)
+    // 轉班邏輯：原班級 → 新班級 → 新老師
     let newEnglishClass = '';
-    const summarySheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
-    if (summarySheet) {
+    
+    // 優先從班級資訊工作表獲取
+    const classInfoSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+    if (classInfoSheet) {
       try {
-        // 嘗試從總覽工作表獲取 English Class 資訊
-        const teacherClasses = summarySheet.getRange('B5').getValue(); // 假設班級資訊在B5
-        if (teacherClasses && teacherClasses.toString().trim() !== '') {
-          newEnglishClass = teacherClasses.toString().trim();
+        // 嘗試從班級資訊工作表獲取 English Class (通常在B5)
+        const classData = classInfoSheet.getRange('B5').getValue();
+        if (classData && classData.toString().trim() !== '') {
+          newEnglishClass = classData.toString().trim();
+          Logger.log(`📚 從班級資訊工作表獲取新班級：${newEnglishClass}`);
         }
       } catch (error) {
-        Logger.log('無法從總覽工作表獲取班級資訊：' + error.message);
+        Logger.log('從班級資訊工作表獲取班級失敗：' + error.message);
+      }
+    }
+    
+    // 備用：從總覽工作表獲取
+    if (!newEnglishClass) {
+      const summarySheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+      if (summarySheet) {
+        try {
+          const teacherClasses = summarySheet.getRange('B5').getValue();
+          if (teacherClasses && teacherClasses.toString().trim() !== '') {
+            newEnglishClass = teacherClasses.toString().trim();
+            Logger.log(`📚 從總覽工作表獲取新班級：${newEnglishClass}`);
+          }
+        } catch (error) {
+          Logger.log('無法從總覽工作表獲取班級資訊：' + error.message);
+        }
       }
     }
     
@@ -1084,19 +1104,30 @@ function addStudentToTeacher(studentData, newTeacher) {
     
     const headers = studentSheet.getRange(1, 1, 1, studentSheet.getLastColumn()).getValues()[0];
     
-    // 更新學生資料，特別是 English Class
+    // 🔧 修復問題4：正確更新學生的班級資訊 (English Class)
     const updatedStudentData = { ...studentData };
+    const originalClass = studentData['English Class'] || '未知班級';
+    
     if (newEnglishClass) {
       updatedStudentData['English Class'] = newEnglishClass;
+      Logger.log(`📚 學生班級轉換：${originalClass} → ${newEnglishClass}`);
+    } else {
+      Logger.log('⚠️ 未能獲取新班級資訊，保持原有班級');
     }
     
     const newRow = headers.map(header => updatedStudentData[header] || '');
     studentSheet.appendRow(newRow);
     
-    // 同步更新學生總表中的 English Class
+    // 同步更新學生總表中的 English Class 和 LT 欄位
     if (newEnglishClass) {
       updateStudentEnglishClassInMasterList(studentData.ID || studentData['Student ID'], newEnglishClass);
     }
+    
+    // 同步更新學生總表中的 LT (Leading Teacher) 欄位
+    updateStudentTeacherInMasterList(studentData.ID || studentData['Student ID'], newTeacher);
+    
+    // 🔧 修復問題5：更新新老師記錄簿的學生人數統計
+    updateStudentCountInNewTeacherBook(targetBook);
     
     return {
       success: true,
@@ -1746,4 +1777,29 @@ function generateFixReport(fixResults) {
   }
   
   return report;
+}
+
+/**
+ * 🔧 修復問題5：更新新老師記錄簿的學生人數統計
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 新老師記錄簿
+ */
+function updateStudentCountInNewTeacherBook(teacherBook) {
+  try {
+    Logger.log(`📊 更新新老師記錄簿的學生人數統計：${teacherBook.getName()}`);
+    
+    // 調用已有的學生人數統計更新函數
+    if (typeof updateStudentCountInSheets === 'function') {
+      updateStudentCountInSheets(teacherBook);
+    } else {
+      // 備用實現
+      const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+      const actualStudentCount = studentSheet && studentSheet.getLastRow() > 1 ? 
+                                 studentSheet.getLastRow() - 1 : 0;
+      
+      Logger.log(`📊 新老師記錄簿學生人數：${actualStudentCount}`);
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 更新新老師記錄簿學生人數統計失敗：${error.message}`);
+  }
 }
