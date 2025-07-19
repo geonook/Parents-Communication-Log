@@ -622,7 +622,7 @@ function createMasterListInstructionSheet(masterListSheet) {
  */
 function setupMasterListValidations(sheet) {
   // Grade 年級驗證 (B欄)
-  const gradeRange = sheet.getRange('B5:B1000');
+  const gradeRange = sheet.getRange('B4:B1000');
   const gradeValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.GRADE_LEVELS)
     .setAllowInvalid(false)
@@ -631,16 +631,16 @@ function setupMasterListValidations(sheet) {
   gradeRange.setDataValidation(gradeValidation);
   
   // HR 班級格式提示 (C欄)
-  const hrRange = sheet.getRange('C5:C1000');
+  const hrRange = sheet.getRange('C4:C1000');
   hrRange.setNote('原班級（僅供參考），如：701, 702, 801等');
   
   // English Class 英語班級提示和背景 (J欄)
-  const englishClassRange = sheet.getRange('J5:J1000');
+  const englishClassRange = sheet.getRange('J4:J1000');
   englishClassRange.setNote('🔥 重要！英語授課班級，格式：年級 + 空格 + 班級名稱\n例如：G1 Trailblazers, G2 Discoverers');
   englishClassRange.setBackground('#E8F5E8'); // 淺綠色背景提醒重要性
   
   // LT 老師姓名提示 (K欄)
-  const ltRange = sheet.getRange('K5:K1000');
+  const ltRange = sheet.getRange('K4:K1000');
   ltRange.setNote('🔥 重要！請填入英文老師姓名，用於自動建立記錄簿');
   ltRange.setBackground('#FFF3E0'); // 淺橙色背景提醒重要性
 }
