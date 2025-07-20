@@ -1654,8 +1654,13 @@ function consolidateClassData(rawClassData) {
           existing.teachers.push(classInfo.teacher);
         }
         
-        // 選擇主要老師（學生人數最多的老師）
-        if ((classInfo.studentCount || 0) > existing.maxStudentCount) {
+        // 選擇主要老師：優先使用學生總表的LT，其次選擇學生人數最多的老師
+        if (classInfo.source === 'master_list') {
+          // 學生總表的LT資料具有最高優先級
+          existing.primaryTeacher = classInfo.teacher;
+          existing.isLTConfirmed = true;
+        } else if (!existing.isLTConfirmed && (classInfo.studentCount || 0) > existing.maxStudentCount) {
+          // 如果沒有LT確認，則選擇學生人數最多的老師
           existing.primaryTeacher = classInfo.teacher;
           existing.maxStudentCount = classInfo.studentCount || 0;
         }
@@ -1667,6 +1672,7 @@ function consolidateClassData(rawClassData) {
           teachers: classInfo.teacher ? [classInfo.teacher] : [],
           totalStudentCount: classInfo.studentCount || 0,
           maxStudentCount: classInfo.studentCount || 0,
+          isLTConfirmed: classInfo.source === 'master_list', // 學生總表來源即為LT確認
           source: classInfo.source || 'unknown'
         });
       }
@@ -1828,7 +1834,8 @@ function getClassesFromMasterList() {
     
     // 尋找班級和老師相關欄位
     const classColumnIndex = findColumnIndex(headers, ['English Class', 'Class', '英語班級', '班級', 'EC']);
-    const teacherColumnIndex = findColumnIndex(headers, ['Teacher', '老師', '授課老師', 'Instructor']);
+    // 優先搜尋 LT (Local Teacher) 欄位，這是班級的主要老師
+    const teacherColumnIndex = findColumnIndex(headers, ['LT', 'Local Teacher', 'English Teacher', 'Teacher', '老師', '本地老師', '英文老師', '授課老師', 'Instructor']);
     
     if (classColumnIndex === -1) {
       Logger.log('⚠️ 學生總表中找不到班級欄位');
