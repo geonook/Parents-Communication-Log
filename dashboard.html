@@ -209,6 +209,36 @@
             font-size: 1em;
         }
         
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .class-info-display {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border-left: 4px solid #4facfe;
+            font-size: 0.9em;
+            display: none;
+        }
+        
+        .class-info-display.show {
+            display: block;
+        }
+        
+        .class-info-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        
         .form-group textarea {
             width: 100%;
             padding: 12px;
@@ -915,8 +945,11 @@
                     <input type="text" id="classChangeStudentId" placeholder="請輸入學生ID" />
                 </div>
                 <div class="form-group">
-                    <label for="classChangeNewTeacher">新老師：</label>
-                    <input type="text" id="classChangeNewTeacher" placeholder="請輸入新老師姓名" />
+                    <label for="classChangeNewClass">目標班級：</label>
+                    <select id="classChangeNewClass" onchange="onClassSelected()">
+                        <option value="">請選擇班級...</option>
+                    </select>
+                    <div id="selectedClassInfo" class="class-info-display"></div>
                 </div>
                 <div class="change-form-actions">
                     <button class="btn-secondary" onclick="closeClassChangeModal()">取消</button>
@@ -1463,29 +1496,37 @@
         
         function showClassChangeForm() {
             document.getElementById('classChangeModal').style.display = 'block';
+            loadAvailableClasses();
         }
         
         function closeClassChangeModal() {
             document.getElementById('classChangeModal').style.display = 'none';
             document.getElementById('classChangeStudentId').value = '';
-            document.getElementById('classChangeNewTeacher').value = '';
+            document.getElementById('classChangeNewClass').value = '';
+            document.getElementById('selectedClassInfo').classList.remove('show');
         }
         
         function processClassChange() {
             const studentId = document.getElementById('classChangeStudentId').value.trim();
-            const newTeacher = document.getElementById('classChangeNewTeacher').value.trim();
+            const classSelect = document.getElementById('classChangeNewClass');
+            const selectedClass = classSelect.value;
             
             if (!studentId) {
                 showError('請輸入學生ID');
                 return;
             }
             
-            if (!newTeacher) {
-                showError('請輸入新老師姓名');
+            if (!selectedClass) {
+                showError('請選擇目標班級');
                 return;
             }
             
-            if (!confirm(`確定要將學生 ${studentId} 轉班到 ${newTeacher} 嗎？\n\n此操作會將學生從原老師記錄簿轉移到新老師記錄簿。`)) {
+            // 從選項中獲取班級資訊
+            const selectedOption = classSelect.options[classSelect.selectedIndex];
+            const teacherName = selectedOption.dataset.teacher;
+            const studentCount = selectedOption.dataset.studentCount;
+            
+            if (!confirm(`確定要將學生 ${studentId} 轉班嗎？\n\n目標班級：${selectedClass}\n對應老師：${teacherName}\n目前學生數：${studentCount}人\n\n此操作會將學生從原班級轉移到新班級。`)) {
                 return;
             }
             
@@ -1496,7 +1537,7 @@
                 .withSuccessHandler(function(result) {
                     hideLoading();
                     if (result.success) {
-                        showSuccess(`學生轉班處理完成！\n\n異動ID：${result.changeId}\n\n詳細資訊：\n- 學生ID：${studentId}\n- 新老師：${newTeacher}\n- 處理時間：${new Date().toLocaleString()}`);
+                        showSuccess(`學生轉班處理完成！\n\n異動ID：${result.changeId}\n\n詳細資訊：\n- 學生ID：${studentId}\n- 目標班級：${selectedClass}\n- 新老師：${teacherName}\n- 處理時間：${new Date().toLocaleString()}`);
                         closeClassChangeModal();
                         updateStats();
                     } else {
@@ -1507,7 +1548,11 @@
                     hideLoading();
                     showError('轉班處理失敗：' + error.message);
                 })
-                .processStudentClassChangeWeb(studentId, newTeacher);
+                .processStudentClassChangeWeb({
+                    studentId: studentId,
+                    newClass: selectedClass,
+                    newTeacher: teacherName
+                });
         }
         
         function showInfoUpdateForm() {
@@ -2402,6 +2447,77 @@
             document.getElementById('semesterProgressLabel').textContent = `${stats.currentSemester} ${stats.currentTerm}進度`;
         }
 
+        // 班級管理相關函數
+        function loadAvailableClasses() {
+            const classSelect = document.getElementById('classChangeNewClass');
+            
+            // 顯示載入狀態
+            classSelect.innerHTML = '<option value="">載入班級中...</option>';
+            classSelect.disabled = true;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    classSelect.disabled = false;
+                    if (result.success && result.classes.length > 0) {
+                        populateClassDropdown(result.classes);
+                    } else {
+                        classSelect.innerHTML = '<option value="">無可用班級</option>';
+                        showError('載入班級失敗：' + (result.message || '找不到可用班級'));
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    classSelect.disabled = false;
+                    classSelect.innerHTML = '<option value="">載入失敗</option>';
+                    showError('載入班級失敗：' + error.message);
+                })
+                .getAvailableClassesWeb();
+        }
+        
+        function populateClassDropdown(classes) {
+            const classSelect = document.getElementById('classChangeNewClass');
+            let options = '<option value="">請選擇班級...</option>';
+            
+            classes.forEach(classInfo => {
+                options += `<option value="${classInfo.value}" 
+                           data-teacher="${classInfo.teacher}" 
+                           data-student-count="${classInfo.studentCount}">
+                           ${classInfo.display}
+                           </option>`;
+            });
+            
+            classSelect.innerHTML = options;
+        }
+        
+        function onClassSelected() {
+            const classSelect = document.getElementById('classChangeNewClass');
+            const classInfoDiv = document.getElementById('selectedClassInfo');
+            
+            if (classSelect.value) {
+                const selectedOption = classSelect.options[classSelect.selectedIndex];
+                const teacher = selectedOption.dataset.teacher;
+                const studentCount = selectedOption.dataset.studentCount;
+                const className = selectedOption.value;
+                
+                classInfoDiv.innerHTML = `
+                    <div class="class-info-item">
+                        <span><strong>班級：</strong></span>
+                        <span>${className}</span>
+                    </div>
+                    <div class="class-info-item">
+                        <span><strong>對應老師：</strong></span>
+                        <span>${teacher}</span>
+                    </div>
+                    <div class="class-info-item">
+                        <span><strong>目前學生數：</strong></span>
+                        <span>${studentCount}人</span>
+                    </div>
+                `;
+                classInfoDiv.classList.add('show');
+            } else {
+                classInfoDiv.classList.remove('show');
+            }
+        }
+        
         // 頁面載入時更新統計
         document.addEventListener('DOMContentLoaded', function() {
             updateStats();
