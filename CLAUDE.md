@@ -1,7 +1,7 @@
 # CLAUDE.md - Parents Communication Log
 
-> **Documentation Version**: 1.0  
-> **Last Updated**: 2025-07-13  
+> **Documentation Version**: 2.0  
+> **Last Updated**: 2025-07-20  
 > **Project**: Parents Communication Log  
 > **Description**: Parent-teacher communication tracking system with teacher management, student data import, dashboard, and automation features  
 > **Features**: GitHub auto-backup, Task agents, technical debt prevention
@@ -117,6 +117,124 @@ This file provides essential guidance to Claude Code (claude.ai/code) when worki
 ✅ **ALL CHECKS VERIFIED - PROCEEDING WITH TASK**
 ```
 
+## 🐙 GITHUB SETUP & AUTO-BACKUP
+
+> **🤖 FOR CLAUDE CODE: When initializing any project, automatically ask about GitHub setup**
+
+### 🎯 **GITHUB SETUP PROMPT** (AUTOMATIC)
+> **⚠️ CLAUDE CODE MUST ALWAYS ASK THIS QUESTION when setting up a new project:**
+
+```
+🐙 GitHub Repository Setup
+Would you like to set up a remote GitHub repository for this project?
+
+Options:
+1. ✅ YES - Create new GitHub repo and enable auto-push backup
+2. ✅ YES - Connect to existing GitHub repo and enable auto-push backup  
+3. ❌ NO - Skip GitHub setup (local git only)
+
+[Wait for user choice before proceeding]
+```
+
+### 🚀 **OPTION 1: CREATE NEW GITHUB REPO**
+If user chooses to create new repo, execute:
+
+```bash
+# Ensure GitHub CLI is available
+gh --version || echo "⚠️ GitHub CLI (gh) required. Install: brew install gh"
+
+# Authenticate if needed
+gh auth status || gh auth login
+
+# Create new GitHub repository
+echo "Enter repository name (or press Enter for current directory name):"
+read repo_name
+repo_name=${repo_name:-$(basename "$PWD")}
+
+# Create repository
+gh repo create "$repo_name" --public --description "Google Apps Script project managed with Claude Code" --confirm
+
+# Add remote and push
+git remote add origin "https://github.com/$(gh api user --jq .login)/$repo_name.git"
+git branch -M main
+git push -u origin main
+
+echo "✅ GitHub repository created and connected: https://github.com/$(gh api user --jq .login)/$repo_name"
+```
+
+### 🔗 **OPTION 2: CONNECT TO EXISTING REPO**
+If user chooses to connect to existing repo, execute:
+
+```bash
+# Get repository URL from user
+echo "Enter your GitHub repository URL (https://github.com/username/repo-name):"
+read repo_url
+
+# Extract repo info and add remote
+git remote add origin "$repo_url"
+git branch -M main
+git push -u origin main
+
+echo "✅ Connected to existing GitHub repository: $repo_url"
+```
+
+### 🔄 **AUTO-PUSH CONFIGURATION**
+For both options, configure automatic backup:
+
+```bash
+# Create git hook for auto-push (optional but recommended)
+cat > .git/hooks/post-commit << 'EOF'
+#!/bin/bash
+# Auto-push to GitHub after every commit
+echo "🔄 Auto-pushing to GitHub..."
+git push origin main
+if [ $? -eq 0 ]; then
+    echo "✅ Successfully backed up to GitHub"
+else
+    echo "⚠️ GitHub push failed - manual push may be required"
+fi
+EOF
+
+chmod +x .git/hooks/post-commit
+
+echo "✅ Auto-push configured - GitHub backup after every commit"
+```
+
+### 📋 **GITHUB BACKUP WORKFLOW** (MANDATORY)
+> **⚠️ CLAUDE CODE MUST FOLLOW THIS PATTERN:**
+
+```bash
+# After every commit, always run BOTH:
+git push origin main    # GitHub backup
+clasp push             # Google Apps Script deployment
+
+# This ensures:
+# ✅ Remote backup of all changes
+# ✅ GAS deployment synchronization
+# ✅ Version history preservation
+# ✅ Disaster recovery protection
+```
+
+### 🎯 **CLAUDE CODE GITHUB COMMANDS**
+Essential GitHub operations for Claude Code:
+
+```bash
+# Check GitHub connection status
+gh auth status && git remote -v
+
+# Create new repository (if needed)
+gh repo create [repo-name] --public --confirm
+
+# Push changes (after every commit)
+git push origin main
+
+# Check repository status
+gh repo view
+
+# Clone repository (for new setup)
+gh repo clone username/repo-name
+```
+
 ## 🏗️ PROJECT OVERVIEW
 
 This is a Google Apps Script-based educational management system with the following components:
@@ -221,6 +339,43 @@ Edit(file_path="TeacherManagement.gs", old_string="...", new_string="...")
 4. **✅ Follow Patterns** - Use established project patterns
 5. **📈 Validate** - Ensure no duplication or technical debt
 
+### 🎯 **ENHANCED DEBT PREVENTION DECISION TREE**
+
+```
+📝 BEFORE CREATING ANY NEW FILE:
+
+1. 🔍 MANDATORY SEARCH
+   ├── Grep(pattern="[functionality].*[keyword]", glob="*.gs")
+   ├── Glob(pattern="**/*[related_term]*")
+   └── Result: [FOUND] → Go to step 2 | [NOT_FOUND] → Go to step 4
+
+2. 📖 ANALYZE EXISTING CODE
+   ├── Read(file_path="[found_files]") 
+   ├── Understand: Purpose, Structure, Patterns
+   └── Decision: [EXTENDABLE] → Go to step 3 | [NOT_EXTENDABLE] → Go to step 4
+
+3. ✅ EXTEND EXISTING (PREFERRED)
+   ├── Edit(file_path="[existing_file]", ...)
+   ├── Add new functions/methods to existing file
+   └── Result: ✅ Single source of truth maintained
+
+4. 🤔 CREATE NEW FILE (ONLY IF NECESSARY)
+   ├── Document: Why new file is necessary
+   ├── Ensure: Clear separation of concerns
+   ├── Follow: Established naming patterns
+   └── Result: ⚠️ New file created with justification
+```
+
+### 🛡️ **DEBT PREVENTION VALIDATION CHECKLIST**
+
+Before any file creation/modification:
+- [ ] **Search completed**: Used Grep/Glob to find existing code
+- [ ] **Existing code analyzed**: Read and understood current implementations
+- [ ] **Extension attempted**: Tried to extend existing code first
+- [ ] **Single source verified**: Ensured no duplicate implementations
+- [ ] **Patterns followed**: Used established project conventions
+- [ ] **Purpose documented**: Clear reason for any new files created
+
 ## 🚀 COMMON COMMANDS
 
 ```bash
@@ -235,6 +390,11 @@ clasp push             # Deploy to Google Apps Script - CRITICAL!
 
 # Check clasp status
 clasp status
+
+# GitHub repository management
+gh repo view           # Check repository status
+gh auth status         # Verify GitHub authentication
+git remote -v          # Check remote connections
 ```
 
 ## 🎯 RULE COMPLIANCE CHECK
@@ -266,36 +426,6 @@ Before starting ANY task, verify:
 **⚠️ Prevention is better than consolidation - build clean from the start.**  
 **🎯 Focus on single source of truth and extending existing functionality.**  
 **📈 Each task should maintain clean architecture and prevent technical debt.**
-
----
-
-## 🚀 未來功能需求
-
-### 📋 學生異動管理系統 (STUDENT_CHANGE_MGMT)
-
-**優先級**: 中等 | **狀態**: 需求已記錄，待實施 | **複雜度**: 高
-
-**核心需求**:
-1. **轉學/移出**: 完全移除學生的所有電聯記錄
-2. **轉班**: 將學生從原老師轉移到新老師記錄簿
-3. **基本資料更新**: 更新學生個人資訊並同步到所有相關記錄
-
-**技術要求**:
-- 資料完整性保證
-- 異動歷史追蹤和回滾功能
-- 批量異動處理能力
-- Web Dashboard 整合
-
-**實施模組**:
-- `StudentChangeManager.gs` - 核心異動管理
-- `StudentLocator.gs` - 學生查找定位
-- `DataSyncManager.gs` - 資料同步管理
-
-**預估工作量**: 3-5天 (包含測試和文檔)
-
-**如何開始討論**: 
-- 提及 "學生異動管理" 或 "STUDENT_CHANGE_MGMT"
-- 參考 `FEATURE_ROADMAP.md` 獲取詳細設計
 
 ---
 
