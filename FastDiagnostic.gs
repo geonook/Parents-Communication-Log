@@ -424,6 +424,188 @@ function generateSystemStatusReport() {
 }
 
 /**
+ * 測試班級資料合併功能
+ * 驗證 getAllAvailableClasses 和 consolidateClassData 是否正常工作
+ */
+function testClassConsolidation() {
+  console.log('🏫 開始測試班級資料合併功能');
+  
+  const testResult = {
+    testName: '班級資料合併測試',
+    startTime: new Date(),
+    endTime: null,
+    duration: 0,
+    success: false,
+    details: {
+      functionsExist: false,
+      rawDataCount: 0,
+      consolidatedCount: 0,
+      duplicatesFound: [],
+      duplicatesRemoved: 0,
+      sampleClasses: [],
+      formattedOptionsWork: false,
+      totalStudents: 0
+    },
+    issues: [],
+    recommendations: []
+  };
+  
+  try {
+    // 檢查必要函數是否存在
+    console.log('🔍 步驟1: 檢查班級相關函數存在性');
+    const requiredFunctions = [
+      'getAllAvailableClasses',
+      'consolidateClassData', 
+      'getFormattedClassOptions',
+      'getClassesFromMasterList',
+      'getClassesFromTeacherBooks'
+    ];
+    
+    let missingFunctions = [];
+    requiredFunctions.forEach(funcName => {
+      if (typeof eval(funcName) !== 'function') {
+        missingFunctions.push(funcName);
+      }
+    });
+    
+    if (missingFunctions.length > 0) {
+      testResult.issues.push(`缺少函數: ${missingFunctions.join(', ')}`);
+      testResult.recommendations.push('執行 clasp push 重新部署程式碼');
+      console.log(`❌ 缺少必要函數: ${missingFunctions.join(', ')}`);
+      return testResult;
+    }
+    
+    testResult.details.functionsExist = true;
+    console.log('✅ 所有班級相關函數都存在');
+    
+    // 測試獲取所有可用班級
+    console.log('🔍 步驟2: 測試 getAllAvailableClasses()');
+    const allClasses = getAllAvailableClasses();
+    
+    if (!allClasses || allClasses.length === 0) {
+      testResult.issues.push('getAllAvailableClasses() 返回空結果');
+      testResult.recommendations.push('檢查學生總表和老師記錄簿是否有資料');
+      console.log('⚠️ getAllAvailableClasses() 返回空結果');
+    } else {
+      testResult.details.consolidatedCount = allClasses.length;
+      testResult.details.sampleClasses = allClasses.slice(0, 5).map(cls => ({
+        className: cls.className,
+        teacher: cls.teacher,
+        studentCount: cls.studentCount,
+        source: cls.source
+      }));
+      
+      // 計算總學生數
+      testResult.details.totalStudents = allClasses.reduce((sum, cls) => sum + (cls.studentCount || 0), 0);
+      
+      console.log(`✅ 成功獲取 ${allClasses.length} 個班級`);
+      console.log(`📊 總學生數: ${testResult.details.totalStudents}`);
+      
+      // 顯示前幾個班級樣本
+      console.log('📋 班級樣本:');
+      testResult.details.sampleClasses.forEach((cls, index) => {
+        console.log(`  ${index + 1}. ${cls.className} (${cls.teacher} - ${cls.studentCount}人)`);
+      });
+    }
+    
+    // 測試重複檢查
+    console.log('🔍 步驟3: 檢查是否有重複班級');
+    const classNames = allClasses.map(cls => cls.className);
+    const uniqueClassNames = [...new Set(classNames)];
+    
+    if (classNames.length !== uniqueClassNames.length) {
+      const duplicateNames = classNames.filter((name, index) => classNames.indexOf(name) !== index);
+      testResult.details.duplicatesFound = [...new Set(duplicateNames)];
+      testResult.details.duplicatesRemoved = classNames.length - uniqueClassNames.length;
+      testResult.issues.push(`發現重複班級: ${testResult.details.duplicatesFound.join(', ')}`);
+      console.log(`⚠️ 發現 ${testResult.details.duplicatesRemoved} 個重複班級條目`);
+      console.log(`重複班級: ${testResult.details.duplicatesFound.join(', ')}`);
+    } else {
+      console.log('✅ 沒有發現重複班級，合併功能正常');
+    }
+    
+    // 測試格式化選項功能
+    console.log('🔍 步驟4: 測試 getFormattedClassOptions()');
+    try {
+      const formattedOptions = getFormattedClassOptions();
+      if (formattedOptions && formattedOptions.length > 0) {
+        testResult.details.formattedOptionsWork = true;
+        console.log(`✅ getFormattedClassOptions() 成功，返回 ${formattedOptions.length} 個選項`);
+        
+        // 顯示前3個格式化選項樣本
+        console.log('📋 格式化選項樣本:');
+        formattedOptions.slice(0, 3).forEach((option, index) => {
+          console.log(`  ${index + 1}. ${option.display}`);
+        });
+      } else {
+        testResult.issues.push('getFormattedClassOptions() 返回空結果');
+        console.log('⚠️ getFormattedClassOptions() 返回空結果');
+      }
+    } catch (error) {
+      testResult.issues.push(`getFormattedClassOptions() 執行錯誤: ${error.message}`);
+      console.log(`❌ getFormattedClassOptions() 執行錯誤: ${error.message}`);
+    }
+    
+    // 判斷測試成功條件
+    testResult.success = (
+      testResult.details.functionsExist &&
+      testResult.details.consolidatedCount > 0 &&
+      testResult.details.duplicatesFound.length === 0 &&
+      testResult.details.formattedOptionsWork
+    );
+    
+    // 生成建議
+    if (testResult.success) {
+      testResult.recommendations.push('✅ 班級合併功能工作正常');
+      testResult.recommendations.push('💡 可以在實際應用中使用班級選擇功能');
+    } else {
+      if (testResult.details.duplicatesFound.length > 0) {
+        testResult.recommendations.push('🔧 需要檢查 consolidateClassData() 函數的合併邏輯');
+      }
+      if (testResult.details.consolidatedCount === 0) {
+        testResult.recommendations.push('📋 檢查學生總表和老師記錄簿是否包含班級資料');
+      }
+      if (!testResult.details.formattedOptionsWork) {
+        testResult.recommendations.push('🔧 修復 getFormattedClassOptions() 函數');
+      }
+    }
+    
+  } catch (error) {
+    testResult.issues.push(`測試執行錯誤: ${error.message}`);
+    testResult.recommendations.push('🔧 檢查相關函數的程式碼實作');
+    console.log(`❌ 班級合併測試執行錯誤: ${error.message}`);
+  }
+  
+  testResult.endTime = new Date();
+  testResult.duration = (testResult.endTime - testResult.startTime) / 1000;
+  
+  // 輸出測試報告
+  console.log('');
+  console.log('=== 班級合併測試報告 ===');
+  console.log(`測試時間: ${testResult.duration.toFixed(2)}秒`);
+  console.log(`測試結果: ${testResult.success ? '✅ 成功' : '❌ 失敗'}`);
+  console.log(`合併後班級數: ${testResult.details.consolidatedCount}`);
+  console.log(`重複班級數: ${testResult.details.duplicatesFound.length}`);
+  console.log(`總學生數: ${testResult.details.totalStudents}`);
+  console.log(`格式化功能: ${testResult.details.formattedOptionsWork ? '✅ 正常' : '❌ 異常'}`);
+  
+  if (testResult.issues.length > 0) {
+    console.log('');
+    console.log('⚠️ 發現問題:');
+    testResult.issues.forEach(issue => console.log(`  • ${issue}`));
+  }
+  
+  console.log('');
+  console.log('💡 建議:');
+  testResult.recommendations.forEach(rec => console.log(`  • ${rec}`));
+  
+  console.log('');
+  console.log('=== 測試完成 ===');
+  
+  return testResult;
+}
+
+/**
  * 一鍵快速診斷
  * 執行所有關鍵檢查，提供完整的系統狀態概覽
  */
@@ -447,7 +629,11 @@ function oneClickDiagnosis() {
     const functionCheckResult = quickFunctionCheck();
     
     console.log('');
-    console.log('=== 第4步: 系統狀態報告 ===');
+    console.log('=== 第4步: 班級合併功能測試 ===');
+    const classConsolidationResult = testClassConsolidation();
+    
+    console.log('');
+    console.log('=== 第5步: 系統狀態報告 ===');
     const statusReport = generateSystemStatusReport();
     
     const endTime = new Date();
@@ -457,6 +643,7 @@ function oneClickDiagnosis() {
     console.log('=== 一鍵診斷完成 ===');
     console.log(`總耗時: ${totalDuration.toFixed(2)}秒`);
     console.log(`最終狀態: ${statusReport.status}`);
+    console.log(`班級合併功能: ${classConsolidationResult.success ? '✅ 正常' : '❌ 異常'}`);
     
     // 返回綜合結果
     return {
@@ -464,8 +651,9 @@ function oneClickDiagnosis() {
       ultraFastResult: ultraFastResult,
       originalErrorResult: originalErrorResult,
       functionCheckResult: functionCheckResult,
+      classConsolidationResult: classConsolidationResult,
       statusReport: statusReport,
-      success: ultraFastResult.overallStatus === 'healthy' && originalErrorResult.originalErrorFixed
+      success: ultraFastResult.overallStatus === 'healthy' && originalErrorResult.originalErrorFixed && classConsolidationResult.success
     };
     
   } catch (error) {

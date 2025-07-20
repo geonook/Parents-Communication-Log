@@ -1632,60 +1632,90 @@ function testStudentIdCompatibility() {
 // ============ 班級管理功能模組 ============
 
 /**
+ * 合併重複班級資料，每個班級只保留一個條目
+ * @param {Array} rawClassData - 原始班級資料陣列
+ * @returns {Array} 合併後的班級資料
+ */
+function consolidateClassData(rawClassData) {
+  try {
+    const consolidatedMap = new Map();
+    
+    rawClassData.forEach(classInfo => {
+      const className = classInfo.className;
+      
+      if (consolidatedMap.has(className)) {
+        const existing = consolidatedMap.get(className);
+        
+        // 累加學生人數
+        existing.totalStudentCount += (classInfo.studentCount || 0);
+        
+        // 記錄所有老師
+        if (classInfo.teacher && !existing.teachers.includes(classInfo.teacher)) {
+          existing.teachers.push(classInfo.teacher);
+        }
+        
+        // 選擇主要老師（學生人數最多的老師）
+        if ((classInfo.studentCount || 0) > existing.maxStudentCount) {
+          existing.primaryTeacher = classInfo.teacher;
+          existing.maxStudentCount = classInfo.studentCount || 0;
+        }
+        
+      } else {
+        consolidatedMap.set(className, {
+          className: className,
+          primaryTeacher: classInfo.teacher || '未指定',
+          teachers: classInfo.teacher ? [classInfo.teacher] : [],
+          totalStudentCount: classInfo.studentCount || 0,
+          maxStudentCount: classInfo.studentCount || 0,
+          source: classInfo.source || 'unknown'
+        });
+      }
+    });
+    
+    // 轉換為最終格式
+    return Array.from(consolidatedMap.values()).map(consolidated => ({
+      className: consolidated.className,
+      teacher: consolidated.primaryTeacher,
+      studentCount: consolidated.totalStudentCount,
+      allTeachers: consolidated.teachers,
+      source: consolidated.source
+    }));
+    
+  } catch (error) {
+    Logger.log('❌ 合併班級資料失敗：' + error.message);
+    return rawClassData; // 失敗時返回原始資料
+  }
+}
+
+/**
  * 獲取所有可用班級清單
- * 從學生總表和老師記錄簿中提取班級資訊
- * @returns {Array} 班級清單，包含班級名稱、對應老師、學生人數等資訊
+ * 從學生總表和老師記錄簿中提取班級資訊，並合併重複班級
+ * @returns {Array} 班級清單，每個班級只有一個條目，包含主要老師和總學生人數
  */
 function getAllAvailableClasses() {
   try {
     Logger.log('🏫 開始獲取所有可用班級清單');
     
-    const classMap = new Map();
+    const rawClassData = [];
     
     // 方法1: 從學生總表獲取班級資訊
     const masterListClasses = getClassesFromMasterList();
-    masterListClasses.forEach(classInfo => {
-      const key = `${classInfo.className}-${classInfo.teacher}`;
-      if (!classMap.has(key)) {
-        classMap.set(key, {
-          className: classInfo.className,
-          teacher: classInfo.teacher,
-          studentCount: classInfo.studentCount || 0,
-          source: 'master_list'
-        });
-      }
-    });
+    rawClassData.push(...masterListClasses.map(cls => ({...cls, source: 'master_list'})));
     
     // 方法2: 從老師記錄簿獲取班級資訊
     const teacherBookClasses = getClassesFromTeacherBooks();
-    teacherBookClasses.forEach(classInfo => {
-      const key = `${classInfo.className}-${classInfo.teacher}`;
-      if (classMap.has(key)) {
-        // 更新學生人數為實際統計值
-        const existing = classMap.get(key);
-        existing.studentCount = classInfo.studentCount;
-        existing.source = 'verified';
-      } else {
-        classMap.set(key, {
-          className: classInfo.className,
-          teacher: classInfo.teacher,
-          studentCount: classInfo.studentCount,
-          source: 'teacher_book'
-        });
-      }
-    });
+    rawClassData.push(...teacherBookClasses.map(cls => ({...cls, source: 'teacher_book'})));
     
-    // 轉換為陣列並排序
-    const allClasses = Array.from(classMap.values()).sort((a, b) => {
-      // 先按班級名稱排序，再按老師名稱排序
-      if (a.className !== b.className) {
-        return a.className.localeCompare(b.className);
-      }
-      return a.teacher.localeCompare(b.teacher);
-    });
+    // 合併重複班級資料
+    const consolidatedClasses = consolidateClassData(rawClassData);
     
-    Logger.log(`🏫 獲取到 ${allClasses.length} 個班級`);
-    return allClasses;
+    // 排序：按班級名稱排序
+    const sortedClasses = consolidatedClasses.sort((a, b) => 
+      a.className.localeCompare(b.className)
+    );
+    
+    Logger.log(`🏫 原始資料 ${rawClassData.length} 個條目，合併後 ${sortedClasses.length} 個班級`);
+    return sortedClasses;
     
   } catch (error) {
     Logger.log('❌ 獲取班級清單失敗：' + error.message);
