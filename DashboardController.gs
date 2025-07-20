@@ -34,6 +34,10 @@ function doPost(e) {
         return getSystemStatusWeb();
       case 'setupCompleteSystem':
         return setupCompleteSystemWeb();
+      case 'getAvailableClasses':
+        return getAvailableClassesWeb();
+      case 'processStudentClassChange':
+        return processStudentClassChangeWeb(e.parameter);
       default:
         return { success: false, message: '未知的操作' };
     }
@@ -823,12 +827,21 @@ function processStudentTransferOutWeb(studentId, reason) {
 /**
  * 學生轉班 Web API
  * @param {string} studentId 學生ID
- * @param {string} newTeacher 新老師
+ * @param {string} newTeacher 新老師 (向後兼容)
+ * @param {string} newClass 新班級 (可選，優先於newTeacher)
  * @returns {Object} 處理結果
  */
-function processStudentClassChangeWeb(studentId, newTeacher) {
+function processStudentClassChangeWeb(studentId, newTeacher, newClass = null) {
   try {
-    Logger.log(`Dashboard: 處理學生轉班 - ${studentId} → ${newTeacher}`);
+    // 支持物件參數格式
+    if (typeof studentId === 'object') {
+      const params = studentId;
+      studentId = params.studentId;
+      newTeacher = params.newTeacher;
+      newClass = params.newClass;
+    }
+    
+    Logger.log(`Dashboard: 處理學生轉班 - ${studentId} → ${newClass ? `班級:${newClass}` : `老師:${newTeacher}`}`);
     
     // 先獲取學生資訊和原老師資訊
     const studentInfo = getStudentBasicData(studentId);
@@ -844,6 +857,7 @@ function processStudentClassChangeWeb(studentId, newTeacher) {
       studentId: studentId,
       changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE,
       newTeacher: newTeacher,
+      newClass: newClass,
       fromTeacher: fromTeacher,
       operator: Session.getActiveUser().getEmail()
     };
@@ -861,6 +875,7 @@ function processStudentClassChangeWeb(studentId, newTeacher) {
         studentName: studentName,
         fromTeacher: fromTeacher,
         newTeacher: newTeacher,
+        newClass: newClass,
         processTime: new Date().toLocaleString(),
         operator: Session.getActiveUser().getEmail()
       }
@@ -2183,4 +2198,67 @@ function sortContactRecordsWeb(spreadsheetId) {
     };
   }
 }
+
+/**
+ * 獲取可用班級清單 Web API
+ * @returns {Object} 班級清單
+ */
+function getAvailableClassesWeb() {
+  try {
+    Logger.log('Dashboard: 獲取可用班級清單');
+    
+    const classOptions = getFormattedClassOptions();
+    
+    return {
+      success: true,
+      message: `成功獲取 ${classOptions.length} 個班級`,
+      classes: classOptions,
+      summary: {
+        totalClasses: classOptions.length,
+        totalStudents: classOptions.reduce((sum, cls) => sum + cls.studentCount, 0)
+      }
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 獲取班級清單失敗 - ' + error.toString());
+    return {
+      success: false,
+      message: '獲取班級清單失敗：' + error.message,
+      classes: []
+    };
+  }
+}
+
+/**
+ * 驗證班級存在性 Web API
+ * @param {string} className 班級名稱
+ * @returns {Object} 驗證結果
+ */
+function validateClassExistsWeb(className) {
+  try {
+    Logger.log(`Dashboard: 驗證班級存在性 - ${className}`);
+    
+    const validation = validateClassExists(className);
+    
+    return {
+      success: true,
+      exists: validation.exists,
+      message: validation.message,
+      classInfo: validation.exists ? {
+        className: className,
+        teacher: validation.teacher,
+        studentCount: validation.studentCount
+      } : null
+    };
+    
+  } catch (error) {
+    Logger.log('Dashboard: 班級驗證失敗 - ' + error.toString());
+    return {
+      success: false,
+      exists: false,
+      message: '班級驗證失敗：' + error.message
+    };
+  }
+}
+
 // 原 sortContactRecordsWeb 函數已移除，排序邏輯已整合到記錄簿建立過程中

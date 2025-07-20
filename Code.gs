@@ -847,27 +847,44 @@ function studentClassChange() {
       return;
     }
     
-    // 獲取目標老師
-    const teacherResponse = ui.prompt(
-      '目標老師',
-      '請輸入新老師姓名：',
+    // 獲取所有可用班級
+    const classOptions = getFormattedClassOptions();
+    if (!classOptions || classOptions.length === 0) {
+      ui.alert('錯誤', '找不到可用的班級，請先確認系統中有設定班級資料', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 建立班級選擇選單
+    let classListMessage = '請選擇目標班級：\n\n';
+    classOptions.forEach((option, index) => {
+      classListMessage += `${index + 1}. ${option.display}\n`;
+    });
+    classListMessage += '\n請輸入班級編號（1-' + classOptions.length + '）：';
+    
+    const classResponse = ui.prompt(
+      '選擇目標班級',
+      classListMessage,
       ui.ButtonSet.OK_CANCEL
     );
     
-    if (teacherResponse.getSelectedButton() !== ui.Button.OK) {
+    if (classResponse.getSelectedButton() !== ui.Button.OK) {
       return;
     }
     
-    const newTeacher = teacherResponse.getResponseText().trim();
-    if (!newTeacher) {
-      ui.alert('錯誤', '請輸入有效的老師姓名', ui.ButtonSet.OK);
+    const classIndex = parseInt(classResponse.getResponseText().trim()) - 1;
+    if (isNaN(classIndex) || classIndex < 0 || classIndex >= classOptions.length) {
+      ui.alert('錯誤', '請輸入有效的班級編號', ui.ButtonSet.OK);
       return;
     }
+    
+    const selectedClass = classOptions[classIndex];
+    const newClass = selectedClass.value;
+    const newTeacher = selectedClass.teacher;
     
     // 確認操作
     const confirmResponse = ui.alert(
       '確認轉班操作',
-      `即將處理學生轉班：\n\n學生ID：${studentId}\n新老師：${newTeacher}\n\n此操作將：\n• 從原老師記錄簿移除學生資料\n• 添加學生到新老師記錄簿\n• 標記相關電聯記錄為已轉班\n• 更新學生總表中的老師資訊\n\n確定要繼續嗎？`,
+      `即將處理學生轉班：\n\n學生ID：${studentId}\n目標班級：${newClass}\n新老師：${newTeacher}\n班級人數：${selectedClass.studentCount}人\n\n此操作將：\n• 從原老師記錄簿移除學生資料\n• 添加學生到新班級的老師記錄簿\n• 標記相關電聯記錄為已轉班\n• 更新學生總表中的班級和老師資訊\n\n確定要繼續嗎？`,
       ui.ButtonSet.YES_NO
     );
     
@@ -879,6 +896,7 @@ function studentClassChange() {
     const changeRequest = {
       studentId: studentId,
       changeType: CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE,
+      newClass: newClass,
       newTeacher: newTeacher,
       operator: Session.getActiveUser().getEmail()
     };
@@ -888,7 +906,7 @@ function studentClassChange() {
     if (result.success) {
       ui.alert(
         '轉班處理完成',
-        `學生 ${studentId} 轉班處理成功！\n\n異動ID：${result.changeId}\n從：${result.details.fromTeacher}\n到：${result.details.toTeacher}\n轉班日期：${result.details.transferDate}`,
+        `學生 ${studentId} 轉班處理成功！\n\n異動ID：${result.changeId}\n原班級：${result.details.fromTeacher}\n新班級：${newClass}\n新老師：${result.details.toTeacher}\n轉班日期：${result.details.transferDate}`,
         ui.ButtonSet.OK
       );
     } else {

@@ -15,6 +15,7 @@ const CHANGE_LOG_CONFIG = {
     'Operator',            // 操作者
     'From Teacher',        // 原老師 (轉班時)
     'To Teacher',          // 新老師 (轉班時)
+    'To Class',            // 新班級 (轉班時)
     'Reason',              // 異動原因
     'Status',              // 異動狀態
     'Backup Data',         // 備份資料路徑
@@ -81,7 +82,7 @@ function processStudentChange(changeRequest) {
         operationResult = handleTransferOut(changeRequest.studentId, changeRequest.reason, changeRequest.operator);
         break;
       case CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE:
-        operationResult = handleClassChange(changeRequest.studentId, changeRequest.newTeacher, changeRequest.operator);
+        operationResult = handleClassChange(changeRequest);
         break;
       case CHANGE_LOG_CONFIG.CHANGE_TYPES.INFO_UPDATE:
         operationResult = handleInfoUpdate(changeRequest.studentId, changeRequest.updateData, changeRequest.operator);
@@ -229,12 +230,33 @@ function handleTransferOut(studentId, reason, operator) {
 /**
  * 處理學生轉班
  * @param {string} studentId 學生ID  
- * @param {string} newTeacher 新老師
+ * @param {string} newTeacher 新老師 (向後兼容)
  * @param {string} operator 操作者
+ * @param {string} newClass 新班級 (可選，優先於newTeacher)
  * @returns {Object} 操作結果
  */
-function handleClassChange(studentId, newTeacher, operator) {
-  Logger.log(`🔄 處理學生轉班：${studentId} → ${newTeacher}`);
+function handleClassChange(studentId, newTeacher, operator, newClass = null) {
+  // 支持新的呼叫方式：傳入changeRequest物件
+  if (typeof studentId === 'object' && studentId.studentId) {
+    const changeRequest = studentId;
+    studentId = changeRequest.studentId;
+    newTeacher = changeRequest.newTeacher;
+    operator = changeRequest.operator;
+    newClass = changeRequest.newClass;
+  }
+  
+  // 如果提供了班級資訊，根據班級獲取對應老師
+  if (newClass) {
+    const classTeacher = getTeacherByClass(newClass);
+    if (classTeacher) {
+      newTeacher = classTeacher;
+      Logger.log(`🔄 處理學生轉班：${studentId} → 班級:${newClass} (老師:${newTeacher})`);
+    } else {
+      Logger.log(`⚠️ 找不到班級 "${newClass}" 對應的老師，使用傳入的老師：${newTeacher}`);
+    }
+  } else {
+    Logger.log(`🔄 處理學生轉班：${studentId} → ${newTeacher}`);
+  }
   
   try {
     // 定位學生當前記錄
@@ -288,8 +310,9 @@ function handleClassChange(studentId, newTeacher, operator) {
           changeType: '轉班',
           fromTeacher: record.teacherName,
           toTeacher: newTeacher,
+          toClass: newClass || newTeacher, // 新增班級資訊
           changeDate: new Date().toLocaleString(),
-          reason: '學生轉班'
+          reason: newClass ? `學生轉班至${newClass}` : '學生轉班'
         });
         
         // 🔧 修復問題2：重新排序電聯記錄，維持正確的Student ID順序
@@ -442,8 +465,18 @@ function validateStudentChange(changeRequest) {
     
     // 轉班特別驗證
     if (changeRequest.changeType === CHANGE_LOG_CONFIG.CHANGE_TYPES.CLASS_CHANGE) {
-      if (!changeRequest.newTeacher) {
-        return { isValid: false, message: '轉班操作缺少新老師資訊' };
+      if (changeRequest.newClass) {
+        // 驗證班級是否存在
+        const classValidation = validateClassExists(changeRequest.newClass);
+        if (!classValidation.exists) {
+          return { isValid: false, message: classValidation.message };
+        }
+        // 如果沒有提供老師但有班級，嘗試從班級獲取老師
+        if (!changeRequest.newTeacher) {
+          changeRequest.newTeacher = classValidation.teacher;
+        }
+      } else if (!changeRequest.newTeacher) {
+        return { isValid: false, message: '轉班操作缺少新班級或新老師資訊' };
       }
     }
     
@@ -507,7 +540,8 @@ function createChangeRecord(changeId, changeRequest) {
   changeRecord['Operator'] = changeRequest.operator;
   changeRecord['From Teacher'] = fromTeacher;
   changeRecord['To Teacher'] = changeRequest.newTeacher || '';
-  changeRecord['Reason'] = changeRequest.reason || '';
+  changeRecord['To Class'] = changeRequest.newClass || ''; // 新增班級資訊
+  changeRecord['Reason'] = changeRequest.reason || (changeRequest.newClass ? `轉班至${changeRequest.newClass}` : '');
   changeRecord['Status'] = CHANGE_LOG_CONFIG.STATUS.PENDING;
   changeRecord['Backup Data'] = '';
   changeRecord['Rollback Available'] = 'Yes';
@@ -771,7 +805,7 @@ function addStudentChangeToClassInfo(teacherBook, changeInfo) {
       
       // 添加標題行
       const headerRow = changeLogStartRow + 1;
-      const headers = ['異動日期', '學生ID', '學生姓名', '異動類型', '原老師', '新老師', '異動原因'];
+      const headers = ['異動日期', '學生ID', '學生姓名', '異動類型', '原老師', '新老師', '新班級', '異動原因'];
       classInfoSheet.getRange(headerRow, 1, 1, headers.length).setValues([headers]);
       classInfoSheet.getRange(headerRow, 1, 1, headers.length).setFontWeight('bold');
       classInfoSheet.getRange(headerRow, 1, 1, headers.length).setBackground('#f0f0f0');
@@ -795,6 +829,7 @@ function addStudentChangeToClassInfo(teacherBook, changeInfo) {
       changeInfo.changeType,
       changeInfo.fromTeacher,
       changeInfo.toTeacher,
+      changeInfo.toClass || '',  // 新班級資訊
       changeInfo.reason
     ];
     

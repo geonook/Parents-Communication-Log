@@ -1627,4 +1627,330 @@ function testStudentIdCompatibility() {
   });
   
   return results;
+}
+
+// ============ 班級管理功能模組 ============
+
+/**
+ * 獲取所有可用班級清單
+ * 從學生總表和老師記錄簿中提取班級資訊
+ * @returns {Array} 班級清單，包含班級名稱、對應老師、學生人數等資訊
+ */
+function getAllAvailableClasses() {
+  try {
+    Logger.log('🏫 開始獲取所有可用班級清單');
+    
+    const classMap = new Map();
+    
+    // 方法1: 從學生總表獲取班級資訊
+    const masterListClasses = getClassesFromMasterList();
+    masterListClasses.forEach(classInfo => {
+      const key = `${classInfo.className}-${classInfo.teacher}`;
+      if (!classMap.has(key)) {
+        classMap.set(key, {
+          className: classInfo.className,
+          teacher: classInfo.teacher,
+          studentCount: classInfo.studentCount || 0,
+          source: 'master_list'
+        });
+      }
+    });
+    
+    // 方法2: 從老師記錄簿獲取班級資訊
+    const teacherBookClasses = getClassesFromTeacherBooks();
+    teacherBookClasses.forEach(classInfo => {
+      const key = `${classInfo.className}-${classInfo.teacher}`;
+      if (classMap.has(key)) {
+        // 更新學生人數為實際統計值
+        const existing = classMap.get(key);
+        existing.studentCount = classInfo.studentCount;
+        existing.source = 'verified';
+      } else {
+        classMap.set(key, {
+          className: classInfo.className,
+          teacher: classInfo.teacher,
+          studentCount: classInfo.studentCount,
+          source: 'teacher_book'
+        });
+      }
+    });
+    
+    // 轉換為陣列並排序
+    const allClasses = Array.from(classMap.values()).sort((a, b) => {
+      // 先按班級名稱排序，再按老師名稱排序
+      if (a.className !== b.className) {
+        return a.className.localeCompare(b.className);
+      }
+      return a.teacher.localeCompare(b.teacher);
+    });
+    
+    Logger.log(`🏫 獲取到 ${allClasses.length} 個班級`);
+    return allClasses;
+    
+  } catch (error) {
+    Logger.log('❌ 獲取班級清單失敗：' + error.message);
+    return [];
+  }
+}
+
+/**
+ * 根據班級名稱獲取對應老師
+ * @param {string} className 班級名稱
+ * @returns {string|null} 對應的老師名稱，如果找不到則返回null
+ */
+function getTeacherByClass(className) {
+  try {
+    const allClasses = getAllAvailableClasses();
+    const matchingClass = allClasses.find(cls => cls.className === className);
+    
+    if (matchingClass) {
+      Logger.log(`🏫 班級 "${className}" 對應老師：${matchingClass.teacher}`);
+      return matchingClass.teacher;
+    }
+    
+    Logger.log(`⚠️ 找不到班級 "${className}" 對應的老師`);
+    return null;
+    
+  } catch (error) {
+    Logger.log('❌ 獲取班級對應老師失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 獲取班級與老師的對應關係
+ * @returns {Object} 班級與老師的映射對象
+ */
+function getClassTeacherMapping() {
+  try {
+    const allClasses = getAllAvailableClasses();
+    const mapping = {};
+    
+    allClasses.forEach(classInfo => {
+      mapping[classInfo.className] = {
+        teacher: classInfo.teacher,
+        studentCount: classInfo.studentCount,
+        source: classInfo.source
+      };
+    });
+    
+    Logger.log(`🏫 建立班級老師映射，包含 ${Object.keys(mapping).length} 個班級`);
+    return mapping;
+    
+  } catch (error) {
+    Logger.log('❌ 建立班級老師映射失敗：' + error.message);
+    return {};
+  }
+}
+
+/**
+ * 驗證班級是否存在
+ * @param {string} className 班級名稱
+ * @returns {Object} 驗證結果
+ */
+function validateClassExists(className) {
+  try {
+    const allClasses = getAllAvailableClasses();
+    const classExists = allClasses.some(cls => cls.className === className);
+    
+    if (classExists) {
+      const classInfo = allClasses.find(cls => cls.className === className);
+      return {
+        exists: true,
+        teacher: classInfo.teacher,
+        studentCount: classInfo.studentCount,
+        message: `班級 "${className}" 存在，對應老師：${classInfo.teacher}`
+      };
+    }
+    
+    return {
+      exists: false,
+      teacher: null,
+      studentCount: 0,
+      message: `班級 "${className}" 不存在`
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 驗證班級存在性失敗：' + error.message);
+    return {
+      exists: false,
+      teacher: null,
+      studentCount: 0,
+      message: '驗證過程發生錯誤：' + error.message
+    };
+  }
+}
+
+/**
+ * 從學生總表獲取班級資訊
+ * @returns {Array} 班級資訊陣列
+ */
+function getClassesFromMasterList() {
+  try {
+    const masterListData = getSystemMasterList();
+    if (!masterListData || masterListData.length < 4) {
+      Logger.log('⚠️ 學生總表資料不足');
+      return [];
+    }
+    
+    const headers = masterListData[2]; // 第3行是標題
+    const studentData = masterListData.slice(3); // 從第4行開始是學生資料
+    
+    // 尋找班級和老師相關欄位
+    const classColumnIndex = findColumnIndex(headers, ['English Class', 'Class', '英語班級', '班級', 'EC']);
+    const teacherColumnIndex = findColumnIndex(headers, ['Teacher', '老師', '授課老師', 'Instructor']);
+    
+    if (classColumnIndex === -1) {
+      Logger.log('⚠️ 學生總表中找不到班級欄位');
+      return [];
+    }
+    
+    const classStats = new Map();
+    
+    studentData.forEach(row => {
+      if (row.length > classColumnIndex) {
+        const className = row[classColumnIndex]?.toString().trim();
+        const teacher = teacherColumnIndex !== -1 ? row[teacherColumnIndex]?.toString().trim() : '';
+        
+        if (className) {
+          const key = `${className}-${teacher}`;
+          if (classStats.has(key)) {
+            classStats.get(key).studentCount++;
+          } else {
+            classStats.set(key, {
+              className: className,
+              teacher: teacher || '未指定',
+              studentCount: 1
+            });
+          }
+        }
+      }
+    });
+    
+    return Array.from(classStats.values());
+    
+  } catch (error) {
+    Logger.log('❌ 從學生總表獲取班級資訊失敗：' + error.message);
+    return [];
+  }
+}
+
+/**
+ * 從老師記錄簿獲取班級資訊
+ * @returns {Array} 班級資訊陣列
+ */
+function getClassesFromTeacherBooks() {
+  try {
+    const teacherBooks = getTeacherBooksList();
+    const classes = [];
+    
+    teacherBooks.forEach(book => {
+      try {
+        const teacherName = extractTeacherNameFromFileName(book.getName());
+        const classInfo = extractClassInfoFromTeacherBook(book, teacherName);
+        
+        if (classInfo && classInfo.length > 0) {
+          classes.push(...classInfo);
+        }
+        
+      } catch (error) {
+        Logger.log(`❌ 處理老師記錄簿失敗 ${book.getName()}：${error.message}`);
+      }
+    });
+    
+    return classes;
+    
+  } catch (error) {
+    Logger.log('❌ 從老師記錄簿獲取班級資訊失敗：' + error.message);
+    return [];
+  }
+}
+
+/**
+ * 從老師記錄簿提取班級資訊
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {string} teacherName 老師名稱
+ * @returns {Array} 班級資訊陣列
+ */
+function extractClassInfoFromTeacherBook(teacherBook, teacherName) {
+  try {
+    const classInfoSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    
+    let studentCount = 0;
+    if (studentSheet && studentSheet.getLastRow() > 1) {
+      studentCount = studentSheet.getLastRow() - 1; // 減去標題行
+    }
+    
+    // 從班級資訊工作表獲取班級名稱
+    let className = teacherName; // 預設使用老師名稱作為班級名稱
+    
+    if (classInfoSheet) {
+      // 嘗試從班級資訊工作表找到實際班級名稱
+      const classInfoData = classInfoSheet.getDataRange().getValues();
+      for (let i = 0; i < classInfoData.length; i++) {
+        for (let j = 0; j < classInfoData[i].length; j++) {
+          const cellValue = classInfoData[i][j]?.toString().trim();
+          if (cellValue && (cellValue.includes('班級') || cellValue.includes('Class'))) {
+            // 檢查下一個或同一行是否有班級名稱
+            if (j + 1 < classInfoData[i].length) {
+              const potentialClassName = classInfoData[i][j + 1]?.toString().trim();
+              if (potentialClassName && potentialClassName !== '班級' && potentialClassName !== 'Class') {
+                className = potentialClassName;
+                break;
+              }
+            }
+          }
+        }
+        if (className !== teacherName) break;
+      }
+    }
+    
+    return [{
+      className: className,
+      teacher: teacherName,
+      studentCount: studentCount
+    }];
+    
+  } catch (error) {
+    Logger.log(`❌ 從 ${teacherName} 記錄簿提取班級資訊失敗：${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 尋找欄位索引的輔助函數
+ * @param {Array} headers 標題陣列
+ * @param {Array} possibleNames 可能的欄位名稱
+ * @returns {number} 欄位索引，找不到則返回-1
+ */
+function findColumnIndex(headers, possibleNames) {
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i]?.toString().trim();
+    if (possibleNames.some(name => header.includes(name))) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * 格式化班級選項供UI使用
+ * @returns {Array} 格式化的班級選項陣列
+ */
+function getFormattedClassOptions() {
+  try {
+    const allClasses = getAllAvailableClasses();
+    
+    return allClasses.map(classInfo => ({
+      display: `${classInfo.className} (${classInfo.teacher} - ${classInfo.studentCount}人)`,
+      value: classInfo.className,
+      teacher: classInfo.teacher,
+      studentCount: classInfo.studentCount
+    }));
+    
+  } catch (error) {
+    Logger.log('❌ 格式化班級選項失敗：' + error.message);
+    return [];
+  }
 } 
