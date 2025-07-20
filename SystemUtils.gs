@@ -1834,11 +1834,16 @@ function getClassesFromMasterList() {
     
     // 尋找班級和老師相關欄位
     const classColumnIndex = findColumnIndex(headers, ['English Class', 'Class', '英語班級', '班級', 'EC']);
-    // 優先搜尋 LT (Local Teacher) 欄位，這是班級的主要老師
-    const teacherColumnIndex = findColumnIndex(headers, ['LT', 'Local Teacher', 'English Teacher', 'Teacher', '老師', '本地老師', '英文老師', '授課老師', 'Instructor']);
+    // 精確搜尋 LT (Local Teacher) 欄位，避免與 Previous Teacher 混淆
+    const teacherColumnIndex = findLTColumnIndex(headers);
     
     if (classColumnIndex === -1) {
       Logger.log('⚠️ 學生總表中找不到班級欄位');
+      return [];
+    }
+    
+    if (teacherColumnIndex === -1) {
+      Logger.log('⚠️ 學生總表中找不到LT欄位，請確認是否包含 "LT" 或 "Local Teacher" 欄位');
       return [];
     }
     
@@ -1953,6 +1958,25 @@ function extractClassInfoFromTeacherBook(teacherBook, teacherName) {
     Logger.log(`❌ 從 ${teacherName} 記錄簿提取班級資訊失敗：${error.message}`);
     return [];
   }
+}
+
+/**
+ * 精確匹配 LT (Local Teacher) 欄位索引
+ * 用戶明確要求：LT只有一個意思 - Local Teacher
+ * @param {Array} headers 標題陣列
+ * @returns {number} LT欄位索引，找不到則返回-1
+ */
+function findLTColumnIndex(headers) {
+  for (let i = 0; i < headers.length; i++) {
+    const header = headers[i]?.toString().trim();
+    // 精確匹配，避免與 "Previous Teacher" 等欄位混淆
+    if (header === 'LT' || header === 'Local Teacher') {
+      Logger.log(`✅ 找到LT欄位：第${i+1}欄 "${header}"`);
+      return i;
+    }
+  }
+  Logger.log('⚠️ 未找到精確的LT欄位，請確認學生總表包含 "LT" 或 "Local Teacher" 欄位');
+  return -1;
 }
 
 /**
