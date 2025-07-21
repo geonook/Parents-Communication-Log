@@ -949,7 +949,7 @@ function updateStudentCountInSheets(teacherBook) {
 }
 
 /**
- * 更新班級資訊工作表中的學生人數
+ * 更新班級資訊工作表中的學生人數（強化版本）
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
  * @param {number} studentCount 實際學生人數
  */
@@ -961,35 +961,164 @@ function updateClassInfoStudentCount(teacherBook, studentCount) {
       return;
     }
     
-    // 查找學生人數的位置（通常在B7或附近）
-    // 先嘗試常見位置
-    const commonPositions = [
-      { row: 7, col: 2 }, // B7
-      { row: 6, col: 2 }, // B6  
-      { row: 8, col: 2 }  // B8
-    ];
+    Logger.log(`🔍 開始在班級資訊工作表中搜尋學生人數欄位，目標值：${studentCount}`);
     
     let updated = false;
-    for (const pos of commonPositions) {
-      try {
-        const cellValue = classInfoSheet.getRange(pos.row, pos.col - 1).getValue(); // 檢查A欄的標籤
-        if (cellValue && cellValue.toString().includes('學生人數')) {
-          classInfoSheet.getRange(pos.row, pos.col).setValue(studentCount);
-          Logger.log(`📊 更新班級資訊工作表學生人數：${studentCount} (位置: ${pos.row}, ${pos.col})`);
-          updated = true;
-          break;
+    let updateDetails = [];
+    
+    // 🎯 策略1：全表掃描精確匹配（最安全的方法）
+    for (let row = 1; row <= 25; row++) {
+      for (let col = 1; col <= 10; col++) {
+        try {
+          const labelCell = classInfoSheet.getRange(row, col);
+          const labelValue = labelCell.getValue();
+          
+          if (labelValue && typeof labelValue === 'string') {
+            const labelText = labelValue.toString().trim();
+            
+            // 精確匹配班級學生人數相關標籤
+            const classStudentCountLabels = [
+              '學生人數', '班級人數', '學生數量', '總學生數', '學生總數',
+              '人數', '班級學生數', '學生數', 'Student Count', 'Class Size'
+            ];
+            
+            const isClassStudentCountLabel = classStudentCountLabels.some(label => {
+              return labelText === label || 
+                     labelText.includes(label) || 
+                     (labelText.includes('學生') && labelText.includes('人數'));
+            });
+            
+            if (isClassStudentCountLabel) {
+              // 檢查右邊儲存格是否適合放置數字
+              const valueCell = classInfoSheet.getRange(row, col + 1);
+              const currentValue = valueCell.getValue();
+              
+              // 驗證目標儲存格：必須是數字、空白或0，且不能是重要標籤
+              if (isValidNumberCell(currentValue) && !isImportantLabel(currentValue)) {
+                // 🔒 關鍵安全檢查：確保周圍沒有重要標籤會被影響
+                const surroundingCellsSafe = checkSurroundingCellsSafety(classInfoSheet, row, col + 1);
+                
+                if (surroundingCellsSafe) {
+                  valueCell.setValue(studentCount);
+                  const cellAddress = `${getColumnLetter(col + 1)}${row}`;
+                  updateDetails.push(`✅ 精確匹配更新：${cellAddress} (標籤: "${labelText}")`);
+                  Logger.log(`✅ 在班級資訊工作表 ${cellAddress} 精確更新學生人數：${studentCount} (標籤: "${labelText}")`);
+                  updated = true;
+                  break;
+                } else {
+                  Logger.log(`⚠️ 跳過位置 ${getColumnLetter(col + 1)}${row}：周圍環境不安全，可能影響重要標籤`);
+                }
+              } else {
+                Logger.log(`⚠️ 跳過位置 ${getColumnLetter(col + 1)}${row}：目標儲存格不適合 (${typeof currentValue}: "${currentValue}")`);
+              }
+            }
+          }
+        } catch (e) {
+          continue; // 跳過無法讀取的儲存格
         }
-      } catch (e) {
-        // 繼續嘗試下一個位置
+      }
+      if (updated) break;
+    }
+    
+    // 🎯 策略2：如果精確匹配失敗，使用更保守的位置檢查
+    if (!updated) {
+      Logger.log('⚠️ 精確匹配失敗，嘗試常見位置（超級保守模式）');
+      
+      const commonPositions = [
+        { row: 7, col: 2, label: 'B7' },
+        { row: 6, col: 2, label: 'B6' },
+        { row: 8, col: 2, label: 'B8' },
+        { row: 5, col: 2, label: 'B5' },
+        { row: 9, col: 2, label: 'B9' }
+      ];
+      
+      for (const pos of commonPositions) {
+        try {
+          const targetCell = classInfoSheet.getRange(pos.row, pos.col);
+          const currentValue = targetCell.getValue();
+          const leftCell = classInfoSheet.getRange(pos.row, pos.col - 1);
+          const leftValue = leftCell.getValue();
+          
+          // 超級嚴格的檢查：
+          // 1. 目標儲存格必須是有效數字類型
+          // 2. 目標儲存格不能是重要標籤（特別是"定期電聯次數"）
+          // 3. 左邊儲存格必須包含學生人數相關標籤
+          // 4. 周圍環境必須安全
+          if (isValidNumberCell(currentValue) && 
+              !isImportantLabel(currentValue) &&
+              isStudentRelatedLabel(leftValue) &&
+              checkSurroundingCellsSafety(classInfoSheet, pos.row, pos.col)) {
+            
+            targetCell.setValue(studentCount);
+            updateDetails.push(`✅ 位置匹配更新：${pos.label} (左標籤: "${leftValue}")`);
+            Logger.log(`✅ 在班級資訊工作表 ${pos.label} 位置更新學生人數：${studentCount} (左標籤: "${leftValue}")`);
+            updated = true;
+            break;
+          } else {
+            const reasons = [];
+            if (!isValidNumberCell(currentValue)) reasons.push(`目標值類型錯誤(${typeof currentValue}:"${currentValue}")`);
+            if (isImportantLabel(currentValue)) reasons.push(`目標值是重要標籤("${currentValue}")`);
+            if (!isStudentRelatedLabel(leftValue)) reasons.push(`左標籤不相關("${leftValue}")`);
+            
+            Logger.log(`⚠️ 跳過位置 ${pos.label}：${reasons.join(', ')}`);
+          }
+        } catch (e) {
+          Logger.log(`⚠️ 檢查位置 ${pos.label} 時發生錯誤：${e.message}`);
+          continue;
+        }
       }
     }
     
-    if (!updated) {
-      Logger.log('⚠️ 未找到班級資訊工作表中的學生人數欄位');
+    // 📊 輸出詳細更新報告
+    if (updated) {
+      Logger.log(`✅ 班級資訊工作表學生人數更新成功！`);
+      updateDetails.forEach(detail => Logger.log(`   ${detail}`));
+    } else {
+      Logger.log('⚠️ 無法在班級資訊工作表中找到安全的學生人數更新位置');
+      Logger.log('💡 建議：請檢查班級資訊工作表是否有標準的「學生人數」標籤，且該欄位右邊是數字');
     }
     
   } catch (error) {
     Logger.log(`❌ 更新班級資訊工作表學生人數失敗：${error.message}`);
+  }
+}
+
+/**
+ * 檢查指定儲存格周圍環境的安全性
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet 工作表
+ * @param {number} row 行號
+ * @param {number} col 列號
+ * @returns {boolean} 是否安全
+ */
+function checkSurroundingCellsSafety(sheet, row, col) {
+  try {
+    // 檢查目標儲存格周圍的8個儲存格
+    const surroundingPositions = [
+      { r: row - 1, c: col - 1 }, { r: row - 1, c: col }, { r: row - 1, c: col + 1 },
+      { r: row, c: col - 1 },                            { r: row, c: col + 1 },
+      { r: row + 1, c: col - 1 }, { r: row + 1, c: col }, { r: row + 1, c: col + 1 }
+    ];
+    
+    for (const pos of surroundingPositions) {
+      if (pos.r > 0 && pos.c > 0) { // 確保在有效範圍內
+        try {
+          const cellValue = sheet.getRange(pos.r, pos.c).getValue();
+          
+          // 如果周圍有重要標籤，則認為不安全
+          if (isImportantLabel(cellValue)) {
+            Logger.log(`⚠️ 檢測到周圍重要標籤：${getColumnLetter(pos.c)}${pos.r} = "${cellValue}"`);
+            return false;
+          }
+        } catch (e) {
+          // 忽略超出範圍的儲存格
+        }
+      }
+    }
+    
+    return true; // 周圍環境安全
+  } catch (error) {
+    Logger.log(`⚠️ 檢查周圍環境時發生錯誤：${error.message}`);
+    return false; // 發生錯誤時採用保守策略
   }
 }
 
@@ -1045,7 +1174,7 @@ function updateProgressTrackingStudentCount(teacherBook, studentCount) {
 }
 
 /**
- * 更新總覽工作表中的學生人數
+ * 更新總覽工作表中的學生人數（強化版本）
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
  * @param {number} studentCount 實際學生人數
  */
@@ -1057,30 +1186,52 @@ function updateSummaryStudentCount(teacherBook, studentCount) {
       return;
     }
     
-    // 常見的總覽工作表學生人數位置
-    const studentCountPositions = [
-      { row: 5, col: 2, label: 'B5' },  // 通常在B5
-      { row: 6, col: 2, label: 'B6' },  // 或B6
-      { row: 4, col: 2, label: 'B4' },  // 或B4
-      { row: 7, col: 2, label: 'B7' }   // 或B7
-    ];
+    Logger.log(`🔍 開始在總覽工作表中搜尋學生人數欄位，目標值：${studentCount}`);
     
     let updated = false;
+    let updateDetails = [];
     
-    // 先嘗試找到標題包含「學生人數」、「總學生數」等關鍵字的行
-    for (let row = 1; row <= 15; row++) {
-      for (let col = 1; col <= 5; col++) {
+    // 🎯 策略1：精確匹配學生人數標籤（最安全的方法）
+    for (let row = 1; row <= 20; row++) {
+      for (let col = 1; col <= 10; col++) {
         try {
-          const cellValue = summarySheet.getRange(row, col).getValue();
-          if (cellValue && typeof cellValue === 'string') {
-            const value = cellValue.toString().toLowerCase();
-            if (value.includes('學生人數') || value.includes('總學生數') || 
-                value.includes('student') && value.includes('count')) {
-              // 在右邊一格更新數值
-              summarySheet.getRange(row, col + 1).setValue(studentCount);
-              Logger.log(`📊 在總覽工作表 ${getColumnLetter(col + 1)}${row} 更新學生人數：${studentCount}`);
-              updated = true;
-              break;
+          const labelCell = summarySheet.getRange(row, col);
+          const labelValue = labelCell.getValue();
+          
+          if (labelValue && typeof labelValue === 'string') {
+            const labelText = labelValue.toString().trim();
+            
+            // 精確匹配學生人數相關標籤
+            const studentCountLabels = [
+              '學生人數', '總學生數', '學生總數', '班級人數', '學生數量',
+              'Student Count', 'Total Students', 'Number of Students'
+            ];
+            
+            const isStudentCountLabel = studentCountLabels.some(label => 
+              labelText === label || labelText.includes(label)
+            );
+            
+            if (isStudentCountLabel) {
+              // 檢查右邊儲存格是否適合放置數字
+              const valueCell = summarySheet.getRange(row, col + 1);
+              const currentValue = valueCell.getValue();
+              
+              // 驗證目標儲存格：必須是數字、空白或0
+              if (isValidNumberCell(currentValue)) {
+                // 額外安全檢查：確保不會覆蓋其他重要標籤
+                if (!isImportantLabel(currentValue)) {
+                  valueCell.setValue(studentCount);
+                  const cellAddress = `${getColumnLetter(col + 1)}${row}`;
+                  updateDetails.push(`✅ 精確匹配更新：${cellAddress} (標籤: "${labelText}")`);
+                  Logger.log(`✅ 在總覽工作表 ${cellAddress} 精確更新學生人數：${studentCount} (標籤: "${labelText}")`);
+                  updated = true;
+                  break;
+                } else {
+                  Logger.log(`⚠️ 跳過位置 ${getColumnLetter(col + 1)}${row}：目標儲存格包含重要標籤 "${currentValue}"`);
+                }
+              } else {
+                Logger.log(`⚠️ 跳過位置 ${getColumnLetter(col + 1)}${row}：目標儲存格類型不適合 (${typeof currentValue}: "${currentValue}")`);
+              }
             }
           }
         } catch (e) {
@@ -1090,31 +1241,110 @@ function updateSummaryStudentCount(teacherBook, studentCount) {
       if (updated) break;
     }
     
-    // 如果沒找到標題，嘗試常見位置
+    // 🎯 策略2：如果精確匹配失敗，使用保守的位置檢查
     if (!updated) {
+      Logger.log('⚠️ 精確匹配失敗，嘗試常見位置（保守模式）');
+      
+      const studentCountPositions = [
+        { row: 5, col: 2, label: 'B5' },
+        { row: 6, col: 2, label: 'B6' },
+        { row: 4, col: 2, label: 'B4' },
+        { row: 7, col: 2, label: 'B7' }
+      ];
+      
       for (const pos of studentCountPositions) {
         try {
-          // 檢查這個位置是否是數字類型的儲存格
-          const currentValue = summarySheet.getRange(pos.row, pos.col).getValue();
-          if (typeof currentValue === 'number' || currentValue === '' || currentValue === 0) {
-            summarySheet.getRange(pos.row, pos.col).setValue(studentCount);
-            Logger.log(`📊 在總覽工作表 ${pos.label} 更新學生人數：${studentCount}`);
+          const targetCell = summarySheet.getRange(pos.row, pos.col);
+          const currentValue = targetCell.getValue();
+          const leftCell = summarySheet.getRange(pos.row, pos.col - 1);
+          const leftValue = leftCell.getValue();
+          
+          // 更嚴格的檢查：
+          // 1. 目標儲存格必須是數字類型
+          // 2. 左邊儲存格應該包含學生相關標籤
+          // 3. 目標儲存格不能是重要標籤
+          if (isValidNumberCell(currentValue) && 
+              !isImportantLabel(currentValue) &&
+              isStudentRelatedLabel(leftValue)) {
+            
+            targetCell.setValue(studentCount);
+            updateDetails.push(`✅ 位置匹配更新：${pos.label} (左標籤: "${leftValue}")`);
+            Logger.log(`✅ 在總覽工作表 ${pos.label} 位置更新學生人數：${studentCount} (左標籤: "${leftValue}")`);
             updated = true;
             break;
+          } else {
+            Logger.log(`⚠️ 跳過位置 ${pos.label}：不符合安全條件 (當前值: "${currentValue}", 左標籤: "${leftValue}")`);
           }
         } catch (e) {
+          Logger.log(`⚠️ 檢查位置 ${pos.label} 時發生錯誤：${e.message}`);
           continue;
         }
       }
     }
     
-    if (!updated) {
-      Logger.log('⚠️ 無法在總覽工作表中找到合適的學生人數更新位置');
+    // 📊 輸出詳細更新報告
+    if (updated) {
+      Logger.log(`✅ 總覽工作表學生人數更新成功！`);
+      updateDetails.forEach(detail => Logger.log(`   ${detail}`));
+    } else {
+      Logger.log('⚠️ 無法在總覽工作表中找到安全的學生人數更新位置');
+      Logger.log('💡 建議：請檢查總覽工作表是否有標準的「學生人數」標籤');
     }
     
   } catch (error) {
     Logger.log(`❌ 更新總覽工作表學生人數失敗：${error.message}`);
   }
+}
+
+/**
+ * 檢查儲存格值是否適合放置數字
+ * @param {*} value 儲存格值
+ * @returns {boolean} 是否適合放置數字
+ */
+function isValidNumberCell(value) {
+  return (
+    typeof value === 'number' ||
+    value === '' ||
+    value === null ||
+    value === undefined ||
+    (typeof value === 'string' && value.trim() === '') ||
+    value === 0
+  );
+}
+
+/**
+ * 檢查是否是重要標籤（不應被覆蓋）
+ * @param {*} value 儲存格值
+ * @returns {boolean} 是否是重要標籤
+ */
+function isImportantLabel(value) {
+  if (!value || typeof value !== 'string') return false;
+  
+  const importantLabels = [
+    '定期電聯次數', '電聯次數', '聯繫次數', '聯繫頻率',
+    '建立日期', '創建日期', '更新日期', '最後聯繫',
+    '老師姓名', '教師姓名', '班級名稱', '科目',
+    '學年度', '學期', '年級', '班級'
+  ];
+  
+  const valueStr = value.toString().trim();
+  return importantLabels.some(label => valueStr.includes(label));
+}
+
+/**
+ * 檢查是否是學生相關標籤
+ * @param {*} value 儲存格值
+ * @returns {boolean} 是否是學生相關標籤
+ */
+function isStudentRelatedLabel(value) {
+  if (!value || typeof value !== 'string') return false;
+  
+  const studentLabels = [
+    '學生', '人數', 'Student', 'Count', '數量', '總數'
+  ];
+  
+  const valueStr = value.toString().trim().toLowerCase();
+  return studentLabels.some(label => valueStr.includes(label.toLowerCase()));
 }
 
 /**
@@ -1288,17 +1518,28 @@ function transferContactHistory(studentId, fromTeacher, newTeacher, studentRecor
               }
             });
             
-            // 添加來源標記
-            newRowData[sourceColumnIndex] = `來自${record.teacherName}`;
+            // 添加來源標記（增強版本）
+            newRowData[sourceColumnIndex] = `📥 來自${record.teacherName}`;
             
             // 添加記錄到新工作表
             newContactSheet.appendRow(newRowData);
             
-            // 為歷史記錄設置特殊格式（灰底色）
+            // 🎨 為歷史記錄設置增強的視覺格式
             const newRowIndex = newContactSheet.getLastRow();
             const range = newContactSheet.getRange(newRowIndex, 1, 1, newHeaders.length);
-            range.setBackground('#f0f0f0'); // 淺灰底色
-            range.setFontColor('#666666'); // 深灰字體
+            
+            // 更明顯的視覺標記
+            range.setBackground('#fff3cd'); // 淺黃底色（更明顯）
+            range.setFontColor('#856404'); // 深棕色字體
+            range.setFontWeight('normal');
+            range.setBorder(true, true, true, true, true, true, '#ffc107', SpreadsheetApp.BorderStyle.SOLID_MEDIUM); // 金黃色邊框
+            
+            // 在來源欄位使用更醒目的格式
+            const sourceCell = newContactSheet.getRange(newRowIndex, sourceColumnIndex + 1);
+            sourceCell.setBackground('#ffeaa7'); // 來源欄位用更明顯的黃色
+            sourceCell.setFontWeight('bold'); // 來源標記用粗體
+            
+            Logger.log(`🎨 已為轉移記錄設置增強視覺標記：第${newRowIndex}行`)
             
             totalTransferredRecords++;
             Logger.log(`📋 轉移記錄：第${contactRowNum}行 → 新記錄簿第${newRowIndex}行`);
