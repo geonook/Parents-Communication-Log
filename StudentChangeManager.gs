@@ -297,7 +297,7 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
             contactSheet.getRange(contactRow, contactSheet.getLastColumn() + 1).setValue(`已轉至${newTeacher}`);
             
             // 為整行加上刪除線格式（包含新增的標記欄位）
-            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn() + 1);
+            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn());
             rowRange.setFontLine('line-through');
             rowRange.setFontColor('#888888'); // 設為灰色
           });

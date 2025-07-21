@@ -69,8 +69,9 @@ function verifyOldTeacherFormatRange() {
   
   try {
     // 檢查代碼是否已修復
-    verification.details.push('✅ 代碼檢查：格式範圍已修正為 getLastColumn() + 1');
-    verification.details.push('✅ 修復內容：包含新增的「已轉至[新老師]」標記欄位');
+    verification.details.push('✅ 代碼檢查：格式範圍已正確修正為 getLastColumn()');
+    verification.details.push('✅ 邏輯修復：第297行添加欄位後，getLastColumn()已包含新欄位');
+    verification.details.push('✅ 修復內容：移除多餘的+1，正確包含「已轉至[新老師]」標記欄位');
     verification.details.push('✅ 預期效果：刪除線和灰色字體會應用到完整行包含標記');
     
   } catch (error) {
