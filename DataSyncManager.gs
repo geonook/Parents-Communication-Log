@@ -1104,9 +1104,10 @@ function addStudentToTeacher(studentData, newTeacher) {
     
     const headers = studentSheet.getRange(1, 1, 1, studentSheet.getLastColumn()).getValues()[0];
     
-    // 🔧 修復問題4：正確更新學生的班級資訊 (English Class)
+    // 🔧 修復問題4：正確更新學生的班級資訊 (English Class) 和 LT 欄位
     const updatedStudentData = { ...studentData };
     const originalClass = studentData['English Class'] || '未知班級';
+    const originalLT = studentData['LT'] || studentData['Local Teacher'] || '未知老師';
     
     if (newEnglishClass) {
       updatedStudentData['English Class'] = newEnglishClass;
@@ -1115,7 +1116,23 @@ function addStudentToTeacher(studentData, newTeacher) {
       Logger.log('⚠️ 未能獲取新班級資訊，保持原有班級');
     }
     
-    const newRow = headers.map(header => updatedStudentData[header] || '');
+    // 🔧 修復問題B：確保LT欄位更新為新老師
+    if (updatedStudentData['LT'] !== undefined) {
+      updatedStudentData['LT'] = newTeacher;
+      Logger.log(`👨‍🏫 學生LT欄位更新：${originalLT} → ${newTeacher}`);
+    }
+    if (updatedStudentData['Local Teacher'] !== undefined) {
+      updatedStudentData['Local Teacher'] = newTeacher;
+      Logger.log(`👨‍🏫 學生Local Teacher欄位更新：${originalLT} → ${newTeacher}`);
+    }
+    
+    const newRow = headers.map(header => {
+      // 確保LT相關欄位使用新老師名稱
+      if (header === 'LT' || header === 'Local Teacher') {
+        return newTeacher;
+      }
+      return updatedStudentData[header] || '';
+    });
     studentSheet.appendRow(newRow);
     
     // 同步更新學生總表中的 English Class 和 LT 欄位

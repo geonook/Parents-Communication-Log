@@ -335,6 +335,20 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
       };
     }
     
+    // 🔧 修復問題C：轉移學生的歷史電聯記錄到新老師記錄簿
+    try {
+      Logger.log(`📋 開始轉移 ${studentId} 的歷史電聯記錄`);
+      const historyTransferResult = transferContactHistory(studentId, fromTeacher, newTeacher, studentRecords);
+      if (historyTransferResult.success) {
+        Logger.log(`✅ 成功轉移 ${historyTransferResult.recordCount} 筆歷史電聯記錄`);
+      } else {
+        Logger.log(`⚠️ 歷史電聯記錄轉移失敗：${historyTransferResult.message}`);
+      }
+    } catch (historyError) {
+      Logger.log(`❌ 歷史電聯記錄轉移發生錯誤：${historyError.message}`);
+      // 不影響整體轉班操作，繼續執行
+    }
+    
     // 更新學生總表中的老師資訊
     updateStudentTeacherInMasterList(studentId, newTeacher);
     
@@ -915,11 +929,17 @@ function updateStudentCountInSheets(teacherBook) {
     
     Logger.log(`📊 實際學生人數：${actualStudentCount}`);
     
+    // 更新總覽工作表
+    updateSummaryStudentCount(teacherBook, actualStudentCount);
+    
     // 更新班級資訊工作表
     updateClassInfoStudentCount(teacherBook, actualStudentCount);
     
     // 更新進度追蹤工作表
     updateProgressTrackingStudentCount(teacherBook, actualStudentCount);
+    
+    // 驗證與學生總表數據一致性
+    validateCountConsistencyWithMasterList(teacherBook, actualStudentCount);
     
     Logger.log(`✅ 學生人數統計更新完成：${actualStudentCount} 人`);
     
@@ -1021,5 +1041,272 @@ function updateProgressTrackingStudentCount(teacherBook, studentCount) {
     
   } catch (error) {
     Logger.log(`❌ 更新進度追蹤工作表學生人數失敗：${error.message}`);
+  }
+}
+
+/**
+ * 更新總覽工作表中的學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} studentCount 實際學生人數
+ */
+function updateSummaryStudentCount(teacherBook, studentCount) {
+  try {
+    const summarySheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      Logger.log('⚠️ 總覽工作表不存在');
+      return;
+    }
+    
+    // 常見的總覽工作表學生人數位置
+    const studentCountPositions = [
+      { row: 5, col: 2, label: 'B5' },  // 通常在B5
+      { row: 6, col: 2, label: 'B6' },  // 或B6
+      { row: 4, col: 2, label: 'B4' },  // 或B4
+      { row: 7, col: 2, label: 'B7' }   // 或B7
+    ];
+    
+    let updated = false;
+    
+    // 先嘗試找到標題包含「學生人數」、「總學生數」等關鍵字的行
+    for (let row = 1; row <= 15; row++) {
+      for (let col = 1; col <= 5; col++) {
+        try {
+          const cellValue = summarySheet.getRange(row, col).getValue();
+          if (cellValue && typeof cellValue === 'string') {
+            const value = cellValue.toString().toLowerCase();
+            if (value.includes('學生人數') || value.includes('總學生數') || 
+                value.includes('student') && value.includes('count')) {
+              // 在右邊一格更新數值
+              summarySheet.getRange(row, col + 1).setValue(studentCount);
+              Logger.log(`📊 在總覽工作表 ${getColumnLetter(col + 1)}${row} 更新學生人數：${studentCount}`);
+              updated = true;
+              break;
+            }
+          }
+        } catch (e) {
+          continue; // 跳過無法讀取的儲存格
+        }
+      }
+      if (updated) break;
+    }
+    
+    // 如果沒找到標題，嘗試常見位置
+    if (!updated) {
+      for (const pos of studentCountPositions) {
+        try {
+          // 檢查這個位置是否是數字類型的儲存格
+          const currentValue = summarySheet.getRange(pos.row, pos.col).getValue();
+          if (typeof currentValue === 'number' || currentValue === '' || currentValue === 0) {
+            summarySheet.getRange(pos.row, pos.col).setValue(studentCount);
+            Logger.log(`📊 在總覽工作表 ${pos.label} 更新學生人數：${studentCount}`);
+            updated = true;
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    if (!updated) {
+      Logger.log('⚠️ 無法在總覽工作表中找到合適的學生人數更新位置');
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 更新總覽工作表學生人數失敗：${error.message}`);
+  }
+}
+
+/**
+ * 驗證老師記錄簿的學生人數與學生總表數據一致性
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} actualCount 實際統計的學生人數
+ */
+function validateCountConsistencyWithMasterList(teacherBook, actualCount) {
+  try {
+    const teacherName = extractTeacherNameFromFileName(teacherBook.getName());
+    Logger.log(`🔍 驗證 ${teacherName} 的學生人數一致性`);
+    
+    // 從學生總表獲取該老師的學生數
+    const masterListData = getSystemMasterList();
+    if (!masterListData || masterListData.length < 4) {
+      Logger.log('⚠️ 無法獲取學生總表數據，跳過一致性驗證');
+      return;
+    }
+    
+    const headers = masterListData[2];
+    const studentData = masterListData.slice(3);
+    const ltColumnIndex = findLTColumnIndex(headers);
+    
+    if (ltColumnIndex === -1) {
+      Logger.log('⚠️ 學生總表中找不到LT欄位，跳過一致性驗證');
+      return;
+    }
+    
+    // 統計學生總表中該老師的學生數
+    let masterListCount = 0;
+    studentData.forEach(row => {
+      if (row.length > ltColumnIndex) {
+        const teacher = row[ltColumnIndex]?.toString().trim();
+        if (teacher === teacherName) {
+          masterListCount++;
+        }
+      }
+    });
+    
+    // 比較數據一致性
+    if (actualCount === masterListCount) {
+      Logger.log(`✅ 數據一致性驗證通過：記錄簿 ${actualCount} 人 = 學生總表 ${masterListCount} 人`);
+    } else {
+      Logger.log(`⚠️ 數據不一致警告：記錄簿 ${actualCount} 人 ≠ 學生總表 ${masterListCount} 人`);
+      Logger.log(`   建議檢查 ${teacherName} 的學生記錄是否完整同步`);
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 學生人數一致性驗證失敗：${error.message}`);
+  }
+}
+
+/**
+ * 將欄位索引轉換為Excel欄位字母（如：1->A, 2->B, 27->AA）
+ * @param {number} columnIndex 欄位索引（1開始）
+ * @returns {string} 欄位字母
+ */
+function getColumnLetter(columnIndex) {
+  let result = '';
+  while (columnIndex > 0) {
+    columnIndex--;
+    result = String.fromCharCode(65 + (columnIndex % 26)) + result;
+    columnIndex = Math.floor(columnIndex / 26);
+  }
+  return result;
+}
+
+/**
+ * 轉移學生的歷史電聯記錄到新老師記錄簿
+ * 🔧 修復問題C：實現電聯記錄歷史轉移功能
+ * @param {string} studentId 學生ID
+ * @param {string} fromTeacher 原老師名稱  
+ * @param {string} newTeacher 新老師名稱
+ * @param {Object} studentRecords 學生記錄定位結果
+ * @returns {Object} 轉移結果
+ */
+function transferContactHistory(studentId, fromTeacher, newTeacher, studentRecords) {
+  try {
+    Logger.log(`📋 開始轉移 ${studentId} 的歷史電聯記錄：${fromTeacher} → ${newTeacher}`);
+    
+    // 找到新老師的記錄簿
+    const teacherBooks = getAllTeacherBooks();
+    const newTeacherBook = teacherBooks.find(book => 
+      book.getName().includes(newTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === newTeacher
+    );
+    
+    if (!newTeacherBook) {
+      return {
+        success: false,
+        message: `找不到新老師 ${newTeacher} 的記錄簿`
+      };
+    }
+    
+    const newContactSheet = newTeacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!newContactSheet) {
+      return {
+        success: false,
+        message: `新老師記錄簿中找不到電聯記錄工作表`
+      };
+    }
+    
+    let totalTransferredRecords = 0;
+    
+    // 從每個原老師記錄簿提取該學生的電聯記錄
+    for (const record of studentRecords.teacherRecords) {
+      if (!record.contactRecords || record.contactRecords.length === 0) {
+        continue;
+      }
+      
+      try {
+        const sourceBook = SpreadsheetApp.openById(record.fileId);
+        const sourceContactSheet = sourceBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+        
+        if (!sourceContactSheet) {
+          Logger.log(`⚠️ 原老師記錄簿 ${record.teacherName} 中找不到電聯記錄工作表`);
+          continue;
+        }
+        
+        // 獲取原工作表的標題行
+        const sourceHeaders = sourceContactSheet.getRange(1, 1, 1, sourceContactSheet.getLastColumn()).getValues()[0];
+        const newHeaders = newContactSheet.getRange(1, 1, 1, newContactSheet.getLastColumn()).getValues()[0];
+        
+        // 檢查是否需要添加"來源"欄位
+        let sourceColumnIndex = newHeaders.indexOf('來源');
+        if (sourceColumnIndex === -1) {
+          // 添加"來源"欄位到新工作表
+          newContactSheet.getRange(1, newHeaders.length + 1).setValue('來源');
+          newHeaders.push('來源');
+          sourceColumnIndex = newHeaders.length - 1;
+          Logger.log('📝 在新老師記錄簿中添加"來源"欄位');
+        }
+        
+        // 轉移該學生的每筆電聯記錄
+        for (const contactRowNum of record.contactRecords) {
+          try {
+            const sourceRowData = sourceContactSheet.getRange(contactRowNum, 1, 1, sourceHeaders.length).getValues()[0];
+            
+            // 建立新記錄行，確保欄位對應正確
+            const newRowData = new Array(newHeaders.length).fill('');
+            
+            // 映射原欄位到新欄位
+            sourceHeaders.forEach((sourceHeader, sourceIndex) => {
+              const newIndex = newHeaders.indexOf(sourceHeader);
+              if (newIndex !== -1) {
+                newRowData[newIndex] = sourceRowData[sourceIndex];
+              }
+            });
+            
+            // 添加來源標記
+            newRowData[sourceColumnIndex] = `來自${record.teacherName}`;
+            
+            // 添加記錄到新工作表
+            newContactSheet.appendRow(newRowData);
+            
+            // 為歷史記錄設置特殊格式（灰底色）
+            const newRowIndex = newContactSheet.getLastRow();
+            const range = newContactSheet.getRange(newRowIndex, 1, 1, newHeaders.length);
+            range.setBackground('#f0f0f0'); // 淺灰底色
+            range.setFontColor('#666666'); // 深灰字體
+            
+            totalTransferredRecords++;
+            Logger.log(`📋 轉移記錄：第${contactRowNum}行 → 新記錄簿第${newRowIndex}行`);
+            
+          } catch (recordError) {
+            Logger.log(`❌ 轉移單筆記錄失敗：${recordError.message}`);
+          }
+        }
+        
+      } catch (bookError) {
+        Logger.log(`❌ 處理原老師記錄簿失敗：${bookError.message}`);
+      }
+    }
+    
+    // 轉移完成後重新排序新工作表
+    if (totalTransferredRecords > 0) {
+      Logger.log(`🔄 重新排序新老師記錄簿的電聯記錄`);
+      ensureContactRecordsSorting(newTeacherBook);
+    }
+    
+    return {
+      success: true,
+      recordCount: totalTransferredRecords,
+      message: `成功轉移 ${totalTransferredRecords} 筆歷史電聯記錄`
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 歷史電聯記錄轉移失敗：${error.message}`);
+    return {
+      success: false,
+      message: error.message,
+      recordCount: 0
+    };
   }
 }
