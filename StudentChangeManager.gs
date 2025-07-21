@@ -182,8 +182,8 @@ function handleTransferOut(studentId, reason, operator) {
           removedRecords.push(`${record.teacherName} - 電聯記錄標記`);
         }
         
-        // 更新班級資訊工作表的異動記錄
-        addStudentChangeToClassInfo(teacherBook, {
+        // 更新總覽工作表的異動記錄
+        addStudentChangeToSummary(teacherBook, {
           studentId: studentId,
           studentName: getStudentName(studentId) || '未知',
           changeType: '轉出',
@@ -303,8 +303,8 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
           });
         }
         
-        // 更新班級資訊工作表的異動記錄
-        addStudentChangeToClassInfo(teacherBook, {
+        // 更新總覽工作表的異動記錄
+        addStudentChangeToSummary(teacherBook, {
           studentId: studentId,
           studentName: studentData['Chinese Name'] || studentData['English Name'],
           changeType: '轉班',
@@ -343,7 +343,7 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
       );
       
       if (newTeacherBook) {
-        addStudentChangeToClassInfo(newTeacherBook, {
+        addStudentChangeToSummary(newTeacherBook, {
           studentId: studentId,
           studentName: studentData['Chinese Name'] || studentData['English Name'],
           changeType: '轉入',
@@ -893,6 +893,91 @@ function addStudentChangeToClassInfo(teacherBook, changeInfo) {
     
   } catch (error) {
     Logger.log('❌ 添加學生異動記錄到班級資訊失敗：' + error.message);
+  }
+}
+
+/**
+ * 添加學生異動記錄到總覽工作表
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {Object} changeInfo 異動資訊
+ */
+function addStudentChangeToSummary(teacherBook, changeInfo) {
+  try {
+    const summarySheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      Logger.log('❌ 找不到總覽工作表');
+      return;
+    }
+    
+    // 尋找或創建異動記錄區域
+    const lastRow = summarySheet.getLastRow();
+    let changeLogStartRow = -1;
+    
+    // 查找是否已經有異動記錄區域
+    for (let i = 1; i <= lastRow; i++) {
+      const cellValue = summarySheet.getRange(i, 1).getValue();
+      if (cellValue === '學生異動記錄') {
+        changeLogStartRow = i;
+        break;
+      }
+    }
+    
+    // 如果沒有找到，創建新的異動記錄區域
+    if (changeLogStartRow === -1) {
+      changeLogStartRow = lastRow + 2; // 留空一行
+      summarySheet.getRange(changeLogStartRow, 1).setValue('學生異動記錄');
+      summarySheet.getRange(changeLogStartRow, 1).setFontWeight('bold');
+      summarySheet.getRange(changeLogStartRow, 1).setFontSize(12);
+      
+      // 添加標題行
+      const headerRow = changeLogStartRow + 1;
+      const headers = ['異動日期', '學生ID', '學生姓名', '異動類型', '原老師', '新老師', '新班級', '異動原因'];
+      summarySheet.getRange(headerRow, 1, 1, headers.length).setValues([headers]);
+      summarySheet.getRange(headerRow, 1, 1, headers.length).setFontWeight('bold');
+      summarySheet.getRange(headerRow, 1, 1, headers.length).setBackground('#f0f0f0');
+    }
+    
+    // 找到插入位置（標題行後的第一個空行）
+    const headerRow = changeLogStartRow + 1;
+    let insertRow = headerRow + 1;
+    
+    // 找到第一個空行
+    while (insertRow <= summarySheet.getLastRow() && 
+           summarySheet.getRange(insertRow, 1).getValue() !== '') {
+      insertRow++;
+    }
+    
+    // 插入異動記錄
+    const changeData = [
+      changeInfo.changeDate,
+      changeInfo.studentId,
+      changeInfo.studentName,
+      changeInfo.changeType,
+      changeInfo.fromTeacher,
+      changeInfo.toTeacher,
+      changeInfo.toClass || '',  // 新班級資訊
+      changeInfo.reason
+    ];
+    
+    summarySheet.getRange(insertRow, 1, 1, changeData.length).setValues([changeData]);
+    
+    // 設定格式
+    const changeRow = summarySheet.getRange(insertRow, 1, 1, changeData.length);
+    changeRow.setBorder(true, true, true, true, true, true);
+    
+    // 根據異動類型設定不同顏色
+    if (changeInfo.changeType === '轉出') {
+      changeRow.setBackground('#ffe6e6'); // 淡紅色
+    } else if (changeInfo.changeType === '轉班') {
+      changeRow.setBackground('#e6f3ff'); // 淡藍色
+    } else {
+      changeRow.setBackground('#f0f8e6'); // 淡綠色
+    }
+    
+    Logger.log(`✅ 已添加學生異動記錄到總覽工作表：${changeInfo.studentName} - ${changeInfo.changeType}`);
+    
+  } catch (error) {
+    Logger.log('❌ 添加學生異動記錄到總覽工作表失敗：' + error.message);
   }
 }
 

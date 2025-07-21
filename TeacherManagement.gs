@@ -280,7 +280,7 @@ function setupTeacherRecordBook(recordBook, teacherInfo) {
   
   // 創建各個工作表（先建立基本結構，不設定公式）
   createSummarySheet(recordBook, teacherInfo);
-  createClassInfoSheet(recordBook, teacherInfo);
+  // createClassInfoSheet(recordBook, teacherInfo); // 已移除 - 異動記錄現在寫入總覽工作表
   createStudentListSheet(recordBook, teacherInfo);
   createContactLogSheet(recordBook, teacherInfo);
   createProgressSheet(recordBook, teacherInfo);
