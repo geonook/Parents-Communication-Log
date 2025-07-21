@@ -296,8 +296,8 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
             // 在最後一欄標記轉班狀態
             contactSheet.getRange(contactRow, contactSheet.getLastColumn() + 1).setValue(`已轉至${newTeacher}`);
             
-            // 為整行加上刪除線格式
-            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn());
+            // 為整行加上刪除線格式（包含新增的標記欄位）
+            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn() + 1);
             rowRange.setFontLine('line-through');
             rowRange.setFontColor('#888888'); // 設為灰色
           });
@@ -918,13 +918,13 @@ function ensureContactRecordsSorting(teacherBook) {
     if (typeof sortContactRecordsData === 'function') {
       const sortResult = sortContactRecordsData(allData);
       
-      if (sortResult.success && sortResult.sortedData.length > 0) {
+      if (sortResult.success && sortResult.data.length > 0) {
         // 清空現有資料並寫入排序後的資料
         contactSheet.clear();
-        contactSheet.getRange(1, 1, sortResult.sortedData.length, sortResult.sortedData[0].length)
-                   .setValues(sortResult.sortedData);
+        contactSheet.getRange(1, 1, sortResult.data.length, sortResult.data[0].length)
+                   .setValues(sortResult.data);
         
-        Logger.log(`✅ 電聯記錄重新排序完成，處理了 ${sortResult.sortedData.length - 1} 筆記錄`);
+        Logger.log(`✅ 電聯記錄重新排序完成，處理了 ${sortResult.data.length - 1} 筆記錄`);
       } else {
         Logger.log('⚠️ 排序函數未能成功排序資料');
       }
