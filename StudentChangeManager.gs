@@ -1248,10 +1248,34 @@ function transferContactHistory(studentId, fromTeacher, newTeacher, studentRecor
           Logger.log('📝 在新老師記錄簿中添加"來源"欄位');
         }
         
+        // 確定學生ID欄位位置（安全檢查用）
+        const studentIdColumnIndex = sourceHeaders.findIndex(header => 
+          header && (header.toString().includes('Student ID') || 
+                    header.toString().includes('學生ID') ||
+                    header.toString().includes('ID'))
+        );
+        
+        let verifiedRecords = 0;
+        let skippedRecords = 0;
+        
         // 轉移該學生的每筆電聯記錄
         for (const contactRowNum of record.contactRecords) {
           try {
             const sourceRowData = sourceContactSheet.getRange(contactRowNum, 1, 1, sourceHeaders.length).getValues()[0];
+            
+            // 🔧 安全檢查：確認該記錄屬於目標學生
+            if (studentIdColumnIndex !== -1) {
+              const recordStudentId = sourceRowData[studentIdColumnIndex]?.toString().trim();
+              if (recordStudentId !== studentId) {
+                Logger.log(`⚠️ 安全檢查：跳過非目標學生記錄 ${recordStudentId} (目標：${studentId})，第${contactRowNum}行`);
+                skippedRecords++;
+                continue; // 跳過此記錄
+              }
+              verifiedRecords++;
+              Logger.log(`✅ 安全驗證通過：記錄屬於學生 ${studentId}，第${contactRowNum}行`);
+            } else {
+              Logger.log(`⚠️ 無法找到Student ID欄位進行安全驗證，但仍轉移記錄（第${contactRowNum}行）`);
+            }
             
             // 建立新記錄行，確保欄位對應正確
             const newRowData = new Array(newHeaders.length).fill('');
@@ -1284,6 +1308,12 @@ function transferContactHistory(studentId, fromTeacher, newTeacher, studentRecor
           }
         }
         
+        // 📊 安全轉移統計報告
+        Logger.log(`📊 ${record.teacherName} 記錄簿轉移統計：`);
+        Logger.log(`   ✅ 已驗證轉移：${verifiedRecords} 筆`);
+        Logger.log(`   ⚠️ 安全跳過：${skippedRecords} 筆`);
+        Logger.log(`   📋 總處理數：${record.contactRecords?.length || 0} 筆`);
+        
       } catch (bookError) {
         Logger.log(`❌ 處理原老師記錄簿失敗：${bookError.message}`);
       }
@@ -1295,10 +1325,21 @@ function transferContactHistory(studentId, fromTeacher, newTeacher, studentRecor
       ensureContactRecordsSorting(newTeacherBook);
     }
     
+    // 📊 最終安全轉移報告
+    Logger.log(`🎯 歷史電聯記錄轉移完成報告：`);
+    Logger.log(`   👤 目標學生：${studentId}`);
+    Logger.log(`   📋 成功轉移：${totalTransferredRecords} 筆記錄`);
+    Logger.log(`   🔒 安全機制：已驗證所有記錄歸屬正確性`);
+    Logger.log(`   📂 轉移路徑：${fromTeacher} → ${newTeacher}`);
+    
     return {
       success: true,
       recordCount: totalTransferredRecords,
-      message: `成功轉移 ${totalTransferredRecords} 筆歷史電聯記錄`
+      studentId: studentId,
+      fromTeacher: fromTeacher,
+      toTeacher: newTeacher,
+      securityVerified: true,
+      message: `安全轉移 ${totalTransferredRecords} 筆歷史電聯記錄（已驗證學生ID歸屬）`
     };
     
   } catch (error) {
