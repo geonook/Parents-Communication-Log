@@ -1924,10 +1924,25 @@ function extractClassInfoFromTeacherBook(teacherBook, teacherName) {
       studentCount = studentSheet.getLastRow() - 1; // 減去標題行
     }
     
-    // 從班級資訊工作表獲取班級名稱
+    // 從總覽工作表或班級資訊工作表獲取班級名稱
     let className = teacherName; // 預設使用老師名稱作為班級名稱
     
-    if (classInfoSheet) {
+    // 優先嘗試從總覽工作表獲取班級資訊
+    const summarySheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (summarySheet) {
+      try {
+        // 嘗試從總覽工作表的授課班級欄位獲取（通常在B5）
+        const teacherClasses = summarySheet.getRange('B5').getValue();
+        if (teacherClasses && teacherClasses.toString().trim() !== '') {
+          className = teacherClasses.toString().trim();
+        }
+      } catch (error) {
+        Logger.log('從總覽工作表獲取班級資訊失敗：' + error.message);
+      }
+    }
+    
+    // 備用：從班級資訊工作表獲取（向後兼容）
+    if (className === teacherName && classInfoSheet) {
       // 嘗試從班級資訊工作表找到實際班級名稱
       const classInfoData = classInfoSheet.getDataRange().getValues();
       for (let i = 0; i < classInfoData.length; i++) {

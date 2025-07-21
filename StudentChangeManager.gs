@@ -1044,9 +1044,6 @@ function updateStudentCountInSheets(teacherBook) {
     // 更新總覽工作表
     updateSummaryStudentCount(teacherBook, actualStudentCount);
     
-    // 更新班級資訊工作表
-    updateClassInfoStudentCount(teacherBook, actualStudentCount);
-    
     // 更新進度追蹤工作表
     updateProgressTrackingStudentCount(teacherBook, actualStudentCount);
     

@@ -1062,33 +1062,33 @@ function addStudentToTeacher(studentData, newTeacher) {
     // 轉班邏輯：原班級 → 新班級 → 新老師
     let newEnglishClass = '';
     
-    // 優先從班級資訊工作表獲取
-    const classInfoSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
-    if (classInfoSheet) {
+    // 優先從總覽工作表獲取
+    const summarySheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (summarySheet) {
       try {
-        // 嘗試從班級資訊工作表獲取 English Class (通常在B5)
-        const classData = classInfoSheet.getRange('B5').getValue();
-        if (classData && classData.toString().trim() !== '') {
-          newEnglishClass = classData.toString().trim();
-          Logger.log(`📚 從班級資訊工作表獲取新班級：${newEnglishClass}`);
+        const teacherClasses = summarySheet.getRange('B5').getValue();
+        if (teacherClasses && teacherClasses.toString().trim() !== '') {
+          newEnglishClass = teacherClasses.toString().trim();
+          Logger.log(`📚 從總覽工作表獲取新班級：${newEnglishClass}`);
         }
       } catch (error) {
-        Logger.log('從班級資訊工作表獲取班級失敗：' + error.message);
+        Logger.log('無法從總覽工作表獲取班級資訊：' + error.message);
       }
     }
     
-    // 備用：從總覽工作表獲取
+    // 備用：從班級資訊工作表獲取（向後兼容）
     if (!newEnglishClass) {
-      const summarySheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
-      if (summarySheet) {
+      const classInfoSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
+      if (classInfoSheet) {
         try {
-          const teacherClasses = summarySheet.getRange('B5').getValue();
-          if (teacherClasses && teacherClasses.toString().trim() !== '') {
-            newEnglishClass = teacherClasses.toString().trim();
-            Logger.log(`📚 從總覽工作表獲取新班級：${newEnglishClass}`);
+          // 嘗試從班級資訊工作表獲取 English Class (通常在B5)
+          const classData = classInfoSheet.getRange('B5').getValue();
+          if (classData && classData.toString().trim() !== '') {
+            newEnglishClass = classData.toString().trim();
+            Logger.log(`📚 從班級資訊工作表獲取新班級：${newEnglishClass}（向後兼容模式）`);
           }
         } catch (error) {
-          Logger.log('無法從總覽工作表獲取班級資訊：' + error.message);
+          Logger.log('從班級資訊工作表獲取班級失敗：' + error.message);
         }
       }
     }
