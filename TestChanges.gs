@@ -28,16 +28,16 @@ function testClassInfoSheetChanges() {
     
     // 驗證工作表結構
     const sheet = testSpreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
-    const headers = sheet.getRange(1, 1, 1, 4).getValues()[0];
+    const headers = sheet.getRange(1, 1, 1, 3).getValues()[0];
     
     Logger.log('📋 工作表標題行：' + headers.join(', '));
     
-    // 驗證標題是否正確（應該只有4欄，不包含班導師）
-    const expectedHeaders = ['班級', '班級人數', '班級特殊情況說明', '最後更新日期'];
+    // 驗證標題是否正確（移除班級特殊情況說明欄位）
+    const expectedHeaders = ['班級', '班級人數', '最後更新日期'];
     const headersMatch = JSON.stringify(headers) === JSON.stringify(expectedHeaders);
     
     if (headersMatch) {
-      Logger.log('✅ 標題行驗證通過：已成功移除班導師欄位');
+      Logger.log('✅ 標題行驗證通過：已成功移除班級特殊情況說明欄位');
     } else {
       Logger.log('❌ 標題行驗證失敗');
       Logger.log('期望：' + expectedHeaders.join(', '));
@@ -45,7 +45,7 @@ function testClassInfoSheetChanges() {
     }
     
     // 驗證資料行
-    const dataRows = sheet.getRange(2, 1, 2, 4).getValues();
+    const dataRows = sheet.getRange(2, 1, 2, 3).getValues();
     Logger.log('📊 資料行：');
     dataRows.forEach((row, index) => {
       Logger.log(`第${index + 1}行：${row.join(', ')}`);

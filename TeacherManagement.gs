@@ -473,8 +473,8 @@ function setupSummaryFormulas(recordBook, teacherInfo) {
 function createClassInfoSheet(recordBook, teacherInfo) {
   const sheet = recordBook.insertSheet(SYSTEM_CONFIG.SHEET_NAMES.CLASS_INFO);
   
-  // 設定標題
-  const headers = [['班級', '班級人數', '班級特殊情況說明', '最後更新日期']];
+  // 設定標題（移除班級特殊情況說明欄位）
+  const headers = [['班級', '班級人數', '最後更新日期']];
   sheet.getRange(1, 1, 1, headers[0].length).setValues(headers);
   
   // 如果有學生資料，從中提取班級資訊

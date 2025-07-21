@@ -335,6 +335,33 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
       };
     }
     
+    // 🔧 修復問題4：為新老師記錄簿添加學生異動記錄
+    try {
+      const newTeacherBook = getAllTeacherBooks().find(book => 
+        book.getName().includes(newTeacher) || 
+        extractTeacherNameFromFileName(book.getName()) === newTeacher
+      );
+      
+      if (newTeacherBook) {
+        addStudentChangeToClassInfo(newTeacherBook, {
+          studentId: studentId,
+          studentName: studentData['Chinese Name'] || studentData['English Name'],
+          changeType: '轉入',
+          fromTeacher: fromTeacher,
+          toTeacher: newTeacher,
+          toClass: newClass || newTeacher,
+          changeDate: new Date().toLocaleString(),
+          reason: newClass ? `學生從${fromTeacher}轉入${newClass}` : `學生從${fromTeacher}轉入`
+        });
+        Logger.log(`✅ 已為新老師 ${newTeacher} 添加學生轉入記錄`);
+      } else {
+        Logger.log(`⚠️ 找不到新老師 ${newTeacher} 的記錄簿，無法添加異動記錄`);
+      }
+    } catch (newTeacherLogError) {
+      Logger.log(`❌ 為新老師添加異動記錄失敗：${newTeacherLogError.message}`);
+      // 不影響整體轉班操作，繼續執行
+    }
+    
     // 🔧 修復問題C：轉移學生的歷史電聯記錄到新老師記錄簿
     try {
       Logger.log(`📋 開始轉移 ${studentId} 的歷史電聯記錄`);
@@ -976,17 +1003,16 @@ function updateClassInfoStudentCount(teacherBook, studentCount) {
           if (labelValue && typeof labelValue === 'string') {
             const labelText = labelValue.toString().trim();
             
-            // 精確匹配班級學生人數相關標籤
-            const classStudentCountLabels = [
-              '學生人數', '班級人數', '學生數量', '總學生數', '學生總數',
-              '人數', '班級學生數', '學生數', 'Student Count', 'Class Size'
-            ];
+            // 🎯 精確匹配班級人數標籤（班級人數就是學生人數）
+            const isClassStudentCountLabel = (
+              labelText === '班級人數' ||           // 精確匹配第一優先
+              labelText === '學生人數' ||           // 精確匹配第二優先  
+              labelText === '班級學生數' ||         // 精確匹配第三優先
+              labelText === 'Class Size' ||         // 英文精確匹配
+              labelText === 'Student Count'         // 英文精確匹配
+            );
             
-            const isClassStudentCountLabel = classStudentCountLabels.some(label => {
-              return labelText === label || 
-                     labelText.includes(label) || 
-                     (labelText.includes('學生') && labelText.includes('人數'));
-            });
+            Logger.log(`🔍 檢查標籤 "${labelText}": ${isClassStudentCountLabel ? '✅ 匹配' : '❌ 不匹配'}`);
             
             if (isClassStudentCountLabel) {
               // 檢查右邊儲存格是否適合放置數字
