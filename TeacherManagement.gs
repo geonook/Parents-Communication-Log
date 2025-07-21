@@ -524,7 +524,7 @@ function createClassInfoSheet(recordBook, teacherInfo) {
     }
     
     // 最後更新日期
-    sheet.getRange(row, 4).setValue(new Date().toLocaleDateString());
+    sheet.getRange(row, 3).setValue(new Date().toLocaleDateString());
   });
   
   // 新增資料來源說明
