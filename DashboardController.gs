@@ -42,8 +42,17 @@ function doPost(e) {
         return { success: false, message: '未知的操作' };
     }
   } catch (error) {
+    const errorResult = ErrorHandler.handle('Dashboard POST處理', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM, {
+      additionalInfo: { action: action },
+      showUI: false
+    });
+    
     Logger.log('Dashboard POST 錯誤：' + error.toString());
-    return { success: false, message: error.message };
+    return { 
+      success: false, 
+      message: errorResult.friendlyMessage,
+      errorId: errorResult.errorId 
+    };
   }
 }
 
