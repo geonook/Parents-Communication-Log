@@ -15,13 +15,36 @@
  * 提供統一的性能測量和分析接口
  */
 class PerformanceMonitor {
-  // 性能數據存儲
-  static measurements = new Map();
-  static benchmarks = new Map();
-  static alerts = [];
+  // 性能數據存儲 - 使用靜態方法初始化
+  static getMeasurements() {
+    if (!this._measurements) {
+      this._measurements = new Map();
+    }
+    return this._measurements;
+  }
+  
+  static getBenchmarks() {
+    if (!this._benchmarks) {
+      this._benchmarks = new Map();
+    }
+    return this._benchmarks;
+  }
+  
+  static getAlerts() {
+    if (!this._alerts) {
+      this._alerts = [];
+    }
+    return this._alerts;
+  }
+  
+  // 便利屬性
+  static get measurements() { return this.getMeasurements(); }
+  static get benchmarks() { return this.getBenchmarks(); }
+  static get alerts() { return this.getAlerts(); }
   
   // 配置常數
-  static CONFIG = {
+  static get CONFIG() {
+    return {
     // 性能告警閾值（毫秒）
     THRESHOLDS: {
       FAST: 1000,        // 1秒內：快速
@@ -43,7 +66,8 @@ class PerformanceMonitor {
       'BATCH_OPERATION',
       'USER_INTERFACE'
     ]
-  };
+    };
+  }
   
   /**
    * 開始性能測量
