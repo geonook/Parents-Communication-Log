@@ -7,16 +7,28 @@
  * 創建單一老師的電聯記錄簿
  */
 function createTeacherRecordBook() {
+  // 開始性能監控
+  const perfSession = startTimer('創建老師記錄簿', 'RECORD_CREATION');
+  
   try {
     // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
+    perfSession.checkpoint('UI初始化完成');
+    
     // 獲取老師資訊
     const teacherInfo = getTeacherInfoFromUser();
-    if (!teacherInfo) return;
+    if (!teacherInfo) {
+      perfSession.end(false, '用戶取消操作');
+      return;
+    }
+    
+    perfSession.checkpoint('老師資訊獲取完成', { teacherName: teacherInfo.name });
     
     // 創建記錄簿
     const recordBook = createTeacherSheet(teacherInfo);
+    
+    perfSession.checkpoint('記錄簿創建完成');
     
     ui.alert(
       '建立成功！', 
@@ -24,7 +36,13 @@ function createTeacherRecordBook() {
       ui.ButtonSet.OK
     );
     
+    // 性能監控：操作成功完成
+    perfSession.end(true, `成功創建 ${teacherInfo.name} 老師記錄簿`);
+    
   } catch (error) {
+    // 性能監控：操作失敗
+    perfSession.end(false, error.message);
+    
     Logger.log('創建老師記錄簿失敗：' + error.toString());
     safeErrorHandler('創建老師記錄簿', error);
   }

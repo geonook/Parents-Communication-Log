@@ -148,6 +148,9 @@ function onOpen() {
  * 初始化整個系統
  */
 function initializeSystem() {
+  // 開始性能監控
+  const perfSession = startTimer('系統初始化', 'SYSTEM_INIT');
+  
   try {
     const response = safeUIAlert(
       '系統初始化', 
@@ -158,22 +161,27 @@ function initializeSystem() {
     // 統一 Web 環境架構 - 移除環境檢查
     // 自動執行初始化程序
     
+    perfSession.checkpoint('用戶確認完成');
     Logger.log('開始系統初始化...');
     
     // 建立主資料夾結構
     const mainFolder = createSystemFolders();
+    perfSession.checkpoint('主資料夾結構建立完成');
     Logger.log('✅ 主資料夾結構建立完成');
     
     // 建立範本檔案
     createTemplateFiles(mainFolder);
+    perfSession.checkpoint('範本檔案建立完成');
     Logger.log('✅ 範本檔案建立完成');
     
     // 建立管理控制台
     const adminSheet = createAdminConsole(mainFolder);
+    perfSession.checkpoint('管理控制台建立完成');
     Logger.log('✅ 管理控制台建立完成');
     
     // 建立學生總表範本
     const masterListSheet = createStudentMasterListTemplate(mainFolder);
+    perfSession.checkpoint('學生總表範本建立完成');
     Logger.log('✅ 學生總表範本建立完成');
     
     const successMessage = `系統已成功初始化！\n\n主資料夾：${mainFolder.getUrl()}\n管理控制台：${adminSheet.getUrl()}\n學生總表：${masterListSheet.getUrl()}\n\n請在學生總表中貼上您的學生資料，然後使用「從學生總表建立老師記錄簿」功能。`;
@@ -181,7 +189,13 @@ function initializeSystem() {
     safeUIAlert('初始化完成！', successMessage);
     Logger.log('🎉 系統初始化完成');
     
+    // 性能監控：系統初始化成功
+    perfSession.end(true, '系統初始化成功完成');
+    
   } catch (error) {
+    // 性能監控：系統初始化失敗
+    perfSession.end(false, error.message);
+    
     Logger.log('系統初始化失敗：' + error.toString());
     safeErrorHandler('系統初始化', error);
   }
