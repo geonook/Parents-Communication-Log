@@ -17,14 +17,21 @@ class SystemService extends ApiService {
     return this.executeWithErrorHandling(async () => {
       Logger.log('SystemService: 獲取系統狀態');
       
-      const systemHealth = getSystemRecordBooksHealth();
+      // 使用智能緩存獲取系統健康狀態
+      const systemHealth = await globalCache.get(
+        'system_health',
+        () => getSystemRecordBooksHealth(),
+        CACHE_CONFIG.TTL.SYSTEM_STATUS
+      );
+      
       const systemStats = this.calculateSystemStats();
       
       const status = {
         health: systemHealth,
         stats: systemStats,
         timestamp: new Date().toISOString(),
-        version: '2.0.0'
+        version: '2.0.0',
+        cache: globalCache.getStats() // 包含緩存統計
       };
       
       return this.success(status, '系統狀態獲取成功');

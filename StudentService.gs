@@ -21,8 +21,12 @@ class StudentService extends ApiService {
       let studentData;
       
       if (!sheetId || sheetId.trim() === '') {
-        // 使用系統學生總表
-        studentData = getSystemMasterList();
+        // 使用智能緩存獲取系統學生總表
+        studentData = await globalCache.get(
+          'system_master_list',
+          () => getSystemMasterList(),
+          CACHE_CONFIG.TTL.STUDENT_DATA
+        );
         if (!studentData) {
           return this.error(
             '找不到系統學生總表，請提供學生資料表的 Google Sheets ID 或先初始化系統',

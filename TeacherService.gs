@@ -165,8 +165,12 @@ class TeacherService extends ApiService {
     return this.executeWithErrorHandling(async () => {
       Logger.log('TeacherService: 獲取教師列表');
       
-      // 使用模組化的診斷功能
-      const diagnosis = diagnoseTeacherRecordBooksContactStatus();
+      // 使用智能緩存獲取教師列表
+      const diagnosis = await globalCache.get(
+        'teachers_diagnosis',
+        () => diagnoseTeacherRecordBooksContactStatus(),
+        CACHE_CONFIG.TTL.TEACHER_LIST
+      );
       
       const teachers = [...diagnosis.normalBooks, ...diagnosis.emptyContactBooks]
         .map(book => ({

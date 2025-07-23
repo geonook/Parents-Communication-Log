@@ -156,6 +156,33 @@ function initializeApiRoutes() {
     return ApiResponse.error('學生班級異動功能暫未實現', 'NOT_IMPLEMENTED');
   }, { description: '處理學生班級異動（向後兼容）' });
   
+  // 緩存管理相關路由
+  ApiRouter.register('getCacheStats', async (params) => {
+    const stats = globalCache.getStats();
+    return ApiResponse.success(stats, '緩存統計獲取成功');
+  }, { description: '獲取緩存統計資訊' });
+  
+  ApiRouter.register('clearCache', async (params) => {
+    const pattern = params.pattern;
+    if (pattern) {
+      CacheUtils.invalidateRelated(pattern);
+      return ApiResponse.success({ pattern }, `清理相關緩存: ${pattern}`);
+    } else {
+      globalCache.clear();
+      return ApiResponse.success({}, '清理所有緩存');
+    }
+  }, { description: '清理緩存' });
+  
+  ApiRouter.register('preloadCache', async (params) => {
+    await preloadCommonCache();
+    return ApiResponse.success({}, '常用緩存預載完成');
+  }, { description: '預載常用緩存' });
+  
+  ApiRouter.register('getCacheKeys', async (params) => {
+    const keys = globalCache.getKeys();
+    return ApiResponse.success({ keys, count: keys.length }, `找到 ${keys.length} 個緩存鍵`);
+  }, { description: '獲取所有緩存鍵' });
+  
   Logger.log('API 路由初始化完成');
 }
 
