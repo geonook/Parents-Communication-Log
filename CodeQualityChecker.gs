@@ -1295,11 +1295,235 @@ class CodeQualityChecker {
       {
         description: '生產代碼中不應包含 console.log',
         pattern: /console\.log\s*\(/,
-        remediation: '使用適當的日誌記錄機制替代 console.log'
+        remediation: '使用適當的日誌記錄機制替代 console.log',
+        tags: ['production', 'deployment']
       }
     ));
     
-    Logger.log('[CodeQualityChecker] 預設品質規則初始化完成');
+    // === CI/CD 部署特定品質規則 ===
+    
+    // 部署阻斷規則 - 生產環境複雜度閾值
+    this.registerRule(new QualityRule(
+      'deployment_complexity_blocker',
+      '部署複雜度阻斷',
+      QUALITY_DIMENSIONS.COMPLEXITY,
+      QUALITY_SEVERITY.BLOCKER,
+      {
+        description: '生產環境函數複雜度不得超過20',
+        threshold: 20,
+        checkFunction: (context) => {
+          // 只在生產環境或嚴格模式下應用
+          if (!context.options.strictMode && context.options.securityLevel !== 'HIGH') {
+            return [];
+          }
+          
+          const analysis = this.analyzer.analyzeComplexity(context.content);
+          if (analysis.cyclomaticComplexity > 20) {
+            return [{
+              type: 'deployment_complexity_blocker',
+              message: `函數複雜度 ${analysis.cyclomaticComplexity} 超過生產環境限制 20，阻止部署`,
+              severity: QUALITY_SEVERITY.BLOCKER,
+              remediation: '必須重構複雜函數後才能部署到生產環境'
+            }];
+          }
+          return [];
+        },
+        tags: ['production', 'deployment', 'blocker']
+      }
+    ));
+    
+    // 安全漏洞增強檢查 - 生產環境
+    this.registerRule(new QualityRule(
+      'production_security_vulnerabilities',
+      '生產環境安全漏洞檢查',
+      QUALITY_DIMENSIONS.SECURITY,
+      QUALITY_SEVERITY.BLOCKER,
+      {
+        description: '生產環境禁止已知安全漏洞模式',
+        checkFunction: (context) => {
+          const issues = [];
+          const lines = context.content.split('\n');
+          
+          // 生產環境特定的安全檢查
+          const productionSecurityPatterns = [
+            { pattern: /eval\s*\(/, message: 'eval 函數在生產環境中嚴格禁止', blocker: true },
+            { pattern: /Function\s*\(.*\)/, message: 'Function 構造函數在生產環境中禁止使用', blocker: true },
+            { pattern: /setTimeout\s*\(\s*["'`][^"'`]*["'`]/, message: '字符串形式的 setTimeout 存在安全風險', blocker: false },
+            { pattern: /\.innerHTML\s*=.*\+/, message: 'innerHTML 拼接可能導致 XSS 攻擊', blocker: false },
+            { pattern: /document\.write\s*\(/, message: 'document.write 存在安全和性能問題', blocker: false }
+          ];
+          
+          lines.forEach((line, index) => {
+            productionSecurityPatterns.forEach(({ pattern, message, blocker }) => {
+              if (pattern.test(line)) {
+                const severity = blocker && context.options.securityLevel === 'HIGH' ? 
+                  QUALITY_SEVERITY.BLOCKER : QUALITY_SEVERITY.CRITICAL;
+                
+                issues.push({
+                  type: 'production_security',
+                  line: index + 1,
+                  message: message,
+                  severity: severity,
+                  remediation: '使用安全的替代實現方式'
+                });
+              }
+            });
+          });
+          
+          return issues;
+        },
+        tags: ['production', 'security', 'deployment']
+      }
+    ));
+    
+    // 性能反模式部署阻斷規則
+    this.registerRule(new QualityRule(
+      'deployment_performance_antipatterns',
+      '部署性能反模式檢查',
+      QUALITY_DIMENSIONS.PERFORMANCE,
+      QUALITY_SEVERITY.MAJOR,
+      {
+        description: '檢測會阻止部署的性能反模式',
+        checkFunction: (context) => {
+          const issues = [];
+          const lines = context.content.split('\n');
+          
+          // 部署環境性能反模式
+          const deploymentAntiPatterns = [
+            { 
+              pattern: /for\s*\([^)]*\.length[^)]*\)[\s\S]*?for\s*\([^)]*\.length[^)]*\)/, 
+              message: '嵌套循環中重複計算 length 會嚴重影響性能',
+              severity: QUALITY_SEVERITY.MAJOR
+            },
+            { 
+              pattern: /setInterval\s*\([^,]+,\s*[1-9]\d{0,1}\)/, 
+              message: '高頻率的 setInterval (< 100ms) 可能影響系統性能',
+              severity: context.options.strictMode ? QUALITY_SEVERITY.BLOCKER : QUALITY_SEVERITY.MAJOR
+            },
+            { 
+              pattern: /while\s*\(\s*true\s*\)/, 
+              message: '無限循環可能導致系統掛起',
+              severity: QUALITY_SEVERITY.BLOCKER
+            },
+            { 
+              pattern: /try\s*\{[\s\S]*?\}\s*catch\s*\([^)]*\)\s*\{\s*\}/, 
+              message: '空的 catch 塊會隱藏潛在問題',
+              severity: QUALITY_SEVERITY.MAJOR
+            }
+          ];
+          
+          const content = lines.join('\n');
+          deploymentAntiPatterns.forEach(({ pattern, message, severity }) => {
+            const matches = content.match(pattern);
+            if (matches) {
+              issues.push({
+                type: 'deployment_performance',
+                message: message,
+                severity: severity,
+                remediation: '優化代碼以提高性能和穩定性'
+              });
+            }
+          });
+          
+          return issues;
+        },
+        tags: ['performance', 'deployment', 'antipattern']
+      }
+    ));
+    
+    // 測試覆蓋率要求（按環境）
+    this.registerRule(new QualityRule(
+      'deployment_test_coverage',
+      '部署測試覆蓋率要求',
+      QUALITY_DIMENSIONS.TEST_COVERAGE,
+      QUALITY_SEVERITY.MAJOR,
+      {
+        description: '根據部署環境要求不同的測試覆蓋率',
+        checkFunction: (context) => {
+          // 簡單的測試函數檢測（實際項目中應該整合真正的覆蓋率工具）
+          const testFunctionCount = (context.content.match(/function\s+test\w*\s*\(|it\s*\(|describe\s*\(/g) || []).length;
+          const totalFunctionCount = (context.content.match(/function\s+\w+\s*\(/g) || []).length;
+          
+          if (totalFunctionCount === 0) return [];
+          
+          const testCoverage = testFunctionCount / totalFunctionCount * 100;
+          const requiredCoverage = this.getRequiredTestCoverage(context.options.securityLevel);
+          
+          if (testCoverage < requiredCoverage) {
+            const severity = context.options.securityLevel === 'HIGH' ? 
+              QUALITY_SEVERITY.BLOCKER : QUALITY_SEVERITY.MAJOR;
+            
+            return [{
+              type: 'test_coverage',
+              message: `測試覆蓋率 ${testCoverage.toFixed(1)}% 低於 ${context.options.securityLevel} 環境要求的 ${requiredCoverage}%`,
+              severity: severity,
+              remediation: `增加測試函數以達到 ${requiredCoverage}% 的覆蓋率要求`
+            }];
+          }
+          
+          return [];
+        },
+        tags: ['testing', 'coverage', 'deployment']
+      }
+    ));
+    
+    // 硬編碼配置檢查（部署環境敏感）
+    this.registerRule(new QualityRule(
+      'deployment_hardcoded_config',
+      '部署硬編碼配置檢查',
+      QUALITY_DIMENSIONS.SECURITY,
+      QUALITY_SEVERITY.CRITICAL,
+      {
+        description: '檢測可能影響部署的硬編碼配置',
+        checkFunction: (context) => {
+          const issues = [];
+          const lines = context.content.split('\n');
+          
+          const hardcodedPatterns = [
+            { pattern: /localhost|127\.0\.0\.1/, message: '硬編碼的本地地址可能影響部署', type: 'localhost' },
+            { pattern: /(http|https):\/\/[^'"\s]+\.(dev|test|local)/, message: '硬編碼的開發/測試域名', type: 'dev_domain' },
+            { pattern: /port\s*[=:]\s*[3-9]\d{3}/, message: '硬編碼的端口號可能與部署環境衝突', type: 'port' },
+            { pattern: /\/tmp\/|\/var\/tmp\//, message: '硬編碼的臨時路徑可能在部署環境中不存在', type: 'temp_path' },
+            { pattern: /debug\s*[=:]\s*true/i, message: '硬編碼的 debug 模式應該在生產環境中關閉', type: 'debug_mode' }
+          ];
+          
+          lines.forEach((line, index) => {
+            hardcodedPatterns.forEach(({ pattern, message, type }) => {
+              if (pattern.test(line)) {
+                const severity = (type === 'debug_mode' && context.options.securityLevel === 'HIGH') ? 
+                  QUALITY_SEVERITY.BLOCKER : QUALITY_SEVERITY.CRITICAL;
+                
+                issues.push({
+                  type: 'hardcoded_config',
+                  line: index + 1,
+                  message: message,
+                  severity: severity,
+                  remediation: '使用環境變量或配置文件替代硬編碼值',
+                  configType: type
+                });
+              }
+            });
+          });
+          
+          return issues;
+        },
+        tags: ['configuration', 'deployment', 'hardcoded']
+      }
+    ));
+    
+    Logger.log('[CodeQualityChecker] 預設品質規則（包含CI/CD規則）初始化完成');
+  }
+  
+  /**
+   * 獲取要求的測試覆蓋率
+   */
+  getRequiredTestCoverage(securityLevel) {
+    switch (securityLevel) {
+      case 'HIGH': return 80;    // 生產環境
+      case 'MEDIUM': return 60;  // 測試環境
+      case 'LOW': return 40;     // 開發環境
+      default: return 50;
+    }
   }
   
   /**
@@ -1834,6 +2058,551 @@ class CodeQualityChecker {
   }
   
   /**
+   * 獲取最後一次評估分數
+   * 用於風險評估和CI/CD管線決策
+   * @return {Object} 最後評估結果
+   */
+  getLastAssessmentScore() {
+    if (this.assessmentHistory.length === 0) {
+      return {
+        score: 0,
+        grade: 'F',
+        passed: false,
+        timestamp: null,
+        message: '無評估記錄'
+      };
+    }
+    
+    const lastAssessment = this.assessmentHistory[this.assessmentHistory.length - 1];
+    return {
+      score: lastAssessment.score,
+      grade: lastAssessment.grade,
+      passed: lastAssessment.passed,
+      blocker: lastAssessment.blocker,
+      critical: lastAssessment.critical,
+      fileName: lastAssessment.fileName,
+      timestamp: lastAssessment.timestamp,
+      issueCount: lastAssessment.issues.length,
+      recommendations: lastAssessment.recommendations.slice(0, 3) // 前3個建議
+    };
+  }
+  
+  /**
+   * CI/CD專用品質檢查
+   * 針對CI/CD管線優化的品質檢查，包含部署環境特定規則
+   * @param {string} environment 部署環境 (development/staging/production)
+   * @param {Array} files 檔案列表 {fileName, content}
+   * @param {Object} options 檢查選項
+   * @return {Promise<Object>} CI/CD品質檢查結果
+   */
+  async runCiCdQualityCheck(environment, files, options = {}) {
+    const perfSession = startTimer('CodeQualityChecker.runCiCdQualityCheck', 'CICD_QUALITY_CHECK');
+    
+    try {
+      Logger.log(`[CodeQualityChecker] 開始 CI/CD 品質檢查: ${environment}, 檔案數: ${files.length}`);
+      
+      // 應用CI/CD特定規則
+      const cicdOptions = this.applyCiCdRules(environment, options);
+      
+      // 執行批量品質檢查
+      const batchResult = await this.batchCheckQuality(files, cicdOptions);
+      
+      // 創建整體評估
+      const overallAssessment = this.createCiCdAssessment(batchResult, environment);
+      
+      // 執行環境特定品質門禁
+      const gateResult = this.runQualityGate(overallAssessment, environment);
+      
+      // 觸發健康檢查集成
+      const healthCheckResult = await this.triggerHealthCheckIntegration(overallAssessment, environment);
+      
+      // 記錄CI/CD指標
+      this.recordCiCdMetrics(environment, batchResult, gateResult);
+      
+      // 儲存評估結果以供風險評估使用
+      this.storeCiCdAssessmentResult(overallAssessment, environment);
+      
+      const result = {
+        passed: gateResult.passed,
+        blocked: gateResult.blocked,
+        environment: environment,
+        filesChecked: files.length,
+        averageScore: batchResult.summary.averageScore,
+        passRate: (batchResult.summary.passedFiles / batchResult.summary.totalFiles * 100).toFixed(2),
+        batchResult: batchResult,
+        gateResult: gateResult,
+        healthCheck: healthCheckResult,
+        deploymentRisk: this.calculateDeploymentRisk(overallAssessment, environment),
+        recommendations: this.generateCiCdRecommendations(batchResult, gateResult, environment),
+        qualityTrend: this.getQualityTrend(environment),
+        timestamp: new Date().toISOString()
+      };
+      
+      perfSession.end(result.passed, `CI/CD檢查${environment}: ${result.passed ? '通過' : '失敗'}`);
+      
+      // 發送CI/CD事件
+      if (this.eventBus) {
+        this.eventBus.emit('cicd.quality.completed', {
+          environment: environment,
+          result: result
+        });
+      }
+      
+      Logger.log(`[CodeQualityChecker] CI/CD 品質檢查完成: ${environment}, 結果: ${result.passed ? '通過' : '失敗'}, 風險等級: ${result.deploymentRisk.level}`);
+      
+      return result;
+      
+    } catch (error) {
+      perfSession.end(false, error.message);
+      ErrorHandler.handle(`CodeQualityChecker.runCiCdQualityCheck.${environment}`, error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+      
+      return {
+        passed: false,
+        blocked: true,
+        environment: environment,
+        error: error.message,
+        filesChecked: files.length,
+        timestamp: new Date().toISOString(),
+        deploymentRisk: { level: 'HIGH', message: '品質檢查失敗' }
+      };
+    }
+  }
+  
+  /**
+   * 應用CI/CD特定規則
+   */
+  applyCiCdRules(environment, options) {
+    const cicdOptions = { ...options };
+    
+    // 根據環境調整檢查嚴格程度
+    switch (environment) {
+      case 'production':
+        cicdOptions.skipComplexity = false;
+        cicdOptions.skipSecurity = false;
+        cicdOptions.skipPerformance = false;
+        cicdOptions.strictMode = true;
+        cicdOptions.securityLevel = 'HIGH';
+        break;
+        
+      case 'staging':
+        cicdOptions.skipComplexity = false;
+        cicdOptions.skipSecurity = false;
+        cicdOptions.skipPerformance = false;
+        cicdOptions.strictMode = false;
+        cicdOptions.securityLevel = 'MEDIUM';
+        break;
+        
+      case 'development':
+        cicdOptions.skipComplexity = false;
+        cicdOptions.skipSecurity = false;
+        cicdOptions.skipPerformance = true; // 開發環境可跳過性能檢查
+        cicdOptions.strictMode = false;
+        cicdOptions.securityLevel = 'LOW';
+        break;
+    }
+    
+    return cicdOptions;
+  }
+  
+  /**
+   * 創建CI/CD整體評估
+   */
+  createCiCdAssessment(batchResult, environment) {
+    const assessment = new QualityAssessment(`cicd_${environment}_assessment`, '');
+    assessment.score = batchResult.summary.averageScore;
+    assessment.passed = batchResult.summary.passedFiles === batchResult.summary.totalFiles;
+    assessment.blocker = batchResult.summary.blockedFiles > 0;
+    assessment.critical = batchResult.summary.criticalFiles > 0;
+    
+    // 聚合所有檔案的問題
+    batchResult.results.forEach(result => {
+      if (result.issues) {
+        result.issues.forEach(issue => {
+          assessment.addIssue({
+            ...issue,
+            fileName: result.fileName
+          });
+        });
+      }
+    });
+    
+    // 設置環境特定的指標
+    assessment.metrics.environment = environment;
+    assessment.metrics.filesAnalyzed = batchResult.results.length;
+    assessment.metrics.deploymentReady = assessment.passed && !assessment.blocker;
+    
+    return assessment;
+  }
+  
+  /**
+   * 觸發健康檢查集成
+   * 當品質問題被檢測到時觸發系統健康檢查
+   */
+  async triggerHealthCheckIntegration(assessment, environment) {
+    try {
+      // 檢查是否需要觸發健康檢查
+      const shouldTriggerHealthCheck = this.shouldTriggerHealthCheck(assessment, environment);
+      
+      if (!shouldTriggerHealthCheck) {
+        return {
+          triggered: false,
+          message: '品質狀況良好，無需健康檢查'
+        };
+      }
+      
+      Logger.log(`[CodeQualityChecker] 觸發健康檢查: 品質問題檢測 - ${environment}`);
+      
+      // 嘗試調用 HealthCheckService
+      if (typeof runSystemDiagnostic === 'function') {
+        const healthResult = await runSystemDiagnostic({
+          trigger: 'quality_degradation',
+          environment: environment,
+          qualityScore: assessment.score,
+          issueCount: assessment.issues.length
+        });
+        
+        // 關聯品質下降與系統健康
+        const correlation = this.correlateQualityWithHealth(assessment, healthResult);
+        
+        return {
+          triggered: true,
+          healthResult: healthResult,
+          correlation: correlation,
+          message: `健康檢查已觸發，發現 ${correlation.issues.length} 個相關問題`
+        };
+      }
+      
+      return {
+        triggered: false,
+        message: 'HealthCheckService 不可用'
+      };
+      
+    } catch (error) {
+      ErrorHandler.handle('CodeQualityChecker.triggerHealthCheckIntegration', error, ERROR_LEVELS.WARNING, ERROR_CATEGORIES.INTEGRATION);
+      return {
+        triggered: false,
+        error: error.message,
+        message: '健康檢查觸發失敗'
+      };
+    }
+  }
+  
+  /**
+   * 判斷是否應該觸發健康檢查
+   */
+  shouldTriggerHealthCheck(assessment, environment) {
+    // 生產環境：任何critical或blocker問題都觸發
+    if (environment === 'production') {
+      return assessment.critical || assessment.blocker || assessment.score < 80;
+    }
+    
+    // 測試環境：blocker問題或分數過低觸發
+    if (environment === 'staging') {
+      return assessment.blocker || assessment.score < 70;
+    }
+    
+    // 開發環境：只有blocker問題觸發
+    return assessment.blocker;
+  }
+  
+  /**
+   * 關聯品質下降與系統健康
+   */
+  correlateQualityWithHealth(qualityAssessment, healthResult) {
+    const correlation = {
+      qualityScore: qualityAssessment.score,
+      systemHealth: healthResult ? healthResult.overallStatus : 'unknown',
+      issues: [],
+      recommendations: []
+    };
+    
+    // 分析品質問題與系統健康的關聯性
+    if (qualityAssessment.issues) {
+      qualityAssessment.issues.forEach(issue => {
+        // 安全問題可能影響系統安全性
+        if (issue.dimension === QUALITY_DIMENSIONS.SECURITY) {
+          correlation.issues.push({
+            type: 'security_risk',
+            message: `代碼安全問題可能影響系統安全性: ${issue.message}`,
+            severity: issue.severity
+          });
+        }
+        
+        // 性能問題可能影響系統性能
+        if (issue.dimension === QUALITY_DIMENSIONS.PERFORMANCE) {
+          correlation.issues.push({
+            type: 'performance_risk',
+            message: `代碼性能問題可能影響系統性能: ${issue.message}`,
+            severity: issue.severity
+          });
+        }
+        
+        // 複雜度問題可能影響系統穩定性
+        if (issue.dimension === QUALITY_DIMENSIONS.COMPLEXITY) {
+          correlation.issues.push({
+            type: 'stability_risk',
+            message: `代碼複雜度問題可能影響系統穩定性: ${issue.message}`,
+            severity: issue.severity
+          });
+        }
+      });
+    }
+    
+    // 生成相關建議
+    if (correlation.issues.length > 0) {
+      correlation.recommendations.push('建議在部署前修復品質問題，以降低系統風險');
+      correlation.recommendations.push('考慮增加監控和告警機制');
+      if (correlation.issues.some(i => i.severity === QUALITY_SEVERITY.BLOCKER)) {
+        correlation.recommendations.push('存在阻斷級問題，強烈建議延後部署');
+      }
+    }
+    
+    return correlation;
+  }
+  
+  /**
+   * 記錄CI/CD指標
+   */
+  recordCiCdMetrics(environment, batchResult, gateResult) {
+    if (!this.metricsCollector) {
+      return;
+    }
+    
+    const tags = {
+      environment: environment,
+      gate_result: gateResult.passed ? 'passed' : 'failed',
+      blocked: gateResult.blocked ? 'true' : 'false'
+    };
+    
+    // 記錄CI/CD品質檢查指標
+    this.metricsCollector.recordMetric('cicd_quality_check_total', 1, tags);
+    this.metricsCollector.recordMetric('cicd_quality_score', batchResult.summary.averageScore, tags);
+    this.metricsCollector.recordMetric('cicd_files_checked', batchResult.summary.totalFiles, tags);
+    this.metricsCollector.recordMetric('cicd_files_passed', batchResult.summary.passedFiles, tags);
+    this.metricsCollector.recordMetric('cicd_files_blocked', batchResult.summary.blockedFiles, tags);
+    this.metricsCollector.recordMetric('cicd_gate_passed', gateResult.passed ? 1 : 0, tags);
+    
+    // 記錄部署風險指標
+    const riskLevel = this.calculateDeploymentRisk({ score: batchResult.summary.averageScore }, environment).level;
+    this.metricsCollector.recordMetric('cicd_deployment_risk', this.getRiskScore(riskLevel), {
+      ...tags,
+      risk_level: riskLevel.toLowerCase()
+    });
+  }
+  
+  /**
+   * 獲取風險分數
+   */
+  getRiskScore(riskLevel) {
+    switch (riskLevel) {
+      case 'LOW': return 1;
+      case 'MEDIUM': return 2;
+      case 'HIGH': return 3;
+      case 'CRITICAL': return 4;
+      default: return 2;
+    }
+  }
+  
+  /**
+   * 儲存CI/CD評估結果
+   */
+  storeCiCdAssessmentResult(assessment, environment) {
+    // 添加環境標記
+    assessment.environment = environment;
+    assessment.cicdTimestamp = new Date().toISOString();
+    
+    // 添加到歷史記錄
+    this.addToHistory(assessment);
+    
+    // 如果有快取，也儲存到快取中供風險評估使用
+    if (this.cache) {
+      const cacheKey = `cicd_assessment_${environment}_latest`;
+      this.cache.set(cacheKey, assessment.toJSON(), 3600); // 快取1小時
+    }
+  }
+  
+  /**
+   * 計算部署風險
+   */
+  calculateDeploymentRisk(assessment, environment) {
+    let riskScore = 0;
+    let riskFactors = [];
+    
+    // 基於品質分數計算風險
+    if (assessment.score < 60) {
+      riskScore += 4;
+      riskFactors.push('品質分數過低');
+    } else if (assessment.score < 70) {
+      riskScore += 3;
+      riskFactors.push('品質分數偏低');
+    } else if (assessment.score < 80) {
+      riskScore += 2;
+      riskFactors.push('品質分數中等');
+    } else {
+      riskScore += 1;
+    }
+    
+    // 基於問題嚴重性調整風險
+    if (assessment.blocker) {
+      riskScore += 4;
+      riskFactors.push('存在阻斷級問題');
+    }
+    if (assessment.critical) {
+      riskScore += 3;
+      riskFactors.push('存在關鍵級問題');
+    }
+    
+    // 基於環境調整風險閾值
+    let riskThresholds;
+    switch (environment) {
+      case 'production':
+        riskThresholds = { low: 2, medium: 4, high: 6 };
+        break;
+      case 'staging':
+        riskThresholds = { low: 3, medium: 5, high: 7 };
+        break;
+      default: // development
+        riskThresholds = { low: 4, medium: 6, high: 8 };
+    }
+    
+    // 判斷風險等級
+    let level, message;
+    if (riskScore <= riskThresholds.low) {
+      level = 'LOW';
+      message = '部署風險低，可以安全部署';
+    } else if (riskScore <= riskThresholds.medium) {
+      level = 'MEDIUM';
+      message = '部署風險中等，建議審查後部署';
+    } else if (riskScore <= riskThresholds.high) {
+      level = 'HIGH';
+      message = '部署風險較高，需要修復問題後再部署';
+    } else {
+      level = 'CRITICAL';
+      message = '部署風險極高，禁止部署';
+    }
+    
+    return {
+      level: level,
+      score: riskScore,
+      message: message,
+      factors: riskFactors,
+      environment: environment,
+      recommendation: this.getDeploymentRecommendation(level, environment)
+    };
+  }
+  
+  /**
+   * 獲取部署建議
+   */
+  getDeploymentRecommendation(riskLevel, environment) {
+    switch (riskLevel) {
+      case 'LOW':
+        return '品質檢查通過，建議繼續部署流程';
+      case 'MEDIUM':
+        return '建議進行額外的代碼審查，確認問題影響範圍後部署';
+      case 'HIGH':
+        return environment === 'production' ? '建議修復主要問題後再部署到生產環境' : '可以部署但需要密切監控';
+      case 'CRITICAL':
+        return '必須修復所有阻斷級問題後才能部署';
+      default:
+        return '需要進一步評估部署風險';
+    }
+  }
+  
+  /**
+   * 生成CI/CD建議
+   */
+  generateCiCdRecommendations(batchResult, gateResult, environment) {
+    const recommendations = [];
+    
+    // 基於門禁結果的建議
+    if (gateResult.blocked) {
+      recommendations.push(`🚫 ${environment} 環境部署被阻斷，必須修復阻斷級問題`);
+    } else if (!gateResult.passed) {
+      recommendations.push(`⚠️ ${environment} 環境品質門禁未通過，建議修復後重新檢查`);
+    } else {
+      recommendations.push(`✅ ${environment} 環境品質門禁通過，可以繼續部署流程`);
+    }
+    
+    // 基於批量結果的建議
+    if (batchResult.summary.blockedFiles > 0) {
+      recommendations.push(`修復 ${batchResult.summary.blockedFiles} 個檔案的阻斷級問題`);
+    }
+    
+    if (batchResult.summary.averageScore < 70) {
+      recommendations.push('整體代碼品質偏低，建議進行代碼重構');
+    }
+    
+    if (batchResult.summary.passRate < 80) {
+      recommendations.push(`${Math.round(100 - parseFloat(batchResult.summary.passRate))}% 的檔案未通過品質檢查，建議批量修復`);
+    }
+    
+    // 環境特定建議
+    switch (environment) {
+      case 'production':
+        if (batchResult.summary.averageScore < 80) {
+          recommendations.push('生產環境要求較高品質標準，建議達到80分以上再部署');
+        }
+        break;
+      case 'staging':
+        recommendations.push('測試環境部署後建議進行全面功能測試');
+        break;
+      case 'development':
+        recommendations.push('開發環境可以部署，但建議持續改善代碼品質');
+        break;
+    }
+    
+    return recommendations;
+  }
+  
+  /**
+   * 獲取品質趨勢
+   */
+  getQualityTrend(environment) {
+    // 獲取該環境最近的評估記錄
+    const envAssessments = this.assessmentHistory
+      .filter(a => a.environment === environment)
+      .slice(-10); // 最近10次
+    
+    if (envAssessments.length < 2) {
+      return {
+        trend: 'insufficient_data',
+        message: '資料不足，無法計算趨勢'
+      };
+    }
+    
+    const recent = envAssessments.slice(-3);
+    const earlier = envAssessments.slice(-6, -3);
+    
+    const recentAvg = recent.reduce((sum, a) => sum + a.score, 0) / recent.length;
+    const earlierAvg = earlier.length > 0 ? 
+      earlier.reduce((sum, a) => sum + a.score, 0) / earlier.length : recentAvg;
+    
+    const change = recentAvg - earlierAvg;
+    
+    let trend, message;
+    if (change > 5) {
+      trend = 'improving';
+      message = `品質持續改善，平均提升 ${change.toFixed(1)} 分`;
+    } else if (change < -5) {
+      trend = 'declining';
+      message = `品質呈下降趨勢，平均下降 ${Math.abs(change).toFixed(1)} 分`;
+    } else {
+      trend = 'stable';
+      message = '品質保持穩定';
+    }
+    
+    return {
+      trend: trend,
+      change: change.toFixed(1),
+      recentAverage: recentAvg.toFixed(1),
+      earlierAverage: earlierAvg.toFixed(1),
+      message: message,
+      assessmentCount: envAssessments.length
+    };
+  }
+  
+  /**
    * 添加到歷史記錄
    */
   addToHistory(assessment) {
@@ -1898,66 +2667,56 @@ function getCodeQualityStats() {
 }
 
 /**
- * 整合到 CI/CD 管線的品質檢查
- * 與 DeploymentManager 整合使用
+ * 便利函數 - 獲取最後評估分數
  */
-async function runCiCdQualityCheck(environment, files) {
-  try {
-    Logger.log(`[CodeQualityChecker] 開始 CI/CD 品質檢查: ${environment}`);
-    
-    // 執行批量品質檢查
-    const batchResult = await batchCheckCodeQuality(files, {
-      batchSize: 3, // 小批次避免超時
-      skipComplexity: false,
-      skipSecurity: false
-    });
-    
-    // 計算整體評估
-    const overallAssessment = new QualityAssessment('batch_assessment', '');
-    overallAssessment.score = batchResult.summary.averageScore;
-    overallAssessment.passed = batchResult.summary.passedFiles === batchResult.summary.totalFiles;
-    overallAssessment.blocker = batchResult.summary.blockedFiles > 0;
-    overallAssessment.critical = batchResult.summary.criticalFiles > 0;
-    
-    // 執行對應環境的品質門禁
-    const gateResult = runQualityGate(overallAssessment, environment);
-    
-    // 記錄結果
-    if (globalMetricsCollector) {
-      globalMetricsCollector.recordMetric('cicd_quality_check', gateResult.passed ? 1 : 0, {
-        environment: environment,
-        filesChecked: files.length.toString(),
-        averageScore: batchResult.summary.averageScore.toString()
-      });
-    }
-    
-    Logger.log(`[CodeQualityChecker] CI/CD 品質檢查完成: ${environment}, 結果: ${gateResult.passed ? '通過' : '失敗'}`);
-    
+function getLastQualityAssessmentScore() {
+  return globalCodeQualityChecker.getLastAssessmentScore();
+}
+
+/**
+ * 便利函數 - CI/CD專用品質檢查
+ * 整合到 CI/CD 管線的品質檢查，與 DeploymentManager 整合使用
+ */
+async function runCiCdQualityCheck(environment, files, options = {}) {
+  return await globalCodeQualityChecker.runCiCdQualityCheck(environment, files, options);
+}
+
+/**
+ * 便利函數 - 獲取部署風險評估
+ */
+function getDeploymentRisk(environment) {
+  const lastAssessment = globalCodeQualityChecker.getLastAssessmentScore();
+  if (!lastAssessment.timestamp) {
     return {
-      passed: gateResult.passed,
-      blocked: gateResult.blocked,
-      batchResult: batchResult,
-      gateResult: gateResult,
-      summary: {
-        environment: environment,
-        filesChecked: files.length,
-        averageScore: batchResult.summary.averageScore,
-        passRate: (batchResult.summary.passedFiles / batchResult.summary.totalFiles * 100).toFixed(2)
-      }
+      level: 'UNKNOWN',
+      message: '無品質評估記錄',
+      recommendation: '建議先執行品質檢查'
     };
+  }
+  
+  return globalCodeQualityChecker.calculateDeploymentRisk({
+    score: lastAssessment.score,
+    blocker: lastAssessment.blocker,
+    critical: lastAssessment.critical
+  }, environment);
+}
+
+/**
+ * 便利函數 - 觸發品質相關健康檢查
+ */
+async function triggerQualityHealthCheck(environment, qualityScore = null) {
+  try {
+    const assessment = qualityScore ? 
+      { score: qualityScore, blocker: false, critical: false, issues: [] } :
+      globalCodeQualityChecker.getLastAssessmentScore();
     
+    return await globalCodeQualityChecker.triggerHealthCheckIntegration(assessment, environment);
   } catch (error) {
-    ErrorHandler.handle('runCiCdQualityCheck', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
-    
+    ErrorHandler.handle('triggerQualityHealthCheck', error, ERROR_LEVELS.WARNING, ERROR_CATEGORIES.INTEGRATION);
     return {
-      passed: false,
-      blocked: true,
+      triggered: false,
       error: error.message,
-      summary: {
-        environment: environment,
-        filesChecked: files.length,
-        errorMessage: error.message
-      }
+      message: '健康檢查觸發失敗'
     };
   }
 }
