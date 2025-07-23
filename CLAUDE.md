@@ -1,10 +1,10 @@
 # CLAUDE.md - Parents Communication Log
 
-> **Documentation Version**: 2.0  
-> **Last Updated**: 2025-07-20  
+> **Documentation Version**: 3.0  
+> **Last Updated**: 2025-07-23  
 > **Project**: Parents Communication Log  
-> **Description**: Parent-teacher communication tracking system with teacher management, student data import, dashboard, and automation features  
-> **Features**: GitHub auto-backup, Task agents, technical debt prevention
+> **Description**: Enterprise parent-teacher communication system with CI/CD pipeline, quality gates, health monitoring, and automated deployment  
+> **Features**: GitHub auto-backup, Task agents, technical debt prevention, CI/CD pipeline, quality assurance
 
 This file provides essential guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -437,6 +437,27 @@ clasp push             # Deploy to Google Apps Script - CRITICAL!
 
 # Check clasp status
 clasp status
+
+# === CLASP 權限配置與故障排除 ===
+# 如果遇到權限問題，請執行以下步驟：
+
+# 1. 重新認證 CLASP
+clasp login
+
+# 2. 檢查專案綁定
+clasp settings
+
+# 3. 如果需要重新綁定專案
+clasp create --type standalone --title "Parents Communication Log"
+
+# 4. 或綁定到現有專案
+clasp clone <SCRIPT_ID>
+
+# 5. 設定專案 ID (如果 .clasp.json 遺失)
+echo '{"scriptId":"<YOUR_SCRIPT_ID>","rootDir":"."}' > .clasp.json
+
+# 6. 驗證部署
+clasp push --watch  # 監控模式，自動推送變更
 
 # GitHub repository management
 gh repo view           # Check repository status
