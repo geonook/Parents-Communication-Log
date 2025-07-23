@@ -439,7 +439,7 @@ class DeploymentManager {
   }
   
   /**
-   * 預部署檢查
+   * 預部署檢查 - 整合 CI/CD Pipeline 品質與健康檢查
    */
   async preDeploymentCheck(deploymentConfig) {
     try {
@@ -452,6 +452,101 @@ class DeploymentManager {
       // 檢查版本格式
       if (!deploymentConfig.version || !this.isValidVersion(deploymentConfig.version)) {
         return { success: false, message: '無效的版本號格式' };
+      }
+      
+      // === CI/CD 整合: 品質門禁檢查 ===
+      if (typeof globalCodeQualityChecker !== 'undefined') {
+        Logger.log('執行 CI/CD 品質門禁檢查');
+        
+        try {
+          // 執行代碼品質檢查
+          const qualityResult = deploymentConfig.files ? 
+            await globalCodeQualityChecker.batchCheckCodeQuality(deploymentConfig.files) :
+            await globalCodeQualityChecker.performSystemQualityCheck();
+          
+          // 檢查品質門禁
+          const gateResult = globalCodeQualityChecker.runQualityGate(qualityResult, deploymentConfig.environment);
+          
+          if (!gateResult.passed) {
+            return { 
+              success: false, 
+              message: `品質門禁失敗: ${gateResult.message}`,
+              details: {
+                type: 'QUALITY_GATE_FAILURE',
+                score: qualityResult.overallScore,
+                grade: qualityResult.grade,
+                blockerIssues: qualityResult.issuesSummary.blocker || 0,
+                criticalIssues: qualityResult.issuesSummary.critical || 0
+              }
+            };
+          }
+          
+          Logger.log(`品質門禁通過 - 評分: ${qualityResult.overallScore}, 等級: ${qualityResult.grade}`);
+          
+        } catch (qualityError) {
+          Logger.log(`品質檢查執行錯誤: ${qualityError.message}`);
+          return { 
+            success: false, 
+            message: `品質檢查執行失敗: ${qualityError.message}`,
+            details: { type: 'QUALITY_CHECK_ERROR' }
+          };
+        }
+      }
+      
+      // === CI/CD 整合: 系統健康檢查 ===
+      if (typeof globalHealthCheckService !== 'undefined') {
+        Logger.log('執行 CI/CD 系統健康檢查');
+        
+        try {
+          // 執行健康檢查
+          const healthResults = await globalHealthCheckService.executeAllHealthChecks();
+          const overallHealth = globalHealthCheckService.getHealthStatus();
+          
+          // 關鍵健康狀態阻止部署
+          if (overallHealth.overallStatus === 'CRITICAL') {
+            return { 
+              success: false, 
+              message: `系統健康狀態嚴重 - 部署已阻止`,
+              details: {
+                type: 'HEALTH_CHECK_CRITICAL',
+                status: overallHealth.overallStatus,
+                score: overallHealth.overallScore,
+                failedChecks: healthResults.failed.length,
+                criticalIssues: healthResults.failed.filter(f => f.severity === 'CRITICAL').length
+              }
+            };
+          }
+          
+          // 低健康分數警告
+          if (overallHealth.overallScore < 70) {
+            Logger.log(`⚠️ 系統健康分數偏低: ${overallHealth.overallScore} - 部署風險較高`);
+          }
+          
+          Logger.log(`系統健康檢查通過 - 狀態: ${overallHealth.overallStatus}, 評分: ${overallHealth.overallScore}`);
+          
+        } catch (healthError) {
+          Logger.log(`健康檢查執行錯誤: ${healthError.message}`);
+          return { 
+            success: false, 
+            message: `健康檢查執行失敗: ${healthError.message}`,
+            details: { type: 'HEALTH_CHECK_ERROR' }
+          };
+        }
+      }
+      
+      // === 風險評估整合檢查 ===
+      const riskAssessment = this.performRiskAssessment(deploymentConfig);
+      if (riskAssessment.riskLevel === 'CRITICAL' && !deploymentConfig.forceDeployment) {
+        return { 
+          success: false, 
+          message: `部署風險過高 (${riskAssessment.riskScore}/100) - 需要強制部署參數或降低風險`,
+          details: {
+            type: 'HIGH_RISK_DEPLOYMENT',
+            riskScore: riskAssessment.riskScore,
+            riskLevel: riskAssessment.riskLevel,
+            riskFactors: riskAssessment.factors
+          }
+        };
       }
       
       // 執行測試（如果配置了）
@@ -472,7 +567,16 @@ class DeploymentManager {
         return dependencyCheck;
       }
       
-      return { success: true, message: '預部署檢查通過' };
+      return { 
+        success: true, 
+        message: '預部署檢查通過 (包含品質門禁與健康檢查)',
+        details: {
+          qualityCheckPassed: typeof globalCodeQualityChecker !== 'undefined',
+          healthCheckPassed: typeof globalHealthCheckService !== 'undefined',
+          riskLevel: riskAssessment.riskLevel,
+          riskScore: riskAssessment.riskScore
+        }
+      };
       
     } catch (error) {
       return { success: false, message: `預部署檢查錯誤: ${error.message}` };
@@ -569,6 +673,311 @@ class DeploymentManager {
     } catch (error) {
       return { success: false, message: `依賴檢查失敗: ${error.message}` };
     }
+  }
+  
+  /**
+   * 執行風險評估 - CI/CD Pipeline 整合風險分析
+   */
+  performRiskAssessment(deploymentConfig) {
+    let riskScore = 0;
+    const riskFactors = [];
+    
+    try {
+      // === 因素 1: 環境風險 (25% 權重) ===
+      let environmentRisk = 0;
+      switch (deploymentConfig.environment) {
+        case DEPLOYMENT_ENVIRONMENTS.DEVELOPMENT:
+          environmentRisk = 10; // 開發環境低風險
+          break;
+        case DEPLOYMENT_ENVIRONMENTS.STAGING:
+          environmentRisk = 25; // 測試環境中等風險
+          break;
+        case DEPLOYMENT_ENVIRONMENTS.PRODUCTION:
+          environmentRisk = 40; // 生產環境高風險
+          break;
+        default:
+          environmentRisk = 50; // 未知環境最高風險
+      }
+      riskScore += environmentRisk * 0.25;
+      riskFactors.push({
+        factor: 'environment',
+        score: environmentRisk,
+        weight: 0.25,
+        description: `${deploymentConfig.environment} 環境風險`
+      });
+      
+      // === 因素 2: 品質風險 (30% 權重) ===  
+      let qualityRisk = 50; // 預設中等風險
+      if (typeof globalCodeQualityChecker !== 'undefined') {
+        try {
+          // 假設可以獲取最近的品質檢查結果
+          const recentQualityScore = this.getRecentQualityScore();
+          if (recentQualityScore !== null) {
+            qualityRisk = Math.max(0, 100 - recentQualityScore); // 品質分數越低，風險越高
+          }
+        } catch (error) {
+          Logger.log(`品質風險評估錯誤: ${error.message}`);
+          qualityRisk = 60; // 評估失敗時使用較高風險
+        }
+      }
+      riskScore += qualityRisk * 0.30;
+      riskFactors.push({
+        factor: 'quality',
+        score: qualityRisk,
+        weight: 0.30,
+        description: '代碼品質風險'
+      });
+      
+      // === 因素 3: 健康風險 (25% 權重) ===
+      let healthRisk = 50; // 預設中等風險
+      if (typeof globalHealthCheckService !== 'undefined') {
+        try {
+          const healthStatus = globalHealthCheckService.getHealthStatus();
+          if (healthStatus) {
+            healthRisk = Math.max(0, 100 - healthStatus.overallScore); // 健康分數越低，風險越高
+            
+            // 關鍵健康狀態額外風險
+            if (healthStatus.overallStatus === 'CRITICAL') {
+              healthRisk = Math.min(100, healthRisk + 30);
+            } else if (healthStatus.overallStatus === 'UNHEALTHY') {
+              healthRisk = Math.min(100, healthRisk + 15);
+            }
+          }
+        } catch (error) {
+          Logger.log(`健康風險評估錯誤: ${error.message}`);
+          healthRisk = 60; // 評估失敗時使用較高風險
+        }
+      }
+      riskScore += healthRisk * 0.25;
+      riskFactors.push({
+        factor: 'health',
+        score: healthRisk,
+        weight: 0.25,
+        description: '系統健康風險'
+      });
+      
+      // === 因素 4: 歷史風險 (20% 權重) ===
+      const historicalRisk = this.calculateHistoricalRisk(deploymentConfig.environment);
+      riskScore += historicalRisk * 0.20;
+      riskFactors.push({
+        factor: 'historical',
+        score: historicalRisk,
+        weight: 0.20,
+        description: '歷史部署風險'
+      });
+      
+      // === 額外風險因素 ===
+      
+      // 時間風險 - 非工作時間部署風險較高
+      const currentHour = new Date().getHours();
+      if (currentHour < 9 || currentHour > 18) { // 非工作時間
+        riskScore += 10;
+        riskFactors.push({
+          factor: 'timing',
+          score: 10,
+          weight: 0,
+          description: '非工作時間部署額外風險'
+        });
+      }
+      
+      // 併發部署風險
+      const activePipelines = typeof globalCiCdOrchestrator !== 'undefined' ? 
+        globalCiCdOrchestrator.activeExecutions.size : 0;
+      if (activePipelines > 2) {
+        const concurrencyRisk = Math.min(20, activePipelines * 5);
+        riskScore += concurrencyRisk;
+        riskFactors.push({
+          factor: 'concurrency',
+          score: concurrencyRisk,
+          weight: 0,
+          description: `併發部署風險 (${activePipelines} 個活躍 Pipeline)`
+        });
+      }
+      
+      // 強制部署風險
+      if (deploymentConfig.forceDeployment) {
+        riskScore += 15;
+        riskFactors.push({
+          factor: 'forced',
+          score: 15,
+          weight: 0,
+          description: '強制部署額外風險'
+        });
+      }
+      
+      // 限制風險分數在 0-100 範圍內
+      riskScore = Math.max(0, Math.min(100, Math.round(riskScore)));
+      
+      // 確定風險等級
+      let riskLevel;
+      if (riskScore <= 30) {
+        riskLevel = 'LOW';
+      } else if (riskScore <= 60) {
+        riskLevel = 'MEDIUM';
+      } else if (riskScore <= 80) {
+        riskLevel = 'HIGH';
+      } else {
+        riskLevel = 'CRITICAL';
+      }
+      
+      const assessment = {
+        riskScore: riskScore,
+        riskLevel: riskLevel,
+        factors: riskFactors,
+        timestamp: new Date().toISOString(),
+        recommendation: this.generateRiskRecommendation(riskScore, riskLevel, riskFactors)
+      };
+      
+      Logger.log(`部署風險評估完成 - 分數: ${riskScore}, 等級: ${riskLevel}`);
+      
+      return assessment;
+      
+    } catch (error) {
+      Logger.log(`風險評估執行錯誤: ${error.message}`);
+      
+      // 錯誤時返回高風險評估
+      return {
+        riskScore: 80,
+        riskLevel: 'HIGH',
+        factors: [{
+          factor: 'assessment_error',
+          score: 80,
+          weight: 1.0,
+          description: `風險評估錯誤: ${error.message}`
+        }],
+        timestamp: new Date().toISOString(),
+        recommendation: '風險評估失敗，建議謹慎部署或修復評估問題後重試'
+      };
+    }
+  }
+  
+  /**
+   * 獲取最近的品質分數
+   */
+  getRecentQualityScore() {
+    // 嘗試從快取或最近的品質檢查結果獲取分數
+    try {
+      if (typeof globalCache !== 'undefined') {
+        const cachedScore = globalCache.get('last_quality_score');
+        if (cachedScore && typeof cachedScore === 'number') {
+          return cachedScore;
+        }
+      }
+      
+      // 如果沒有快取，嘗試執行快速品質檢查
+      if (typeof globalCodeQualityChecker !== 'undefined') {
+        // 注意：這裡不執行完整檢查，而是獲取快取的結果
+        const quickScore = globalCodeQualityChecker.getLastAssessmentScore();
+        return quickScore;
+      }
+      
+      return null; // 無法獲取品質分數
+      
+    } catch (error) {
+      Logger.log(`獲取品質分數錯誤: ${error.message}`);
+      return null;
+    }
+  }
+  
+  /**
+   * 計算歷史部署風險
+   */
+  calculateHistoricalRisk(environment) {
+    try {
+      // 獲取該環境最近 10 次部署記錄
+      const recentDeployments = this.deploymentHistory
+        .filter(d => d.environment === environment)
+        .slice(-10);
+      
+      if (recentDeployments.length === 0) {
+        return 30; // 沒有歷史記錄時返回中等風險
+      }
+      
+      // 計算失敗率
+      const failedDeployments = recentDeployments.filter(d => 
+        d.status === DEPLOYMENT_STATUS.FAILED || d.status === DEPLOYMENT_STATUS.ROLLED_BACK
+      ).length;
+      
+      const failureRate = failedDeployments / recentDeployments.length;
+      
+      // 失敗率轉換為風險分數 (0% 失敗率 = 10 風險, 100% 失敗率 = 90 風險)
+      const failureRisk = 10 + (failureRate * 80);
+      
+      // 考慮最近部署的頻率
+      const now = new Date();
+      const recentDeployment = recentDeployments[recentDeployments.length - 1];
+      const timeSinceLastDeploy = now - new Date(recentDeployment.startTime);
+      const hoursSinceLastDeploy = timeSinceLastDeploy / (1000 * 60 * 60);
+      
+      // 如果最近部署很頻繁 (< 4 小時)，增加風險
+      let frequencyRisk = 0;
+      if (hoursSinceLastDeploy < 4) {
+        frequencyRisk = 15;
+      } else if (hoursSinceLastDeploy < 24) {
+        frequencyRisk = 5;
+      }
+      
+      const totalHistoricalRisk = Math.min(100, failureRisk + frequencyRisk);
+      
+      Logger.log(`歷史風險計算 - 失敗率: ${Math.round(failureRate * 100)}%, 頻率風險: ${frequencyRisk}, 總風險: ${Math.round(totalHistoricalRisk)}`);
+      
+      return Math.round(totalHistoricalRisk);
+      
+    } catch (error) {
+      Logger.log(`歷史風險計算錯誤: ${error.message}`);
+      return 40; // 錯誤時返回中高風險
+    }
+  }
+  
+  /**
+   * 生成風險建議
+   */
+  generateRiskRecommendation(riskScore, riskLevel, riskFactors) {
+    const recommendations = [];
+    
+    // 基於風險等級的一般建議
+    switch (riskLevel) {
+      case 'LOW':
+        recommendations.push('風險較低，可以正常執行部署');
+        break;
+      case 'MEDIUM':
+        recommendations.push('風險中等，建議在監控下執行部署');
+        break;
+      case 'HIGH':
+        recommendations.push('風險較高，建議降低風險因素後再部署');
+        break;
+      case 'CRITICAL':
+        recommendations.push('風險極高，強烈建議修復主要問題後再部署');
+        break;
+    }
+    
+    // 基於特定風險因素的建議
+    riskFactors.forEach(factor => {
+      if (factor.score > 60) {
+        switch (factor.factor) {
+          case 'quality':
+            recommendations.push('建議先修復代碼品質問題');
+            break;
+          case 'health':
+            recommendations.push('建議先解決系統健康問題');
+            break;
+          case 'historical':
+            recommendations.push('最近部署失敗率較高，建議檢查部署流程');
+            break;
+          case 'environment':
+            recommendations.push('生產環境部署需要額外謹慎');
+            break;
+        }
+      }
+    });
+    
+    // 時間相關建議
+    const currentHour = new Date().getHours();
+    if (currentHour < 9 || currentHour > 18) {
+      recommendations.push('非工作時間部署，確保有技術支援待命');
+    }
+    
+    return recommendations.length > 0 ? recommendations : ['無特殊建議'];
   }
   
   /**
