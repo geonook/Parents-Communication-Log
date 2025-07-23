@@ -23,7 +23,10 @@ const HEALTH_CATEGORIES = {
   SERVICE: 'service',           // 服務健康
   DATA: 'data',                 // 數據健康
   INTEGRATION: 'integration',   // 整合健康
-  PERFORMANCE: 'performance'    // 性能健康
+  PERFORMANCE: 'performance',   // 性能健康
+  CICD: 'cicd',                // CI/CD管道健康
+  DEPLOYMENT: 'deployment',     // 部署健康
+  QUALITY: 'quality'           // 代碼品質健康
 };
 
 /**
@@ -34,6 +37,36 @@ const HEALTH_SEVERITY = {
   MEDIUM: 'medium',     // 中等嚴重度
   HIGH: 'high',         // 高嚴重度
   CRITICAL: 'critical'  // 關鍵嚴重度
+};
+
+/**
+ * 部署環境枚舉
+ */
+const DEPLOYMENT_ENVIRONMENTS = {
+  DEVELOPMENT: 'development',
+  STAGING: 'staging',
+  PRODUCTION: 'production'
+};
+
+/**
+ * CI/CD 階段枚舉
+ */
+const CICD_STAGES = {
+  BUILD: 'build',
+  TEST: 'test',
+  QUALITY_GATE: 'quality_gate',
+  DEPLOY: 'deploy',
+  MONITOR: 'monitor'
+};
+
+/**
+ * 部署風險等級枚舉
+ */
+const DEPLOYMENT_RISK = {
+  LOW: 'low',           // 低風險 - 可以部署
+  MEDIUM: 'medium',     // 中等風險 - 謹慎部署
+  HIGH: 'high',         // 高風險 - 僅允許開發環境
+  CRITICAL: 'critical'  // 關鍵風險 - 阻止所有部署
 };
 
 /**
@@ -803,15 +836,46 @@ class HealthCheckService {
     this.metricsCollector = globalMetricsCollector;
     this.cache = globalCache;
     this.errorHandler = ErrorHandler;
+    this.codeQualityChecker = null; // Will be set when available
     
     this.isRunning = false;
     this.checkInterval = 60000; // 1分鐘間隔
     this.checkTimer = null;
     
+    // CI/CD specific properties
+    this.deploymentHistory = [];
+    this.qualityIssueCorrelations = new Map();
+    this.environmentThresholds = this.initializeEnvironmentThresholds();
+    this.deploymentBlocks = new Map();
+    
     this.initializeDefaultChecks();
+    this.initializeCICDChecks();
     this.setupEventSubscriptions();
   }
   
+  /**
+   * 初始化環境閾值配置
+   */
+  initializeEnvironmentThresholds() {
+    return {
+      [DEPLOYMENT_ENVIRONMENTS.DEVELOPMENT]: {
+        minimumHealthScore: 60,
+        allowedRisk: DEPLOYMENT_RISK.HIGH,
+        requiredChecks: ['system_memory_usage', 'system_response_time']
+      },
+      [DEPLOYMENT_ENVIRONMENTS.STAGING]: {
+        minimumHealthScore: 80,
+        allowedRisk: DEPLOYMENT_RISK.MEDIUM,
+        requiredChecks: ['system_memory_usage', 'system_response_time', 'eventbus_connectivity', 'spreadsheet_connectivity']
+      },
+      [DEPLOYMENT_ENVIRONMENTS.PRODUCTION]: {
+        minimumHealthScore: 95,
+        allowedRisk: DEPLOYMENT_RISK.LOW,
+        requiredChecks: ['system_memory_usage', 'system_response_time', 'eventbus_connectivity', 'metrics_collector_status', 'spreadsheet_connectivity', 'cache_performance', 'cicd_pipeline_health', 'deployment_readiness']
+      }
+    };
+  }
+
   /**
    * 初始化預設健康檢查
    */
@@ -886,6 +950,96 @@ class HealthCheckService {
     
     Logger.log('[HealthCheckService] 預設健康檢查初始化完成');
   }
+
+  /**
+   * 初始化 CI/CD 相關健康檢查
+   */
+  initializeCICDChecks() {
+    // CI/CD 管道健康檢查
+    this.registerHealthCheck(new HealthCheck(
+      'cicd_pipeline_health',
+      HEALTH_CATEGORIES.CICD,
+      this.checkCICDPipelineHealth.bind(this),
+      {
+        description: '檢查 CI/CD 管道組件健康狀態',
+        severity: HEALTH_SEVERITY.HIGH,
+        thresholds: { 
+          pipeline_success_rate: 0.95,
+          average_build_time: 300000, // 5分鐘
+          quality_gate_pass_rate: 0.98
+        },
+        tags: { cicd: true, pipeline: true }
+      }
+    ));
+
+    // 部署準備度檢查
+    this.registerHealthCheck(new HealthCheck(
+      'deployment_readiness',
+      HEALTH_CATEGORIES.DEPLOYMENT,
+      this.checkDeploymentReadiness.bind(this),
+      {
+        description: '檢查系統是否準備好進行部署',
+        severity: HEALTH_SEVERITY.CRITICAL,
+        thresholds: {
+          health_score_threshold: 90,
+          blocking_issues: 0,
+          critical_alerts: 0
+        },
+        tags: { deployment: true, readiness: true }
+      }
+    ));
+
+    // 品質門禁關聯檢查
+    this.registerHealthCheck(new HealthCheck(
+      'quality_gate_correlation',
+      HEALTH_CATEGORIES.QUALITY,
+      this.checkQualityGateCorrelation.bind(this),
+      {
+        description: '檢查品質問題與健康狀態的關聯性',
+        severity: HEALTH_SEVERITY.MEDIUM,
+        thresholds: {
+          correlation_threshold: 0.7,
+          quality_degradation_rate: 0.1
+        },
+        tags: { quality: true, correlation: true }
+      }
+    ));
+
+    // 部署失敗率檢查
+    this.registerHealthCheck(new HealthCheck(
+      'deployment_failure_rate',
+      HEALTH_CATEGORIES.DEPLOYMENT,
+      this.checkDeploymentFailureRate.bind(this),
+      {
+        description: '監控最近部署失敗趨勢',
+        severity: HEALTH_SEVERITY.HIGH,
+        thresholds: {
+          failure_rate_threshold: 0.1, // 10%
+          recent_deployments_window: 20
+        },
+        tags: { deployment: true, failure_rate: true }
+      }
+    ));
+
+    // 系統負載部署檢查
+    this.registerHealthCheck(new HealthCheck(
+      'system_load_deployment',
+      HEALTH_CATEGORIES.SYSTEM,
+      this.checkSystemLoadForDeployment.bind(this),
+      {
+        description: '檢查系統是否能承受部署負載',
+        severity: HEALTH_SEVERITY.HIGH,
+        thresholds: {
+          cpu_threshold: 0.8,
+          memory_threshold: 0.85,
+          concurrent_operations: 5
+        },
+        tags: { system: true, deployment: true, load: true }
+      }
+    ));
+
+    Logger.log('[HealthCheckService] CI/CD 健康檢查初始化完成');
+  }
   
   /**
    * 設置預設警報規則
@@ -916,6 +1070,33 @@ class HealthCheckService {
       title: 'Service Unavailability',
       messageTemplate: 'Service ${checkName} is unavailable: ${message}'
     });
+
+    // CI/CD 管道警報
+    this.alertManager.registerAlertRule('cicd_pipeline_failure', {
+      categoryConditions: [HEALTH_CATEGORIES.CICD],
+      statusConditions: [HEALTH_STATUS.UNHEALTHY, HEALTH_STATUS.CRITICAL],
+      severity: HEALTH_SEVERITY.CRITICAL,
+      title: 'CI/CD Pipeline Failure',
+      messageTemplate: 'CI/CD pipeline issue detected in ${checkName}: ${message}'
+    });
+
+    // 部署阻斷警報
+    this.alertManager.registerAlertRule('deployment_blocked', {
+      categoryConditions: [HEALTH_CATEGORIES.DEPLOYMENT],
+      statusConditions: [HEALTH_STATUS.CRITICAL],
+      severity: HEALTH_SEVERITY.CRITICAL,
+      title: 'Deployment Blocked',
+      messageTemplate: 'Deployment blocked due to ${checkName}: ${message}'
+    });
+
+    // 品質門禁失敗警報
+    this.alertManager.registerAlertRule('quality_gate_failure', {
+      categoryConditions: [HEALTH_CATEGORIES.QUALITY],
+      statusConditions: [HEALTH_STATUS.UNHEALTHY, HEALTH_STATUS.CRITICAL],
+      severity: HEALTH_SEVERITY.HIGH,
+      title: 'Quality Gate Failure',
+      messageTemplate: 'Quality gate correlation issue in ${checkName}: ${message}'
+    });
   }
   
   /**
@@ -938,6 +1119,39 @@ class HealthCheckService {
             level: event.data.level
           });
         }
+      });
+
+      // 訂閱品質檢查事件
+      this.eventBus.subscribe('quality.degradation', (event) => {
+        // 品質劣化事件觸發相關健康檢查
+        this.handleQualityDegradationEvent(event.data);
+        this.triggerHealthCheck('quality_gate_correlation');
+      });
+
+      // 訂閱部署事件
+      this.eventBus.subscribe('deployment.started', (event) => {
+        // 部署開始時觸發部署準備度檢查
+        this.triggerHealthCheck('deployment_readiness');
+        this.recordDeploymentEvent('started', event.data);
+      });
+
+      this.eventBus.subscribe('deployment.completed', (event) => {
+        // 部署完成後記錄結果
+        this.recordDeploymentEvent('completed', event.data);
+        this.triggerHealthCheck('deployment_failure_rate');
+      });
+
+      this.eventBus.subscribe('deployment.failed', (event) => {
+        // 部署失敗事件處理
+        this.recordDeploymentEvent('failed', event.data);
+        this.triggerHealthCheck('deployment_failure_rate');
+        this.correlateDeploymentFailureWithHealth(event.data);
+      });
+
+      // 訂閱 CI/CD 管道事件
+      this.eventBus.subscribe('cicd.pipeline.status', (event) => {
+        // 管道狀態變化觸發相關檢查
+        this.triggerHealthCheck('cicd_pipeline_health');
       });
       
       Logger.log('[HealthCheckService] 事件訂閱設置完成');
@@ -1212,8 +1426,804 @@ class HealthCheckService {
       timestamp: new Date().toISOString()
     };
   }
+
+  // === CI/CD 整合方法 ===
+
+  /**
+   * 設置代碼品質檢查器實例
+   */
+  setCodeQualityChecker(codeQualityChecker) {
+    this.codeQualityChecker = codeQualityChecker;
+    Logger.log('[HealthCheckService] 代碼品質檢查器已整合');
+  }
+
+  /**
+   * 處理品質劣化事件
+   */
+  handleQualityDegradationEvent(qualityData) {
+    try {
+      const correlation = {
+        timestamp: new Date().toISOString(),
+        qualityData: qualityData,
+        healthSnapshot: this.getHealthStatus(),
+        correlationId: `corr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      this.qualityIssueCorrelations.set(correlation.correlationId, correlation);
+
+      // 根據品質問題嚴重性調整健康檢查頻率
+      if (qualityData.severity === 'BLOCKER' || qualityData.severity === 'CRITICAL') {
+        this.triggerImmediateHealthCheck(['deployment_readiness', 'quality_gate_correlation']);
+      }
+
+      Logger.log(`[HealthCheckService] 品質劣化事件已處理: ${correlation.correlationId}`);
+    } catch (error) {
+      this.errorHandler.handle('HealthCheckService.handleQualityDegradationEvent', error, 
+        ERROR_LEVELS.WARNING, ERROR_CATEGORIES.INTEGRATION);
+    }
+  }
+
+  /**
+   * 記錄部署事件
+   */
+  recordDeploymentEvent(eventType, deploymentData) {
+    try {
+      const deploymentEvent = {
+        id: `deploy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: eventType,
+        timestamp: new Date().toISOString(),
+        environment: deploymentData.environment || 'unknown',
+        version: deploymentData.version,
+        duration: deploymentData.duration,
+        healthSnapshot: this.getHealthStatus(),
+        ...deploymentData
+      };
+
+      this.deploymentHistory.push(deploymentEvent);
+
+      // 保持部署歷史記錄數量限制
+      if (this.deploymentHistory.length > 100) {
+        this.deploymentHistory.splice(0, this.deploymentHistory.length - 100);
+      }
+
+      // 記錄指標
+      if (this.metricsCollector) {
+        this.metricsCollector.recordMetric(`deployment_${eventType}`, 1, {
+          environment: deploymentEvent.environment,
+          success: eventType === 'completed'
+        });
+
+        if (deploymentEvent.duration) {
+          this.metricsCollector.recordMetric('deployment_duration', deploymentEvent.duration, {
+            environment: deploymentEvent.environment,
+            type: eventType
+          });
+        }
+      }
+
+      Logger.log(`[HealthCheckService] 部署事件已記錄: ${eventType} - ${deploymentEvent.id}`);
+    } catch (error) {
+      this.errorHandler.handle('HealthCheckService.recordDeploymentEvent', error, 
+        ERROR_LEVELS.WARNING, ERROR_CATEGORIES.SYSTEM);
+    }
+  }
+
+  /**
+   * 關聯部署失敗與健康狀態
+   */
+  correlateDeploymentFailureWithHealth(failureData) {
+    try {
+      const healthStatus = this.getHealthStatus();
+      const correlation = {
+        timestamp: new Date().toISOString(),
+        failureData: failureData,
+        healthStatus: healthStatus,
+        potentialCauses: this.identifyPotentialCauses(healthStatus, failureData)
+      };
+
+      // 發送關聯分析事件
+      if (this.eventBus) {
+        this.eventBus.publish('health.deployment.correlation', {
+          correlation: correlation,
+          recommendations: this.generateFailureRecommendations(correlation)
+        });
+      }
+
+      Logger.log('[HealthCheckService] 部署失敗與健康狀態關聯分析完成');
+    } catch (error) {
+      this.errorHandler.handle('HealthCheckService.correlateDeploymentFailureWithHealth', error, 
+        ERROR_LEVELS.WARNING, ERROR_CATEGORIES.ANALYSIS);
+    }
+  }
+
+  /**
+   * 識別潛在原因
+   */
+  identifyPotentialCauses(healthStatus, failureData) {
+    const causes = [];
+    
+    if (healthStatus.healthScore < 80) {
+      causes.push('Low overall health score');
+    }
+
+    if (healthStatus.categories) {
+      Object.keys(healthStatus.categories).forEach(category => {
+        const categoryStatus = healthStatus.categories[category];
+        if (categoryStatus.status === HEALTH_STATUS.CRITICAL || categoryStatus.status === HEALTH_STATUS.UNHEALTHY) {
+          causes.push(`${category} category health issues`);
+        }
+      });
+    }
+
+    return causes;
+  }
+
+  /**
+   * 生成失敗建議
+   */
+  generateFailureRecommendations(correlation) {
+    const recommendations = [];
+    
+    correlation.potentialCauses.forEach(cause => {
+      switch (cause) {
+        case 'Low overall health score':
+          recommendations.push('Improve overall system health before attempting deployment');
+          break;
+        case 'system category health issues':
+          recommendations.push('Address system resource issues (memory, CPU, response time)');
+          break;
+        case 'service category health issues':
+          recommendations.push('Verify service connectivity and availability');
+          break;
+        case 'data category health issues':
+          recommendations.push('Check data integrity and database connectivity');
+          break;
+        default:
+          recommendations.push(`Address ${cause} before deployment`);
+      }
+    });
+
+    return recommendations;
+  }
+
+  /**
+   * 觸發立即健康檢查
+   */
+  async triggerImmediateHealthCheck(checkNames) {
+    const results = [];
+    
+    for (const checkName of checkNames) {
+      try {
+        const result = await this.executeHealthCheck(checkName);
+        results.push(result);
+      } catch (error) {
+        Logger.log(`[HealthCheckService] 立即健康檢查失敗: ${checkName} - ${error.message}`);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * 檢查部署許可
+   */
+  checkDeploymentPermission(environment = DEPLOYMENT_ENVIRONMENTS.PRODUCTION) {
+    try {
+      const healthStatus = this.getHealthStatus();
+      const envThresholds = this.environmentThresholds[environment];
+      
+      if (!envThresholds) {
+        return {
+          allowed: false,
+          reason: `Unknown environment: ${environment}`,
+          risk: DEPLOYMENT_RISK.CRITICAL
+        };
+      }
+
+      // 檢查健康分數
+      if (healthStatus.healthScore < envThresholds.minimumHealthScore) {
+        return {
+          allowed: false,
+          reason: `Health score ${healthStatus.healthScore} below minimum ${envThresholds.minimumHealthScore} for ${environment}`,
+          risk: DEPLOYMENT_RISK.CRITICAL,
+          currentScore: healthStatus.healthScore,
+          requiredScore: envThresholds.minimumHealthScore
+        };
+      }
+
+      // 檢查關鍵狀態
+      if (healthStatus.overallStatus === HEALTH_STATUS.CRITICAL) {
+        return {
+          allowed: false,
+          reason: 'System is in critical state',
+          risk: DEPLOYMENT_RISK.CRITICAL,
+          status: healthStatus.overallStatus
+        };
+      }
+
+      // 檢查必要的健康檢查
+      const missingChecks = this.validateRequiredChecks(envThresholds.requiredChecks);
+      if (missingChecks.length > 0) {
+        return {
+          allowed: false,
+          reason: `Missing required health checks: ${missingChecks.join(', ')}`,
+          risk: DEPLOYMENT_RISK.HIGH,
+          missingChecks: missingChecks
+        };
+      }
+
+      // 檢查部署阻擋
+      const activeBlocks = this.getActiveDeploymentBlocks(environment);
+      if (activeBlocks.length > 0) {
+        return {
+          allowed: false,
+          reason: `Active deployment blocks: ${activeBlocks.map(b => b.reason).join(', ')}`,
+          risk: DEPLOYMENT_RISK.CRITICAL,
+          blocks: activeBlocks
+        };
+      }
+
+      // 根據健康狀態確定風險等級
+      let risk = DEPLOYMENT_RISK.LOW;
+      if (healthStatus.overallStatus === HEALTH_STATUS.UNHEALTHY) {
+        risk = DEPLOYMENT_RISK.HIGH;
+      } else if (healthStatus.overallStatus === HEALTH_STATUS.DEGRADED) {
+        risk = DEPLOYMENT_RISK.MEDIUM;
+      }
+
+      // 檢查風險是否可接受
+      const riskAcceptable = this.isRiskAcceptableForEnvironment(risk, environment);
+      
+      return {
+        allowed: riskAcceptable,
+        reason: riskAcceptable ? 'Deployment permitted' : `Risk level ${risk} not acceptable for ${environment}`,
+        risk: risk,
+        healthScore: healthStatus.healthScore,
+        environment: environment,
+        checks: this.getEnvironmentHealthSummary(environment)
+      };
+
+    } catch (error) {
+      this.errorHandler.handle('HealthCheckService.checkDeploymentPermission', error, 
+        ERROR_LEVELS.ERROR, ERROR_CATEGORIES.DEPLOYMENT);
+      
+      return {
+        allowed: false,
+        reason: `Error checking deployment permission: ${error.message}`,
+        risk: DEPLOYMENT_RISK.CRITICAL,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 驗證必要檢查
+   */
+  validateRequiredChecks(requiredChecks) {
+    const missingChecks = [];
+    const latestReport = this.healthHistory.reports[this.healthHistory.reports.length - 1];
+    
+    if (!latestReport) {
+      return requiredChecks; // 如果沒有報告，所有檢查都缺失
+    }
+
+    const executedChecks = latestReport.checks.map(check => check.checkName);
+    
+    requiredChecks.forEach(requiredCheck => {
+      if (!executedChecks.includes(requiredCheck)) {
+        missingChecks.push(requiredCheck);
+      }
+    });
+
+    return missingChecks;
+  }
+
+  /**
+   * 獲取活動部署阻擋
+   */
+  getActiveDeploymentBlocks(environment) {
+    const activeBlocks = [];
+    const now = Date.now();
+
+    this.deploymentBlocks.forEach((block, blockId) => {
+      if (block.expiresAt && new Date(block.expiresAt).getTime() < now) {
+        this.deploymentBlocks.delete(blockId);
+        return;
+      }
+
+      if (!block.environments || block.environments.includes(environment)) {
+        activeBlocks.push(block);
+      }
+    });
+
+    return activeBlocks;
+  }
+
+  /**
+   * 檢查風險是否可接受
+   */
+  isRiskAcceptableForEnvironment(risk, environment) {
+    const envThresholds = this.environmentThresholds[environment];
+    const riskLevels = {
+      [DEPLOYMENT_RISK.LOW]: 0,
+      [DEPLOYMENT_RISK.MEDIUM]: 1,
+      [DEPLOYMENT_RISK.HIGH]: 2,
+      [DEPLOYMENT_RISK.CRITICAL]: 3
+    };
+
+    return riskLevels[risk] <= riskLevels[envThresholds.allowedRisk];
+  }
+
+  /**
+   * 獲取環境健康摘要
+   */
+  getEnvironmentHealthSummary(environment) {
+    const envThresholds = this.environmentThresholds[environment];
+    const healthStatus = this.getHealthStatus();
+    const summary = {
+      environment: environment,
+      requiredChecks: envThresholds.requiredChecks,
+      minimumHealthScore: envThresholds.minimumHealthScore,
+      currentHealthScore: healthStatus.healthScore,
+      allowedRisk: envThresholds.allowedRisk
+    };
+
+    return summary;
+  }
+
+  /**
+   * 添加部署阻擋
+   */
+  addDeploymentBlock(blockId, reason, options = {}) {
+    const block = {
+      id: blockId,
+      reason: reason,
+      createdAt: new Date().toISOString(),
+      environments: options.environments || [DEPLOYMENT_ENVIRONMENTS.PRODUCTION],
+      severity: options.severity || HEALTH_SEVERITY.CRITICAL,
+      expiresAt: options.expiresAt,
+      metadata: options.metadata || {}
+    };
+
+    this.deploymentBlocks.set(blockId, block);
+    
+    // 發送部署阻擋事件
+    if (this.eventBus) {
+      this.eventBus.publish('deployment.blocked', {
+        block: block,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    Logger.log(`[HealthCheckService] 部署阻擋已添加: ${blockId} - ${reason}`);
+  }
+
+  /**
+   * 移除部署阻擋
+   */
+  removeDeploymentBlock(blockId) {
+    const removed = this.deploymentBlocks.delete(blockId);
+    
+    if (removed && this.eventBus) {
+      this.eventBus.publish('deployment.unblocked', {
+        blockId: blockId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    Logger.log(`[HealthCheckService] 部署阻擋已移除: ${blockId}`);
+    return removed;
+  }
   
   // === 健康檢查實現方法 ===
+
+  // === CI/CD 健康檢查實現 ===
+
+  /**
+   * 檢查 CI/CD 管道健康狀態
+   */
+  checkCICDPipelineHealth(thresholds) {
+    try {
+      // 模擬 CI/CD 管道狀態檢查
+      const pipelineMetrics = this.getCICDPipelineMetrics();
+      
+      let status = HEALTH_STATUS.HEALTHY;
+      let message = 'CI/CD pipeline is operating normally';
+      const issues = [];
+
+      // 檢查管道成功率
+      if (pipelineMetrics.successRate < thresholds.pipeline_success_rate) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        issues.push(`Low pipeline success rate: ${(pipelineMetrics.successRate * 100).toFixed(1)}%`);
+      }
+
+      // 檢查平均建置時間
+      if (pipelineMetrics.averageBuildTime > thresholds.average_build_time) {
+        if (status === HEALTH_STATUS.HEALTHY) {
+          status = HEALTH_STATUS.DEGRADED;
+        }
+        issues.push(`Slow build time: ${Math.round(pipelineMetrics.averageBuildTime / 1000)}s`);
+      }
+
+      // 檢查品質門禁通過率
+      if (pipelineMetrics.qualityGatePassRate < thresholds.quality_gate_pass_rate) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        issues.push(`Low quality gate pass rate: ${(pipelineMetrics.qualityGatePassRate * 100).toFixed(1)}%`);
+      }
+
+      if (issues.length > 0) {
+        message = `CI/CD pipeline issues detected: ${issues.join(', ')}`;
+      }
+
+      return {
+        status: status,
+        message: message,
+        data: {
+          pipelineMetrics: pipelineMetrics,
+          issues: issues,
+          thresholdsMet: issues.length === 0
+        }
+      };
+
+    } catch (error) {
+      return {
+        status: HEALTH_STATUS.CRITICAL,
+        message: `CI/CD pipeline health check failed: ${error.message}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 檢查部署準備度
+   */
+  checkDeploymentReadiness(thresholds) {
+    try {
+      const healthStatus = this.getHealthStatus();
+      const activeBlocks = this.getActiveDeploymentBlocks(DEPLOYMENT_ENVIRONMENTS.PRODUCTION);
+      const criticalAlerts = this.alertManager.getAlertHistory({ 
+        severity: HEALTH_SEVERITY.CRITICAL,
+        limit: 5
+      });
+
+      let status = HEALTH_STATUS.HEALTHY;
+      let message = 'System is ready for deployment';
+      const blockingIssues = [];
+
+      // 檢查整體健康分數
+      if (healthStatus.healthScore < thresholds.health_score_threshold) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        blockingIssues.push(`Health score too low: ${healthStatus.healthScore}`);
+      }
+
+      // 檢查部署阻擋
+      if (activeBlocks.length > thresholds.blocking_issues) {
+        status = HEALTH_STATUS.CRITICAL;
+        blockingIssues.push(`${activeBlocks.length} active deployment blocks`);
+      }
+
+      // 檢查關鍵警報
+      if (criticalAlerts.length > thresholds.critical_alerts) {
+        status = HEALTH_STATUS.CRITICAL;
+        blockingIssues.push(`${criticalAlerts.length} critical alerts active`);
+      }
+
+      // 檢查關鍵系統狀態
+      if (healthStatus.overallStatus === HEALTH_STATUS.CRITICAL) {
+        status = HEALTH_STATUS.CRITICAL;
+        blockingIssues.push('System is in critical state');
+      }
+
+      if (blockingIssues.length > 0) {
+        message = `Deployment readiness issues: ${blockingIssues.join(', ')}`;
+      }
+
+      return {
+        status: status,
+        message: message,
+        data: {
+          healthScore: healthStatus.healthScore,
+          activeBlocks: activeBlocks.length,
+          criticalAlerts: criticalAlerts.length,
+          overallStatus: healthStatus.overallStatus,
+          blockingIssues: blockingIssues,
+          readyForDeployment: blockingIssues.length === 0
+        }
+      };
+
+    } catch (error) {
+      return {
+        status: HEALTH_STATUS.CRITICAL,
+        message: `Deployment readiness check failed: ${error.message}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 檢查品質門禁關聯性
+   */
+  checkQualityGateCorrelation(thresholds) {
+    try {
+      const correlations = Array.from(this.qualityIssueCorrelations.values());
+      const recentCorrelations = correlations.filter(c => {
+        const age = Date.now() - new Date(c.timestamp).getTime();
+        return age < 24 * 60 * 60 * 1000; // 最近24小時
+      });
+
+      let status = HEALTH_STATUS.HEALTHY;
+      let message = 'Quality-Health correlation is normal';
+      
+      if (!this.codeQualityChecker) {
+        return {
+          status: HEALTH_STATUS.DEGRADED,
+          message: 'Code quality checker not integrated',
+          data: {
+            integrated: false,
+            correlations: recentCorrelations.length
+          }
+        };
+      }
+
+      // 計算關聯強度
+      const correlationStrength = this.calculateQualityHealthCorrelation(recentCorrelations);
+      
+      if (correlationStrength > thresholds.correlation_threshold) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        message = `High correlation between quality issues and health problems: ${correlationStrength.toFixed(2)}`;
+      }
+
+      // 檢查品質劣化率
+      const qualityDegradationRate = this.calculateQualityDegradationRate(recentCorrelations);
+      if (qualityDegradationRate > thresholds.quality_degradation_rate) {
+        if (status === HEALTH_STATUS.HEALTHY) {
+          status = HEALTH_STATUS.DEGRADED;
+        }
+        message += ` Quality degradation rate: ${(qualityDegradationRate * 100).toFixed(1)}%`;
+      }
+
+      return {
+        status: status,
+        message: message,
+        data: {
+          correlationStrength: correlationStrength,
+          qualityDegradationRate: qualityDegradationRate,
+          recentCorrelations: recentCorrelations.length,
+          integrated: !!this.codeQualityChecker
+        }
+      };
+
+    } catch (error) {
+      return {
+        status: HEALTH_STATUS.CRITICAL,
+        message: `Quality gate correlation check failed: ${error.message}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 檢查部署失敗率
+   */
+  checkDeploymentFailureRate(thresholds) {
+    try {
+      const recentDeployments = this.deploymentHistory.slice(-thresholds.recent_deployments_window);
+      
+      if (recentDeployments.length === 0) {
+        return {
+          status: HEALTH_STATUS.HEALTHY,
+          message: 'No recent deployments to analyze',
+          data: {
+            totalDeployments: 0,
+            failureRate: 0,
+            recentWindow: thresholds.recent_deployments_window
+          }
+        };
+      }
+
+      const failedDeployments = recentDeployments.filter(d => d.type === 'failed');
+      const failureRate = failedDeployments.length / recentDeployments.length;
+
+      let status = HEALTH_STATUS.HEALTHY;
+      let message = `Deployment failure rate: ${(failureRate * 100).toFixed(1)}%`;
+
+      if (failureRate > thresholds.failure_rate_threshold) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        message += ' - High failure rate detected';
+      }
+
+      // 檢查連續失敗
+      const recentFailureStreak = this.calculateRecentFailureStreak();
+      if (recentFailureStreak >= 3) {
+        status = HEALTH_STATUS.CRITICAL;
+        message += ` - ${recentFailureStreak} consecutive failures`;
+      }
+
+      return {
+        status: status,
+        message: message,
+        data: {
+          totalDeployments: recentDeployments.length,
+          failedDeployments: failedDeployments.length,
+          failureRate: failureRate,
+          recentFailureStreak: recentFailureStreak,
+          threshold: thresholds.failure_rate_threshold
+        }
+      };
+
+    } catch (error) {
+      return {
+        status: HEALTH_STATUS.CRITICAL,
+        message: `Deployment failure rate check failed: ${error.message}`,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 檢查系統負載是否適合部署
+   */
+  checkSystemLoadForDeployment(thresholds) {
+    try {
+      const systemLoad = this.getCurrentSystemLoad();
+      
+      let status = HEALTH_STATUS.HEALTHY;
+      let message = 'System load is acceptable for deployment';
+      const loadIssues = [];
+
+      // 檢查 CPU 使用率（模擬）
+      if (systemLoad.cpuUsage > thresholds.cpu_threshold) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        loadIssues.push(`High CPU usage: ${(systemLoad.cpuUsage * 100).toFixed(1)}%`);
+      }
+
+      // 檢查記憶體使用率
+      if (systemLoad.memoryUsage > thresholds.memory_threshold) {
+        if (status === HEALTH_STATUS.HEALTHY) {
+          status = HEALTH_STATUS.DEGRADED;
+        }
+        loadIssues.push(`High memory usage: ${(systemLoad.memoryUsage * 100).toFixed(1)}%`);
+      }
+
+      // 檢查並發操作數
+      if (systemLoad.concurrentOperations > thresholds.concurrent_operations) {
+        status = HEALTH_STATUS.UNHEALTHY;
+        loadIssues.push(`Too many concurrent operations: ${systemLoad.concurrentOperations}`);
+      }
+
+      if (loadIssues.length > 0) {
+        message = `System load issues for deployment: ${loadIssues.join(', ')}`;
+      }
+
+      return {
+        status: status,
+        message: message,
+        data: {
+          systemLoad: systemLoad,
+          loadIssues: loadIssues,
+          suitableForDeployment: loadIssues.length === 0
+        }
+      };
+
+    } catch (error) {
+      return {
+        status: HEALTH_STATUS.CRITICAL,
+        message: `System load deployment check failed: ${error.message}`,
+        error: error.message
+      };
+    }
+  }
+
+  // === CI/CD 輔助方法 ===
+
+  /**
+   * 獲取 CI/CD 管道指標
+   */
+  getCICDPipelineMetrics() {
+    // 模擬管道指標，實際實現中應從真實的 CI/CD 系統獲取
+    const mockMetrics = {
+      successRate: 0.92 + (Math.random() * 0.08), // 92-100%
+      averageBuildTime: 120000 + (Math.random() * 180000), // 2-5分鐘
+      qualityGatePassRate: 0.95 + (Math.random() * 0.05), // 95-100%
+      lastBuildTime: new Date().toISOString(),
+      totalBuilds: 150 + Math.floor(Math.random() * 50),
+      failedBuilds: Math.floor(Math.random() * 10)
+    };
+
+    return mockMetrics;
+  }
+
+  /**
+   * 計算品質健康關聯性
+   */
+  calculateQualityHealthCorrelation(correlations) {
+    if (correlations.length === 0) return 0;
+
+    // 簡化的關聯性計算
+    let correlationSum = 0;
+    correlations.forEach(correlation => {
+      const qualitySeverity = correlation.qualityData.severity || 'INFO';
+      const healthScore = correlation.healthSnapshot.healthScore || 100;
+      
+      // 品質問題越嚴重，健康分數越低，關聯性越高
+      const severityWeight = {
+        'BLOCKER': 1.0,
+        'CRITICAL': 0.8,
+        'MAJOR': 0.6,
+        'MINOR': 0.4,
+        'INFO': 0.2
+      };
+      
+      const weight = severityWeight[qualitySeverity] || 0.2;
+      const healthImpact = (100 - healthScore) / 100;
+      correlationSum += weight * healthImpact;
+    });
+
+    return correlationSum / correlations.length;
+  }
+
+  /**
+   * 計算品質劣化率
+   */
+  calculateQualityDegradationRate(correlations) {
+    if (correlations.length < 2) return 0;
+
+    // 按時間排序
+    const sortedCorrelations = correlations.sort((a, b) => 
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const first = sortedCorrelations[0];
+    const last = sortedCorrelations[sortedCorrelations.length - 1];
+
+    const initialScore = first.healthSnapshot.healthScore || 100;
+    const finalScore = last.healthSnapshot.healthScore || 100;
+
+    return Math.max(0, (initialScore - finalScore) / initialScore);
+  }
+
+  /**
+   * 計算最近失敗連續次數
+   */
+  calculateRecentFailureStreak() {
+    let streak = 0;
+    
+    // 從最新的部署開始向前查找
+    for (let i = this.deploymentHistory.length - 1; i >= 0; i--) {
+      const deployment = this.deploymentHistory[i];
+      if (deployment.type === 'failed') {
+        streak++;
+      } else if (deployment.type === 'completed') {
+        break; // 遇到成功部署就停止
+      }
+    }
+
+    return streak;
+  }
+
+  /**
+   * 獲取當前系統負載
+   */
+  getCurrentSystemLoad() {
+    // 模擬系統負載，實際實現中應從真實系統獲取
+    const baseLoad = {
+      cpuUsage: 0.3 + (Math.random() * 0.4), // 30-70%
+      memoryUsage: 0.4 + (Math.random() * 0.3), // 40-70%
+      concurrentOperations: Math.floor(Math.random() * 8),
+      networkLatency: 50 + (Math.random() * 100), // 50-150ms
+      diskIoUtilization: 0.2 + (Math.random() * 0.3) // 20-50%
+    };
+
+    // 根據健康狀態調整負載
+    const healthStatus = this.getHealthStatus();
+    if (healthStatus.overallStatus === HEALTH_STATUS.CRITICAL) {
+      baseLoad.cpuUsage = Math.min(0.95, baseLoad.cpuUsage + 0.2);
+      baseLoad.memoryUsage = Math.min(0.95, baseLoad.memoryUsage + 0.2);
+      baseLoad.concurrentOperations += 3;
+    }
+
+    return baseLoad;
+  }
   
   /**
    * 檢查系統記憶體使用量
@@ -1533,4 +2543,92 @@ function startHealthMonitoring() {
  */
 function stopHealthMonitoring() {
   return globalHealthCheckService.stopPeriodicChecks();
+}
+
+// === CI/CD 整合便利函數 ===
+
+/**
+ * 便利函數 - 檢查部署許可
+ */
+function checkDeploymentPermission(environment = 'production') {
+  return globalHealthCheckService.checkDeploymentPermission(environment);
+}
+
+/**
+ * 便利函數 - 設置代碼品質檢查器
+ */
+function setCodeQualityChecker(codeQualityChecker) {
+  return globalHealthCheckService.setCodeQualityChecker(codeQualityChecker);
+}
+
+/**
+ * 便利函數 - 添加部署阻擋
+ */
+function addDeploymentBlock(blockId, reason, options = {}) {
+  return globalHealthCheckService.addDeploymentBlock(blockId, reason, options);
+}
+
+/**
+ * 便利函數 - 移除部署阻擋
+ */
+function removeDeploymentBlock(blockId) {
+  return globalHealthCheckService.removeDeploymentBlock(blockId);
+}
+
+/**
+ * 便利函數 - 獲取部署歷史
+ */
+function getDeploymentHistory(limit = 20) {
+  return globalHealthCheckService.deploymentHistory.slice(-limit);
+}
+
+/**
+ * 便利函數 - 觸發 CI/CD 相關健康檢查
+ */
+function triggerCICDHealthChecks() {
+  const cicdChecks = [
+    'cicd_pipeline_health',
+    'deployment_readiness', 
+    'quality_gate_correlation',
+    'deployment_failure_rate',
+    'system_load_deployment'
+  ];
+  
+  return globalHealthCheckService.triggerImmediateHealthCheck(cicdChecks);
+}
+
+/**
+ * 便利函數 - 獲取環境健康摘要
+ */
+function getEnvironmentHealthSummary(environment = 'production') {
+  return globalHealthCheckService.getEnvironmentHealthSummary(environment);
+}
+
+/**
+ * 測試函數 - 模擬品質劣化事件
+ */
+function simulateQualityDegradationEvent(severity = 'MAJOR') {
+  const mockQualityData = {
+    severity: severity,
+    dimension: 'complexity',
+    message: `Mock quality issue for testing - ${severity}`,
+    timestamp: new Date().toISOString(),
+    ruleId: 'test_rule_' + Math.random().toString(36).substr(2, 9)
+  };
+  
+  return globalHealthCheckService.handleQualityDegradationEvent(mockQualityData);
+}
+
+/**
+ * 測試函數 - 模擬部署事件
+ */
+function simulateDeploymentEvent(type = 'completed', environment = 'staging') {
+  const mockDeploymentData = {
+    environment: environment,
+    version: '1.0.' + Math.floor(Math.random() * 100),
+    duration: 120000 + (Math.random() * 180000), // 2-5分鐘
+    timestamp: new Date().toISOString()
+  };
+  
+  return globalHealthCheckService.recordDeploymentEvent(type, mockDeploymentData);
 }
