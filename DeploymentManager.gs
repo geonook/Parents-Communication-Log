@@ -1114,9 +1114,15 @@ class DeploymentManager {
 }
 
 /**
- * 全域部署管理器實例
+ * 全域部署管理器實例（延遲載入以提升前端性能）
  */
-const globalDeploymentManager = new DeploymentManager();
+let _globalDeploymentManager = null;
+function getGlobalDeploymentManager() {
+  if (!_globalDeploymentManager) {
+    _globalDeploymentManager = new DeploymentManager();
+  }
+  return _globalDeploymentManager;
+}
 
 /**
  * 執行部署的便利函數
@@ -1131,7 +1137,7 @@ async function deployToEnvironment(environment, version, options = {}) {
   };
   
   try {
-    const deploymentRecord = await globalDeploymentManager.deploy(deploymentConfig);
+    const deploymentRecord = await getGlobalDeploymentManager().deploy(deploymentConfig);
     return {
       success: true,
       deploymentId: deploymentRecord.deploymentId,
@@ -1169,5 +1175,5 @@ async function deployToProduction(version) {
  * 獲取部署狀態
  */
 function getDeploymentStatus() {
-  return globalDeploymentManager.getDeploymentStats();
+  return getGlobalDeploymentManager().getDeploymentStats();
 }

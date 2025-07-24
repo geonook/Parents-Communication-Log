@@ -749,15 +749,21 @@ class CiCdOrchestrator {
 }
 
 /**
- * 全域 CI/CD 協調器實例
+ * 全域 CI/CD 協調器實例（延遲載入以提升前端性能）
  */
-const globalCiCdOrchestrator = new CiCdOrchestrator();
+let _globalCiCdOrchestrator = null;
+function getGlobalCiCdOrchestrator() {
+  if (!_globalCiCdOrchestrator) {
+    _globalCiCdOrchestrator = new CiCdOrchestrator();
+  }
+  return _globalCiCdOrchestrator;
+}
 
 /**
  * 便捷函數：執行開發環境部署
  */
 function deployToDevelopment(deploymentConfig, options = {}) {
-  return globalCiCdOrchestrator.executeDeploymentPipeline(
+  return getGlobalCiCdOrchestrator().executeDeploymentPipeline(
     DEPLOYMENT_ENVIRONMENTS.DEVELOPMENT,
     deploymentConfig,
     options
@@ -768,7 +774,7 @@ function deployToDevelopment(deploymentConfig, options = {}) {
  * 便捷函數：執行測試環境部署
  */
 function deployToStaging(deploymentConfig, options = {}) {
-  return globalCiCdOrchestrator.executeDeploymentPipeline(
+  return getGlobalCiCdOrchestrator().executeDeploymentPipeline(
     DEPLOYMENT_ENVIRONMENTS.STAGING,
     deploymentConfig,
     options
@@ -779,7 +785,7 @@ function deployToStaging(deploymentConfig, options = {}) {
  * 便捷函數：執行生產環境部署
  */
 function deployToProduction(deploymentConfig, options = {}) {
-  return globalCiCdOrchestrator.executeDeploymentPipeline(
+  return getGlobalCiCdOrchestrator().executeDeploymentPipeline(
     DEPLOYMENT_ENVIRONMENTS.PRODUCTION,
     deploymentConfig,
     options
@@ -790,21 +796,21 @@ function deployToProduction(deploymentConfig, options = {}) {
  * 便捷函數：獲取 CI/CD 統計
  */
 function getCiCdStatistics() {
-  return globalCiCdOrchestrator.getStatistics();
+  return getGlobalCiCdOrchestrator().getStatistics();
 }
 
 /**
  * 便捷函數：獲取活躍部署
  */
 function getActiveDeployments() {
-  return globalCiCdOrchestrator.getActivePipelines();
+  return getGlobalCiCdOrchestrator().getActivePipelines();
 }
 
 /**
  * 便捷函數：獲取部署歷史
  */
 function getDeploymentHistory(limit = 20) {
-  return globalCiCdOrchestrator.getPipelineHistory(limit);
+  return getGlobalCiCdOrchestrator().getPipelineHistory(limit);
 }
 
 console.log('✅ CiCdOrchestrator loaded successfully - Enterprise CI/CD Pipeline Integration Ready');

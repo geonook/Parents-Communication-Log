@@ -1046,34 +1046,40 @@ class MetricsCollector {
 }
 
 /**
- * 全域指標收集器實例
+ * 全域指標收集器實例（延遲載入以提升前端性能）
  */
-const globalMetricsCollector = new MetricsCollector();
+let _globalMetricsCollector = null;
+function getGlobalMetricsCollector() {
+  if (!_globalMetricsCollector) {
+    _globalMetricsCollector = new MetricsCollector();
+  }
+  return _globalMetricsCollector;
+}
 
 /**
  * 便利函數 - 記錄指標
  */
 function recordMetric(metricName, value, tags = {}) {
-  return globalMetricsCollector.recordMetric(metricName, value, tags);
+  return getGlobalMetricsCollector().recordMetric(metricName, value, tags);
 }
 
 /**
  * 便利函數 - 獲取指標數據
  */
 function getMetrics(metricNames = null, options = {}) {
-  return globalMetricsCollector.getMetrics(metricNames, options);
+  return getGlobalMetricsCollector().getMetrics(metricNames, options);
 }
 
 /**
  * 便利函數 - 匯出指標
  */
 function exportMetrics(format = 'json', options = {}) {
-  return globalMetricsCollector.exportMetrics(format, options);
+  return getGlobalMetricsCollector().exportMetrics(format, options);
 }
 
 /**
  * 便利函數 - 獲取儀表板數據
  */
 function getMetricsDashboardData() {
-  return globalMetricsCollector.getDashboardData();
+  return getGlobalMetricsCollector().getDashboardData();
 }

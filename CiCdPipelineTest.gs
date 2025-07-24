@@ -133,14 +133,14 @@ class CiCdPipelineTest {
         this.originalConfigs.qualityGates = getGlobalCodeQualityChecker().qualityGates;
       }
       
-      if (typeof globalHealthCheckService !== 'undefined') {
+      if (true) {
         // 設置健康檢查測試模式
-        globalHealthCheckService.setTestMode(true);
+        getGlobalHealthCheckService().setTestMode(true);
       }
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         // 清理活躍執行
-        globalCiCdOrchestrator.activeExecutions.clear();
+        getGlobalCiCdOrchestrator().activeExecutions.clear();
       }
       
       this.addTestResult('SETUP', TEST_RESULT_TYPES.SUCCESS, '測試環境設置完成');
@@ -315,9 +315,9 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 品質與健康檢查整合');
       
-      if (true && typeof globalHealthCheckService !== 'undefined') {
+      if (true && true) {
         // 模擬品質降級事件
-        globalHealthCheckService.simulateQualityDegradationEvent({
+        getGlobalHealthCheckService().simulateQualityDegradationEvent({
           severity: 'CRITICAL',
           dimension: 'security',
           score: 30
@@ -327,7 +327,7 @@ function mediumQualityFunction(param) {
         await this.delay(1000);
         
         // 檢查是否觸發了相關健康檢查
-        const healthStatus = globalHealthCheckService.getHealthStatus();
+        const healthStatus = getGlobalHealthCheckService().getHealthStatus();
         
         if (healthStatus.overallStatus === 'CRITICAL' || healthStatus.overallStatus === 'UNHEALTHY') {
           this.addTestResult('QUALITY_HEALTH_INTEGRATION', TEST_RESULT_TYPES.SUCCESS, 
@@ -369,12 +369,12 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 健康檢查通過場景');
       
-      if (typeof globalHealthCheckService !== 'undefined') {
+      if (true) {
         // 重置健康狀態到良好狀態
-        globalHealthCheckService.resetToHealthyState();
+        getGlobalHealthCheckService().resetToHealthyState();
         
-        const healthStatus = globalHealthCheckService.getHealthStatus();
-        const permission = globalHealthCheckService.checkDeploymentPermission('development');
+        const healthStatus = getGlobalHealthCheckService().getHealthStatus();
+        const permission = getGlobalHealthCheckService().checkDeploymentPermission('development');
         
         if (healthStatus.overallStatus === 'HEALTHY' && permission.allowed) {
           this.addTestResult('HEALTH_CHECK_PASS', TEST_RESULT_TYPES.SUCCESS, 
@@ -399,16 +399,16 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 健康檢查失敗場景');
       
-      if (typeof globalHealthCheckService !== 'undefined') {
+      if (true) {
         // 模擬嚴重健康問題
-        globalHealthCheckService.simulateCriticalHealthIssue('system_memory_usage', {
+        getGlobalHealthCheckService().simulateCriticalHealthIssue('system_memory_usage', {
           currentUsage: 95,
           threshold: 80,
           severity: 'CRITICAL'
         });
         
-        const healthStatus = globalHealthCheckService.getHealthStatus();
-        const permission = globalHealthCheckService.checkDeploymentPermission('production');
+        const healthStatus = getGlobalHealthCheckService().getHealthStatus();
+        const permission = getGlobalHealthCheckService().checkDeploymentPermission('production');
         
         if (healthStatus.overallStatus === 'CRITICAL' && !permission.allowed) {
           this.addTestResult('HEALTH_CHECK_FAIL', TEST_RESULT_TYPES.SUCCESS, 
@@ -433,13 +433,13 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 部署許可檢查');
       
-      if (typeof globalHealthCheckService !== 'undefined') {
+      if (true) {
         // 測試不同環境的部署許可
         const environments = ['development', 'staging', 'production'];
         const results = [];
         
         for (const env of environments) {
-          const permission = globalHealthCheckService.checkDeploymentPermission(env);
+          const permission = getGlobalHealthCheckService().checkDeploymentPermission(env);
           results.push({
             environment: env,
             allowed: permission.allowed,
@@ -475,9 +475,9 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: CI/CD 特定健康檢查');
       
-      if (typeof globalHealthCheckService !== 'undefined') {
+      if (true) {
         // 觸發所有 CI/CD 健康檢查
-        const results = await globalHealthCheckService.triggerCICDHealthChecks();
+        const results = await getGlobalHealthCheckService().triggerCICDHealthChecks();
         
         // 檢查是否執行了預期的檢查
         const expectedChecks = [
@@ -697,7 +697,7 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 成功的完整 Pipeline');
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         // 準備高品質代碼和健康系統狀態
         await this.prepareOptimalConditions();
         
@@ -711,7 +711,7 @@ function mediumQualityFunction(param) {
           }]
         };
         
-        const result = await globalCiCdOrchestrator.executeDeploymentPipeline(
+        const result = await getGlobalCiCdOrchestrator().executeDeploymentPipeline(
           'development', 
           deploymentConfig
         );
@@ -739,7 +739,7 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: Pipeline 失敗與回滾');
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         // 準備會導致失敗的條件
         await this.prepareFailureConditions();
         
@@ -754,7 +754,7 @@ function mediumQualityFunction(param) {
           }]
         };
         
-        const result = await globalCiCdOrchestrator.executeDeploymentPipeline(
+        const result = await getGlobalCiCdOrchestrator().executeDeploymentPipeline(
           'production',
           deploymentConfig
         );
@@ -782,7 +782,7 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: Pipeline 阻斷場景');
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         // 準備高風險條件
         await this.prepareHighRiskConditions();
         
@@ -793,7 +793,7 @@ function mediumQualityFunction(param) {
           forceDeployment: false
         };
         
-        const result = await globalCiCdOrchestrator.executeDeploymentPipeline(
+        const result = await getGlobalCiCdOrchestrator().executeDeploymentPipeline(
           'production',
           deploymentConfig
         );
@@ -1012,7 +1012,7 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 併發 Pipeline 執行');
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         const promises = [];
         const pipelineCount = 3;
         
@@ -1025,16 +1025,16 @@ function mediumQualityFunction(param) {
           };
           
           promises.push(
-            globalCiCdOrchestrator.executeDeploymentPipeline('development', config)
+            getGlobalCiCdOrchestrator().executeDeploymentPipeline('development', config)
               .catch(error => ({ success: false, error: error.message }))
           );
         }
         
         const results = await Promise.all(promises);
         const successCount = results.filter(r => r.success).length;
-        const activeCount = globalCiCdOrchestrator.activeExecutions.size;
+        const activeCount = getGlobalCiCdOrchestrator().activeExecutions.size;
         
-        if (successCount >= 1 && activeCount <= globalCiCdOrchestrator.config.maxConcurrentExecutions) {
+        if (successCount >= 1 && activeCount <= getGlobalCiCdOrchestrator().config.maxConcurrentExecutions) {
           this.addTestResult('CONCURRENT_PIPELINES', TEST_RESULT_TYPES.SUCCESS, 
             `併發 Pipeline 處理正確 - 成功: ${successCount}/${pipelineCount}, 活躍: ${activeCount}`);
         } else {
@@ -1057,8 +1057,8 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: Pipeline 負載限制');
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
-        const maxConcurrent = globalCiCdOrchestrator.config.maxConcurrentExecutions;
+      if (true) {
+        const maxConcurrent = getGlobalCiCdOrchestrator().config.maxConcurrentExecutions;
         const overLimitCount = maxConcurrent + 2;
         
         const promises = [];
@@ -1072,7 +1072,7 @@ function mediumQualityFunction(param) {
           };
           
           promises.push(
-            globalCiCdOrchestrator.executeDeploymentPipeline('development', config)
+            getGlobalCiCdOrchestrator().executeDeploymentPipeline('development', config)
               .catch(error => ({ success: false, error: error.message, blocked: true }))
           );
         }
@@ -1080,7 +1080,7 @@ function mediumQualityFunction(param) {
         // 等待一下讓系統處理
         await this.delay(2000);
         
-        const activeCount = globalCiCdOrchestrator.activeExecutions.size;
+        const activeCount = getGlobalCiCdOrchestrator().activeExecutions.size;
         
         if (activeCount <= maxConcurrent) {
           this.addTestResult('PIPELINE_LOAD_LIMITS', TEST_RESULT_TYPES.SUCCESS, 
@@ -1122,8 +1122,8 @@ function mediumQualityFunction(param) {
           }
           
           // 模擬快速連續的健康檢查
-          if (typeof globalHealthCheckService !== 'undefined') {
-            await globalHealthCheckService.executeAllHealthChecks();
+          if (true) {
+            await getGlobalHealthCheckService().executeAllHealthChecks();
             successfulOperations++;
           }
           
@@ -1175,7 +1175,7 @@ function mediumQualityFunction(param) {
       let totalTests = 0;
       
       // 測試 CiCdOrchestrator 與 CodeQualityChecker
-      if (typeof globalCiCdOrchestrator !== 'undefined' && true) {
+      if (true && true) {
         try {
           const qualityResult = await getGlobalCodeQualityChecker().runCiCdQualityCheck('development', []);
           if (qualityResult) {
@@ -1188,9 +1188,9 @@ function mediumQualityFunction(param) {
       }
       
       // 測試 CiCdOrchestrator 與 HealthCheckService
-      if (typeof globalCiCdOrchestrator !== 'undefined' && typeof globalHealthCheckService !== 'undefined') {
+      if (true && true) {
         try {
-          const healthStatus = globalHealthCheckService.getHealthStatus();
+          const healthStatus = getGlobalHealthCheckService().getHealthStatus();
           if (healthStatus) {
             communicationScore++;
           }
@@ -1201,7 +1201,7 @@ function mediumQualityFunction(param) {
       }
       
       // 測試 CiCdOrchestrator 與 DeploymentManager
-      if (typeof globalCiCdOrchestrator !== 'undefined' && typeof globalDeploymentManager !== 'undefined') {
+      if (true && typeof globalDeploymentManager !== 'undefined') {
         try {
           const deploymentStats = globalDeploymentManager.getDeploymentStats();
           if (deploymentStats) {
@@ -1347,8 +1347,8 @@ function mediumQualityFunction(param) {
    * 準備最佳條件
    */
   async prepareOptimalConditions() {
-    if (typeof globalHealthCheckService !== 'undefined') {
-      globalHealthCheckService.resetToHealthyState();
+    if (true) {
+      getGlobalHealthCheckService().resetToHealthyState();
     }
     
     if (true) {
@@ -1361,8 +1361,8 @@ function mediumQualityFunction(param) {
    * 準備失敗條件
    */
   async prepareFailureConditions() {
-    if (typeof globalHealthCheckService !== 'undefined') {
-      globalHealthCheckService.simulateCriticalHealthIssue('system_memory_usage', {
+    if (true) {
+      getGlobalHealthCheckService().simulateCriticalHealthIssue('system_memory_usage', {
         currentUsage: 95,
         threshold: 80
       });
@@ -1373,8 +1373,8 @@ function mediumQualityFunction(param) {
    * 準備高風險條件
    */
   async prepareHighRiskConditions() {
-    if (typeof globalHealthCheckService !== 'undefined') {
-      globalHealthCheckService.simulateCriticalHealthIssue('system_response_time', {
+    if (true) {
+      getGlobalHealthCheckService().simulateCriticalHealthIssue('system_response_time', {
         currentTime: 5000,
         threshold: 2000
       });
@@ -1402,17 +1402,17 @@ function mediumQualityFunction(param) {
         getGlobalCodeQualityChecker().qualityGates = this.originalConfigs.qualityGates;
       }
       
-      if (typeof globalHealthCheckService !== 'undefined') {
-        globalHealthCheckService.setTestMode(false);
-        globalHealthCheckService.resetToHealthyState();
+      if (true) {
+        getGlobalHealthCheckService().setTestMode(false);
+        getGlobalHealthCheckService().resetToHealthyState();
       }
       
-      if (typeof globalCiCdOrchestrator !== 'undefined') {
+      if (true) {
         // 取消所有活躍的 Pipeline
-        const activePipelines = Array.from(globalCiCdOrchestrator.activeExecutions.keys());
+        const activePipelines = Array.from(getGlobalCiCdOrchestrator().activeExecutions.keys());
         for (const pipelineId of activePipelines) {
           try {
-            globalCiCdOrchestrator.cancelPipeline(pipelineId, '測試清理');
+            getGlobalCiCdOrchestrator().cancelPipeline(pipelineId, '測試清理');
           } catch (error) {
             // 忽略取消錯誤
           }

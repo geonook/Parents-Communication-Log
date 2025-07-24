@@ -1195,7 +1195,7 @@ class CodeQualityChecker {
     this.gates = new Map();
     this.cache = (typeof globalCache !== 'undefined') ? globalCache : null;
     this.eventBus = (typeof globalEventBus !== 'undefined') ? globalEventBus : null;
-    this.metricsCollector = (typeof globalMetricsCollector !== 'undefined') ? globalMetricsCollector : null;
+    this.metricsCollector = getGlobalMetricsCollector();
     this.assessmentHistory = [];
     this.maxHistorySize = 100;
     

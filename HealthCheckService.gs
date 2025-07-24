@@ -2492,50 +2492,56 @@ class HealthCheckService {
 }
 
 /**
- * 全域健康檢查服務實例
+ * 全域健康檢查服務實例（延遲載入以提升前端性能）
  */
-const globalHealthCheckService = new HealthCheckService();
+let _globalHealthCheckService = null;
+function getGlobalHealthCheckService() {
+  if (!_globalHealthCheckService) {
+    _globalHealthCheckService = new HealthCheckService();
+  }
+  return _globalHealthCheckService;
+}
 
 /**
  * 便利函數 - 執行健康檢查
  */
 function executeHealthCheck(name) {
-  return globalHealthCheckService.executeHealthCheck(name);
+  return getGlobalHealthCheckService().executeHealthCheck(name);
 }
 
 /**
  * 便利函數 - 執行所有健康檢查
  */
 function executeAllHealthChecks() {
-  return globalHealthCheckService.executeAllHealthChecks();
+  return getGlobalHealthCheckService().executeAllHealthChecks();
 }
 
 /**
  * 便利函數 - 獲取健康狀態
  */
 function getHealthStatus() {
-  return globalHealthCheckService.getHealthStatus();
+  return getGlobalHealthCheckService().getHealthStatus();
 }
 
 /**
  * 便利函數 - 獲取健康儀表板數據
  */
 function getHealthDashboardData() {
-  return globalHealthCheckService.getDashboardData();
+  return getGlobalHealthCheckService().getDashboardData();
 }
 
 /**
  * 便利函數 - 開始定期健康檢查
  */
 function startHealthMonitoring() {
-  return globalHealthCheckService.startPeriodicChecks();
+  return getGlobalHealthCheckService().startPeriodicChecks();
 }
 
 /**
  * 便利函數 - 停止定期健康檢查
  */
 function stopHealthMonitoring() {
-  return globalHealthCheckService.stopPeriodicChecks();
+  return getGlobalHealthCheckService().stopPeriodicChecks();
 }
 
 // === CI/CD 整合便利函數 ===
@@ -2544,35 +2550,35 @@ function stopHealthMonitoring() {
  * 便利函數 - 檢查部署許可
  */
 function checkDeploymentPermission(environment = 'production') {
-  return globalHealthCheckService.checkDeploymentPermission(environment);
+  return getGlobalHealthCheckService().checkDeploymentPermission(environment);
 }
 
 /**
  * 便利函數 - 設置代碼品質檢查器
  */
 function setCodeQualityChecker(codeQualityChecker) {
-  return globalHealthCheckService.setCodeQualityChecker(codeQualityChecker);
+  return getGlobalHealthCheckService().setCodeQualityChecker(codeQualityChecker);
 }
 
 /**
  * 便利函數 - 添加部署阻擋
  */
 function addDeploymentBlock(blockId, reason, options = {}) {
-  return globalHealthCheckService.addDeploymentBlock(blockId, reason, options);
+  return getGlobalHealthCheckService().addDeploymentBlock(blockId, reason, options);
 }
 
 /**
  * 便利函數 - 移除部署阻擋
  */
 function removeDeploymentBlock(blockId) {
-  return globalHealthCheckService.removeDeploymentBlock(blockId);
+  return getGlobalHealthCheckService().removeDeploymentBlock(blockId);
 }
 
 /**
  * 便利函數 - 獲取部署歷史
  */
 function getDeploymentHistory(limit = 20) {
-  return globalHealthCheckService.deploymentHistory.slice(-limit);
+  return getGlobalHealthCheckService().deploymentHistory.slice(-limit);
 }
 
 /**
@@ -2587,14 +2593,14 @@ function triggerCICDHealthChecks() {
     'system_load_deployment'
   ];
   
-  return globalHealthCheckService.triggerImmediateHealthCheck(cicdChecks);
+  return getGlobalHealthCheckService().triggerImmediateHealthCheck(cicdChecks);
 }
 
 /**
  * 便利函數 - 獲取環境健康摘要
  */
 function getEnvironmentHealthSummary(environment = 'production') {
-  return globalHealthCheckService.getEnvironmentHealthSummary(environment);
+  return getGlobalHealthCheckService().getEnvironmentHealthSummary(environment);
 }
 
 /**
@@ -2609,7 +2615,7 @@ function simulateQualityDegradationEvent(severity = 'MAJOR') {
     ruleId: 'test_rule_' + Math.random().toString(36).substr(2, 9)
   };
   
-  return globalHealthCheckService.handleQualityDegradationEvent(mockQualityData);
+  return getGlobalHealthCheckService().handleQualityDegradationEvent(mockQualityData);
 }
 
 /**
@@ -2623,5 +2629,5 @@ function simulateDeploymentEvent(type = 'completed', environment = 'staging') {
     timestamp: new Date().toISOString()
   };
   
-  return globalHealthCheckService.recordDeploymentEvent(type, mockDeploymentData);
+  return getGlobalHealthCheckService().recordDeploymentEvent(type, mockDeploymentData);
 }
