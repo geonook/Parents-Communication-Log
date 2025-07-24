@@ -69,7 +69,352 @@ const SYSTEM_CONFIG = {
     'Trailblazers', 'Discoverers', 'Adventurers', 'Innovators', 'Explorers',
     'Navigators', 'Inventors', 'Voyagers', 'Pioneers', 'Guardians',
     'Pathfinders', 'Seekers', 'Visionaries', 'Achievers', 'Champions'
-  ]
+  ],
+
+  // ===== 資料標準化配置 (多資料庫生態系支援) =====
+  // 遵循 CLAUDE.md 規範：擴展現有配置，不創建新配置文件
+  
+  // 標準資料模型定義（基於現有資料結構）
+  DATA_STANDARDS: {
+    // 當前學生資料格式標準（映射現有 STUDENT_FIELDS）
+    CURRENT_STUDENT_FORMAT: {
+      // 基本識別資訊
+      id: { 
+        field: 'ID', 
+        type: 'string', 
+        required: true, 
+        primaryKey: true,
+        description: '學生學號'
+      },
+      grade: { 
+        field: 'Grade', 
+        type: 'enum', 
+        values: ['G1','G2','G3','G4','G5','G6'],
+        description: '年級'
+      },
+      hr: { 
+        field: 'HR', 
+        type: 'string',
+        description: '導師班級'
+      },
+      seatNumber: { 
+        field: 'Seat #', 
+        type: 'string',
+        description: '座號'
+      },
+      
+      // 姓名資訊
+      chineseName: { 
+        field: 'Chinese Name', 
+        type: 'string', 
+        required: true,
+        description: '中文姓名'
+      },
+      englishName: { 
+        field: 'English Name', 
+        type: 'string', 
+        required: true,
+        description: '英文姓名'
+      },
+      
+      // 學習資訊
+      level112: { 
+        field: '112 Level', 
+        type: 'string',
+        description: '112學年度程度'
+      },
+      level113: { 
+        field: '113 Level', 
+        type: 'string',
+        description: '113學年度程度'
+      },
+      previousTeacher: { 
+        field: 'Previous Teacher', 
+        type: 'string',
+        description: '前任老師'
+      },
+      
+      // 班級配置
+      englishClass: { 
+        field: 'English Class', 
+        type: 'string', 
+        required: true,
+        description: '英語班級'
+      },
+      localTeacher: { 
+        field: 'LT', 
+        type: 'string',
+        description: '本地老師'
+      },
+      
+      // 聯絡資訊
+      motherPhone: { 
+        field: "Mother's Phone", 
+        type: 'string',
+        description: '母親電話'
+      },
+      fatherPhone: { 
+        field: "Father's Phone", 
+        type: 'string',
+        description: '父親電話'
+      }
+    },
+    
+    // 當前電聯記錄格式標準（映射現有 CONTACT_FIELDS）
+    CURRENT_CONTACT_FORMAT: {
+      // 基本識別
+      studentId: { 
+        field: 'Student ID', 
+        type: 'string', 
+        required: true,
+        foreignKey: 'STUDENT.id',
+        description: '學生ID'
+      },
+      name: { 
+        field: 'Name', 
+        type: 'string', 
+        required: true,
+        description: '學生姓名'
+      },
+      englishName: { 
+        field: 'English Name', 
+        type: 'string',
+        description: '英文姓名'
+      },
+      englishClass: { 
+        field: 'English Class', 
+        type: 'string', 
+        required: true,
+        description: '英語班級'
+      },
+      
+      // 時間資訊
+      date: { 
+        field: 'Date', 
+        type: 'date', 
+        required: true,
+        description: '聯絡日期'
+      },
+      semester: { 
+        field: 'Semester', 
+        type: 'enum', 
+        values: ['Fall', 'Spring'],
+        description: '學期'
+      },
+      term: { 
+        field: 'Term', 
+        type: 'enum', 
+        values: ['Beginning', 'Midterm', 'Final'],
+        description: '階段'
+      },
+      
+      // 聯絡內容
+      contactType: { 
+        field: 'Contact Type', 
+        type: 'enum', 
+        values: ['Scheduled Contact', 'Regular Contact', 'Special Contact'],
+        description: '聯絡類型'
+      },
+      teacherContent: { 
+        field: 'Teachers Content', 
+        type: 'text',
+        description: '老師內容'
+      },
+      parentResponse: { 
+        field: 'Parents Responses', 
+        type: 'text',
+        description: '家長回應'
+      },
+      contactMethod: { 
+        field: 'Contact Method', 
+        type: 'enum', 
+        values: ['Phone Call', 'Line', 'Email'],
+        description: '聯絡方式'
+      }
+    },
+    
+    // 系統統計資料格式標準
+    SYSTEM_STATS_FORMAT: {
+      teacherCount: { 
+        type: 'integer', 
+        description: '老師總數'
+      },
+      studentCount: { 
+        type: 'integer', 
+        description: '學生總數'
+      },
+      contactCount: { 
+        type: 'integer', 
+        description: '電聯記錄總數'
+      },
+      semesterContactCount: { 
+        type: 'integer', 
+        description: '本學期電聯數'
+      },
+      currentTermProgress: { 
+        type: 'number', 
+        description: '當前階段進度'
+      },
+      currentSemester: { 
+        type: 'enum', 
+        values: ['Fall', 'Spring'],
+        description: '當前學期'
+      },
+      currentTerm: { 
+        type: 'enum', 
+        values: ['Beginning', 'Midterm', 'Final'],
+        description: '當前階段'
+      },
+      semesterProgress: { 
+        type: 'string', 
+        pattern: '^\\d+%$',
+        description: '學期進度百分比'
+      }
+    }
+  },
+
+  // 未來資料庫支援配置（預留，不影響現有系統）
+  FUTURE_DATABASE_CONFIG: {
+    // 當前活躍的資料庫類型
+    ACTIVE_DATABASE: 'googlesheets',
+    
+    // 資料庫連接配置（預留）
+    CONNECTIONS: {
+      googlesheets: {
+        type: 'googlesheets',
+        active: true,
+        config: {
+          mainFolderId: null, // 將使用現有的 MAIN_FOLDER_ID
+          useExistingConfig: true
+        }
+      },
+      airtable: {
+        type: 'airtable',
+        active: false,
+        config: {
+          apiKey: '', // 未來配置
+          baseId: '', 
+          tables: {
+            students: 'Students',
+            contacts: 'Contacts',
+            teachers: 'Teachers'
+          }
+        }
+      },
+      supabase: {
+        type: 'supabase',
+        active: false,
+        config: {
+          url: '', // 未來配置
+          apiKey: '',
+          tables: {
+            students: 'students',
+            contacts: 'contacts',
+            teachers: 'teachers'
+          }
+        }
+      }
+    },
+    
+    // 資料庫映射配置
+    DATABASE_MAPPINGS: {
+      googlesheets: {
+        STUDENT: {
+          source: '學生總表',
+          sheetName: '學生清單',
+          mapping: 'CURRENT_STUDENT_FORMAT'
+        },
+        CONTACT: {
+          source: '老師記錄簿',
+          sheetName: '電聯記錄',
+          mapping: 'CURRENT_CONTACT_FORMAT'
+        }
+      },
+      airtable: {
+        // 預留給未來 Airtable 映射
+        STUDENT: { 
+          table: 'Students',
+          mapping: {} // 將來實現
+        },
+        CONTACT: { 
+          table: 'Contacts',
+          mapping: {} // 將來實現
+        }
+      },
+      supabase: {
+        // 預留給未來 Supabase 映射
+        STUDENT: { 
+          table: 'students',
+          mapping: {} // 將來實現
+        },
+        CONTACT: { 
+          table: 'contacts',
+          mapping: {} // 將來實現
+        }
+      }
+    },
+    
+    // 遷移設定
+    MIGRATION_CONFIG: {
+      batchSize: 100,
+      backupBeforeMigration: true,
+      validateAfterMigration: true,
+      migrationLogEnabled: true
+    }
+  },
+
+  // API 介面規範（為外部系統整合準備）
+  API_STANDARDS: {
+    version: '1.0',
+    baseUrl: '/api/v1',
+    
+    // 標準 API 端點
+    endpoints: {
+      // 學生相關
+      getStudent: { path: '/student/{id}', method: 'GET' },
+      getStudentsByClass: { path: '/class/{name}/students', method: 'GET' },
+      updateStudent: { path: '/student/{id}', method: 'PUT' },
+      
+      // 電聯記錄相關
+      getContacts: { path: '/contacts', method: 'GET' },
+      createContact: { path: '/contacts', method: 'POST' },
+      getContactsByStudent: { path: '/student/{id}/contacts', method: 'GET' },
+      
+      // 統計相關
+      getSystemStats: { path: '/stats/system', method: 'GET' },
+      getClassStats: { path: '/stats/class/{name}', method: 'GET' },
+      getTeacherStats: { path: '/stats/teacher/{name}', method: 'GET' },
+      
+      // 系統相關
+      healthCheck: { path: '/health', method: 'GET' },
+      getSystemInfo: { path: '/system/info', method: 'GET' }
+    },
+    
+    // 標準回應格式
+    responseFormat: {
+      success: {
+        status: 'success',
+        data: {},
+        metadata: {
+          timestamp: 'ISO string',
+          version: 'string',
+          source: 'string'
+        }
+      },
+      error: {
+        status: 'error',
+        error: {
+          code: 'string',
+          message: 'string',
+          details: 'string'
+        },
+        metadata: {
+          timestamp: 'ISO string',
+          version: 'string'
+        }
+      }
+    }
+  }
 };
 
 /**
