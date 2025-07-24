@@ -128,9 +128,9 @@ class CiCdPipelineTest {
       this.backupOriginalConfigs();
       
       // 設置測試模式
-      if (typeof globalCodeQualityChecker !== 'undefined') {
+      if (true) {
         // 暫時降低品質門禁以便測試
-        this.originalConfigs.qualityGates = globalCodeQualityChecker.qualityGates;
+        this.originalConfigs.qualityGates = getGlobalCodeQualityChecker().qualityGates;
       }
       
       if (typeof globalHealthCheckService !== 'undefined') {
@@ -198,8 +198,8 @@ function anotherFunction() {
         }
       ];
       
-      if (typeof globalCodeQualityChecker !== 'undefined') {
-        const result = await globalCodeQualityChecker.runCiCdQualityCheck('development', highQualityFiles);
+      if (true) {
+        const result = await getGlobalCodeQualityChecker().runCiCdQualityCheck('development', highQualityFiles);
         
         if (result.deploymentRisk.level === 'LOW' || result.deploymentRisk.level === 'MEDIUM') {
           this.addTestResult('QUALITY_GATE_PASS', TEST_RESULT_TYPES.SUCCESS, 
@@ -244,8 +244,8 @@ function badFunction() {
         }
       ];
       
-      if (typeof globalCodeQualityChecker !== 'undefined') {
-        const result = await globalCodeQualityChecker.runCiCdQualityCheck('production', lowQualityFiles);
+      if (true) {
+        const result = await getGlobalCodeQualityChecker().runCiCdQualityCheck('production', lowQualityFiles);
         
         if (result.deploymentRisk.blocked) {
           this.addTestResult('QUALITY_GATE_FAIL', TEST_RESULT_TYPES.SUCCESS, 
@@ -285,12 +285,12 @@ function mediumQualityFunction(param) {
         }
       ];
       
-      if (typeof globalCodeQualityChecker !== 'undefined') {
+      if (true) {
         // 測試開發環境 (寬鬆要求)
-        const devResult = await globalCodeQualityChecker.runCiCdQualityCheck('development', mediumQualityFiles);
+        const devResult = await getGlobalCodeQualityChecker().runCiCdQualityCheck('development', mediumQualityFiles);
         
         // 測試生產環境 (嚴格要求)
-        const prodResult = await globalCodeQualityChecker.runCiCdQualityCheck('production', mediumQualityFiles);
+        const prodResult = await getGlobalCodeQualityChecker().runCiCdQualityCheck('production', mediumQualityFiles);
         
         if (!devResult.deploymentRisk.blocked && prodResult.deploymentRisk.level === 'HIGH') {
           this.addTestResult('ENVIRONMENT_QUALITY', TEST_RESULT_TYPES.SUCCESS, 
@@ -315,7 +315,7 @@ function mediumQualityFunction(param) {
     try {
       console.log('  🧪 測試: 品質與健康檢查整合');
       
-      if (typeof globalCodeQualityChecker !== 'undefined' && typeof globalHealthCheckService !== 'undefined') {
+      if (true && typeof globalHealthCheckService !== 'undefined') {
         // 模擬品質降級事件
         globalHealthCheckService.simulateQualityDegradationEvent({
           severity: 'CRITICAL',
@@ -1113,8 +1113,8 @@ function mediumQualityFunction(param) {
       for (let i = 0; i < totalOperations; i++) {
         try {
           // 模擬快速連續的品質檢查
-          if (typeof globalCodeQualityChecker !== 'undefined') {
-            await globalCodeQualityChecker.runCiCdQualityCheck('development', [{
+          if (true) {
+            await getGlobalCodeQualityChecker().runCiCdQualityCheck('development', [{
               fileName: `test${i}.gs`,
               content: 'function test() { return true; }'
             }]);
@@ -1175,9 +1175,9 @@ function mediumQualityFunction(param) {
       let totalTests = 0;
       
       // 測試 CiCdOrchestrator 與 CodeQualityChecker
-      if (typeof globalCiCdOrchestrator !== 'undefined' && typeof globalCodeQualityChecker !== 'undefined') {
+      if (typeof globalCiCdOrchestrator !== 'undefined' && true) {
         try {
-          const qualityResult = await globalCodeQualityChecker.runCiCdQualityCheck('development', []);
+          const qualityResult = await getGlobalCodeQualityChecker().runCiCdQualityCheck('development', []);
           if (qualityResult) {
             communicationScore++;
           }
@@ -1351,9 +1351,9 @@ function mediumQualityFunction(param) {
       globalHealthCheckService.resetToHealthyState();
     }
     
-    if (typeof globalCodeQualityChecker !== 'undefined') {
+    if (true) {
       // 確保品質檢查器處於良好狀態
-      globalCodeQualityChecker.reset();
+      getGlobalCodeQualityChecker().reset();
     }
   }
   
@@ -1398,8 +1398,8 @@ function mediumQualityFunction(param) {
     
     try {
       // 恢復原始配置
-      if (this.originalConfigs.qualityGates && typeof globalCodeQualityChecker !== 'undefined') {
-        globalCodeQualityChecker.qualityGates = this.originalConfigs.qualityGates;
+      if (this.originalConfigs.qualityGates && true) {
+        getGlobalCodeQualityChecker().qualityGates = this.originalConfigs.qualityGates;
       }
       
       if (typeof globalHealthCheckService !== 'undefined') {

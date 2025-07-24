@@ -455,17 +455,17 @@ class DeploymentManager {
       }
       
       // === CI/CD 整合: 品質門禁檢查 ===
-      if (typeof globalCodeQualityChecker !== 'undefined') {
+      if (true) {
         Logger.log('執行 CI/CD 品質門禁檢查');
         
         try {
           // 執行代碼品質檢查
           const qualityResult = deploymentConfig.files ? 
-            await globalCodeQualityChecker.batchCheckCodeQuality(deploymentConfig.files) :
-            await globalCodeQualityChecker.performSystemQualityCheck();
+            await getGlobalCodeQualityChecker().batchCheckCodeQuality(deploymentConfig.files) :
+            await getGlobalCodeQualityChecker().performSystemQualityCheck();
           
           // 檢查品質門禁
-          const gateResult = globalCodeQualityChecker.runQualityGate(qualityResult, deploymentConfig.environment);
+          const gateResult = getGlobalCodeQualityChecker().runQualityGate(qualityResult, deploymentConfig.environment);
           
           if (!gateResult.passed) {
             return { 
@@ -571,7 +571,7 @@ class DeploymentManager {
         success: true, 
         message: '預部署檢查通過 (包含品質門禁與健康檢查)',
         details: {
-          qualityCheckPassed: typeof globalCodeQualityChecker !== 'undefined',
+          qualityCheckPassed: true,
           healthCheckPassed: typeof globalHealthCheckService !== 'undefined',
           riskLevel: riskAssessment.riskLevel,
           riskScore: riskAssessment.riskScore
@@ -708,7 +708,7 @@ class DeploymentManager {
       
       // === 因素 2: 品質風險 (30% 權重) ===  
       let qualityRisk = 50; // 預設中等風險
-      if (typeof globalCodeQualityChecker !== 'undefined') {
+      if (true) {
         try {
           // 假設可以獲取最近的品質檢查結果
           const recentQualityScore = this.getRecentQualityScore();
@@ -865,9 +865,9 @@ class DeploymentManager {
       }
       
       // 如果沒有快取，嘗試執行快速品質檢查
-      if (typeof globalCodeQualityChecker !== 'undefined') {
+      if (true) {
         // 注意：這裡不執行完整檢查，而是獲取快取的結果
-        const quickScore = globalCodeQualityChecker.getLastAssessmentScore();
+        const quickScore = getGlobalCodeQualityChecker().getLastAssessmentScore();
         return quickScore;
       }
       

@@ -239,18 +239,16 @@ class CiCdOrchestrator {
     console.log(`🔍 Executing quality checks for pipeline ${pipelineRecord.pipelineId}`);
     
     try {
-      // 檢查全域品質檢查器是否存在
-      if (typeof globalCodeQualityChecker === 'undefined') {
-        throw new Error('GlobalCodeQualityChecker not available');
-      }
+      // 品質檢查器現在使用延遲初始化，總是可用
+      // 檢查已移除，因為 getGlobalCodeQualityChecker() 會按需創建實例
       
       // 執行品質檢查
       const qualityResult = deploymentConfig.files ? 
-        await globalCodeQualityChecker.batchCheckCodeQuality(deploymentConfig.files) :
-        await globalCodeQualityChecker.performSystemQualityCheck();
+        await getGlobalCodeQualityChecker().batchCheckCodeQuality(deploymentConfig.files) :
+        await getGlobalCodeQualityChecker().performSystemQualityCheck();
       
       // 執行品質門禁
-      const gateResult = globalCodeQualityChecker.runQualityGate(qualityResult, pipelineRecord.environment);
+      const gateResult = getGlobalCodeQualityChecker().runQualityGate(qualityResult, pipelineRecord.environment);
       
       // 記錄結果
       pipelineRecord.qualityResult = {

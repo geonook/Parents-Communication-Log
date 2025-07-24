@@ -1193,9 +1193,9 @@ class CodeQualityChecker {
     this.analyzer = new CodeAnalyzer();
     this.rules = new Map();
     this.gates = new Map();
-    this.cache = globalCache;
-    this.eventBus = globalEventBus;
-    this.metricsCollector = globalMetricsCollector;
+    this.cache = (typeof globalCache !== 'undefined') ? globalCache : null;
+    this.eventBus = (typeof globalEventBus !== 'undefined') ? globalEventBus : null;
+    this.metricsCollector = (typeof globalMetricsCollector !== 'undefined') ? globalMetricsCollector : null;
     this.assessmentHistory = [];
     this.maxHistorySize = 100;
     
@@ -2634,43 +2634,54 @@ class CodeQualityChecker {
 }
 
 /**
- * 全域代碼品質檢查器實例
+ * 全域代碼品質檢查器實例（延遲初始化）
  */
-const globalCodeQualityChecker = new CodeQualityChecker();
+let _globalCodeQualityChecker = null;
+
+/**
+ * 獲取全域代碼品質檢查器實例
+ * 使用延遲初始化避免循環依賴問題
+ */
+function getGlobalCodeQualityChecker() {
+  if (!_globalCodeQualityChecker) {
+    _globalCodeQualityChecker = new CodeQualityChecker();
+  }
+  return _globalCodeQualityChecker;
+}
 
 /**
  * 便利函數 - 執行品質檢查
  */
 async function checkCodeQuality(fileName, content, options = {}) {
-  return await globalCodeQualityChecker.checkQuality(fileName, content, options);
+  return await getGlobalCodeQualityChecker().checkQuality(fileName, content, options);
 }
 
 /**
  * 便利函數 - 執行品質門禁
  */
 function runQualityGate(assessment, gateName) {
-  return globalCodeQualityChecker.runQualityGate(assessment, gateName);
+  return getGlobalCodeQualityChecker().runQualityGate(assessment, gateName);
 }
 
 /**
  * 便利函數 - 批量品質檢查
  */
 async function batchCheckCodeQuality(files, options = {}) {
-  return await globalCodeQualityChecker.batchCheckQuality(files, options);
+  return await getGlobalCodeQualityChecker().batchCheckQuality(files, options);
 }
 
 /**
  * 便利函數 - 獲取品質統計
  */
 function getCodeQualityStats() {
-  return globalCodeQualityChecker.getQualityStats();
+  return getGlobalCodeQualityChecker().getQualityStats();
 }
 
 /**
  * 便利函數 - 獲取最後評估分數
  */
 function getLastQualityAssessmentScore() {
-  return globalCodeQualityChecker.getLastAssessmentScore();
+  return getGlobalCodeQualityChecker().getLastAssessmentScore();
 }
 
 /**
@@ -2678,14 +2689,14 @@ function getLastQualityAssessmentScore() {
  * 整合到 CI/CD 管線的品質檢查，與 DeploymentManager 整合使用
  */
 async function runCiCdQualityCheck(environment, files, options = {}) {
-  return await globalCodeQualityChecker.runCiCdQualityCheck(environment, files, options);
+  return await getGlobalCodeQualityChecker().runCiCdQualityCheck(environment, files, options);
 }
 
 /**
  * 便利函數 - 獲取部署風險評估
  */
 function getDeploymentRisk(environment) {
-  const lastAssessment = globalCodeQualityChecker.getLastAssessmentScore();
+  const lastAssessment = getGlobalCodeQualityChecker().getLastAssessmentScore();
   if (!lastAssessment.timestamp) {
     return {
       level: 'UNKNOWN',
@@ -2694,7 +2705,7 @@ function getDeploymentRisk(environment) {
     };
   }
   
-  return globalCodeQualityChecker.calculateDeploymentRisk({
+  return getGlobalCodeQualityChecker().calculateDeploymentRisk({
     score: lastAssessment.score,
     blocker: lastAssessment.blocker,
     critical: lastAssessment.critical
@@ -2708,9 +2719,9 @@ async function triggerQualityHealthCheck(environment, qualityScore = null) {
   try {
     const assessment = qualityScore ? 
       { score: qualityScore, blocker: false, critical: false, issues: [] } :
-      globalCodeQualityChecker.getLastAssessmentScore();
+      getGlobalCodeQualityChecker().getLastAssessmentScore();
     
-    return await globalCodeQualityChecker.triggerHealthCheckIntegration(assessment, environment);
+    return await getGlobalCodeQualityChecker().triggerHealthCheckIntegration(assessment, environment);
   } catch (error) {
     ErrorHandler.handle('triggerQualityHealthCheck', error, ERROR_LEVELS.WARNING, ERROR_CATEGORIES.INTEGRATION);
     return {
