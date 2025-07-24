@@ -1671,24 +1671,35 @@
                 
                 try {
                     // 1. 註冊模態框
+                    Utils.loading.show('🔧 準備系統介面...');
                     this.registerModals();
                     
                     // 2. 設置事件監聽器
+                    Utils.loading.show('⚙️ 設置互動功能...');
                     this.setupEventListeners();
                     
                     // 3. 檢查系統狀態
                     await this.checkSystemStatus();
                     
                     // 4. 初始化系統狀態
+                    Utils.loading.show('📋 初始化系統設定...');
                     await this.initializeSystemState();
                     
                     // 5. 載入系統統計 (確保最後執行)
                     await this.loadSystemStats();
                     
-                    // 6. 初始化完成標記
+                    // 6. 初始化完成
+                    Utils.loading.show('✅ 初始化完成...');
                     StateManager.setState('appInitialized', true);
                     console.log('Application initialized successfully');
+                    
+                    // 短暫顯示完成訊息後隱藏載入動畫
+                    setTimeout(() => {
+                        Utils.loading.hide();
+                    }, 800);
+                    
                 } catch (error) {
+                    Utils.loading.hide();
                     console.error('Application initialization failed:', error);
                     Utils.notify.error('初始化失敗', '應用程式初始化時發生錯誤，請重新載入頁面');
                     
@@ -1699,7 +1710,7 @@
             
             async checkSystemStatus() {
                 try {
-                    Utils.loading.show('檢查系統狀態...');
+                    Utils.loading.show('🔍 檢查系統連線狀態...');
                     
                     // 檢查後端連線狀態
                     const response = await Utils.api.call('getSystemStatsWeb');
@@ -1824,7 +1835,7 @@
             
             async loadSystemStats() {
                 try {
-                    Utils.loading.show('載入系統統計中...');
+                    Utils.loading.show('📊 載入系統統計資料...');
                     
                     // 調用統計 API
                     const response = await Utils.api.call('getSystemStatsWeb');
