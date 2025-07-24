@@ -30,7 +30,10 @@ function importStudentData() {
     
   } catch (error) {
     Logger.log('學生資料匯入失敗：' + error.toString());
-    safeErrorHandler('學生資料匯入', error);
+    ErrorHandler.data('學生資料匯入', error, {
+      dataType: 'student_data',
+      operation: 'import'
+    });
   }
 }
 
