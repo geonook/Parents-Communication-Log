@@ -2029,4 +2029,309 @@ function getFormattedClassOptions() {
     Logger.log('❌ 格式化班級選項失敗：' + error.message);
     return [];
   }
+}
+
+// ===== 資料存取抽象層 (Data Access Layer) =====
+// 遵循 CLAUDE.md 規範：擴展現有文件，建立單一資料來源，支援未來資料庫整合
+
+/**
+ * 資料存取抽象層
+ * 目的：統一資料存取介面，支援未來多資料庫整合，同時保持現有功能完整性
+ */
+const DataAccessLayer = {
+  // 當前模式：legacy = 使用現有 Google Sheets 邏輯，abstracted = 使用抽象化邏輯
+  currentMode: 'legacy',
+  
+  // 初始化資料存取層
+  initialize() {
+    console.log('📊 DataAccessLayer 初始化中...');
+    
+    try {
+      // 驗證現有系統功能
+      const mainFolder = getSystemMainFolder();
+      if (!mainFolder) {
+        throw new Error('無法存取系統主資料夾');
+      }
+      
+      console.log('✅ DataAccessLayer 初始化成功');
+      return {
+        success: true,
+        mode: this.currentMode,
+        message: '資料存取層已就緒'
+      };
+      
+    } catch (error) {
+      console.error('❌ DataAccessLayer 初始化失敗:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: '資料存取層初始化失敗'
+      };
+    }
+  },
+  
+  /**
+   * 統一學生資料查詢介面
+   * @param {string} id 學生ID
+   * @returns {Object|null} 學生資料物件
+   */
+  async getStudent(id) {
+    if (this.currentMode === 'legacy') {
+      return this.getStudentLegacy(id);
+    }
+    // 未來其他資料庫的邏輯將在此處實現
+    return this.getStudentLegacy(id);
+  },
+  
+  /**
+   * 使用現有邏輯查詢學生（保證 100% 相容性）
+   * @param {string} id 學生ID
+   * @returns {Object|null} 學生資料物件
+   */
+  getStudentLegacy(id) {
+    try {
+      // 使用現有的學生查詢邏輯
+      const mainFolder = getSystemMainFolder();
+      const masterListFiles = mainFolder.getFilesByName('學生總表');
+      
+      if (!masterListFiles.hasNext()) {
+        console.log('⚠️ 學生總表不存在');
+        return null;
+      }
+      
+      const masterListFile = masterListFiles.next();
+      const masterSheet = SpreadsheetApp.openById(masterListFile.getId());
+      const sheet = masterSheet.getActiveSheet();
+      const data = sheet.getDataRange().getValues();
+      
+      // 查找學生
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0]?.toString() === id.toString()) {
+          return this.formatStudentData(data[i], data[0]);
+        }
+      }
+      
+      return null;
+      
+    } catch (error) {
+      console.error('❌ 學生查詢失敗:', error);
+      return null;
+    }
+  },
+  
+  /**
+   * 格式化學生資料
+   * @param {Array} row 學生資料行
+   * @param {Array} headers 欄位標題
+   * @returns {Object} 格式化的學生物件
+   */
+  formatStudentData(row, headers) {
+    const student = {};
+    
+    for (let i = 0; i < headers.length && i < row.length; i++) {
+      const fieldName = headers[i]?.toString().trim();
+      student[fieldName] = row[i];
+    }
+    
+    return student;
+  },
+  
+  /**
+   * 統一系統統計查詢介面
+   * @returns {Object} 系統統計資料
+   */
+  async getSystemStats() {
+    if (this.currentMode === 'legacy') {
+      return this.getSystemStatsLegacy();
+    }
+    // 未來其他資料庫的邏輯將在此處實現
+    return this.getSystemStatsLegacy();
+  },
+  
+  /**
+   * 使用現有邏輯獲取系統統計（保證結果一致性）
+   * @returns {Object} 系統統計資料
+   */
+  getSystemStatsLegacy() {
+    try {
+      // 直接調用現有的統計函數，確保結果完全一致
+      if (typeof calculateSystemStats === 'function') {
+        return calculateSystemStats();
+      }
+      
+      console.error('❌ calculateSystemStats 函數不存在');
+      return this.getDefaultStats();
+      
+    } catch (error) {
+      console.error('❌ 統計計算失敗:', error);
+      return this.getDefaultStats();
+    }
+  },
+  
+  /**
+   * 獲取預設統計資料
+   * @returns {Object} 預設統計物件
+   */
+  getDefaultStats() {
+    return {
+      teacherCount: 0,
+      studentCount: 0,
+      contactCount: 0,
+      semesterContactCount: 0,
+      currentTermProgress: 0,
+      currentSemester: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_SEMESTER || 'Fall',
+      currentTerm: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_TERM || 'Beginning',
+      currentTermCompleted: 0,
+      currentTermTotal: 0,
+      semesterProgress: '0%'
+    };
+  },
+  
+  /**
+   * 統一班級學生查詢介面
+   * @param {string} className 班級名稱
+   * @returns {Array} 學生陣列
+   */
+  async getStudentsByClass(className) {
+    if (this.currentMode === 'legacy') {
+      return this.getStudentsByClassLegacy(className);
+    }
+    return this.getStudentsByClassLegacy(className);
+  },
+  
+  /**
+   * 使用現有邏輯查詢班級學生
+   * @param {string} className 班級名稱
+   * @returns {Array} 學生陣列
+   */
+  getStudentsByClassLegacy(className) {
+    try {
+      const students = [];
+      const mainFolder = getSystemMainFolder();
+      const masterListFiles = mainFolder.getFilesByName('學生總表');
+      
+      if (!masterListFiles.hasNext()) {
+        return students;
+      }
+      
+      const masterListFile = masterListFiles.next();
+      const masterSheet = SpreadsheetApp.openById(masterListFile.getId());
+      const sheet = masterSheet.getActiveSheet();
+      const data = sheet.getDataRange().getValues();
+      const headers = data[0];
+      
+      // 找到 English Class 欄位
+      const classColumnIndex = headers.findIndex(h => 
+        h?.toString().toLowerCase().includes('english class')
+      );
+      
+      if (classColumnIndex === -1) {
+        console.error('❌ 找不到 English Class 欄位');
+        return students;
+      }
+      
+      // 查找指定班級的學生
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][classColumnIndex]?.toString().trim() === className.trim()) {
+          students.push(this.formatStudentData(data[i], headers));
+        }
+      }
+      
+      return students;
+      
+    } catch (error) {
+      console.error('❌ 班級學生查詢失敗:', error);
+      return [];
+    }
+  }
+}
+
+/**
+ * 快取管理系統
+ * 提供透明的快取機制以提升系統效能
+ */
+const DataCache = {
+  cache: new Map(),
+  
+  /**
+   * 獲取快取資料
+   * @param {string} key 快取鍵值
+   * @returns {*} 快取資料或 null
+   */
+  get(key) {
+    const item = this.cache.get(key);
+    if (!item) return null;
+    
+    // 檢查是否過期
+    if (Date.now() > item.expiry) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return item.data;
+  },
+  
+  /**
+   * 設置快取資料
+   * @param {string} key 快取鍵值
+   * @param {*} data 資料
+   * @param {number} ttl 存活時間（毫秒）
+   */
+  set(key, data, ttl = 300000) { // 預設 5 分鐘
+    this.cache.set(key, {
+      data: data,
+      expiry: Date.now() + ttl,
+      created: Date.now()
+    });
+  },
+  
+  /**
+   * 檢查快取是否過期
+   * @param {string} key 快取鍵值
+   * @returns {boolean} 是否過期
+   */
+  isExpired(key) {
+    const item = this.cache.get(key);
+    return !item || Date.now() > item.expiry;
+  },
+  
+  /**
+   * 清除所有快取
+   */
+  clear() {
+    this.cache.clear();
+    console.log('🧹 資料快取已清除');
+  },
+  
+  /**
+   * 清除特定模式的快取
+   * @param {string} pattern 模式字串
+   */
+  clearPattern(pattern) {
+    const keys = Array.from(this.cache.keys());
+    keys.forEach(key => {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    });
+    console.log(`🧹 已清除包含 "${pattern}" 的快取`);
+  },
+  
+  /**
+   * 獲取快取統計資訊
+   * @returns {Object} 快取統計
+   */
+  getStats() {
+    const items = Array.from(this.cache.values());
+    const now = Date.now();
+    
+    return {
+      totalItems: this.cache.size,
+      activeItems: items.filter(item => now <= item.expiry).length,
+      expiredItems: items.filter(item => now > item.expiry).length,
+      memoryUsage: JSON.stringify([...this.cache]).length,
+      oldestItem: Math.min(...items.map(item => item.created)),
+      newestItem: Math.max(...items.map(item => item.created))
+    };
+  }
 } 

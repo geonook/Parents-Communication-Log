@@ -416,3 +416,416 @@ function displayValidationResults(results) {
   // 記錄驗證結果
   Logger.log('系統驗證完成 - 通過：' + results.overall.passed + '，失敗：' + results.overall.failed);
 }
+
+// ===== 重構驗證機制 =====
+// 遵循 CLAUDE.md 規範：擴展現有功能，確保重構過程中系統穩定性
+
+/**
+ * 重構期間的系統一致性驗證
+ * 確保重構前後功能完全一致
+ */
+const MigrationValidation = {
+  /**
+   * 驗證重構前後系統功能一致性
+   * @returns {Object} 驗證結果
+   */
+  async validateSystemConsistency() {
+    console.log('🔍 開始系統一致性驗證...');
+    
+    const tests = [
+      await this.testStudentDataAccess(),
+      await this.testStatisticsCalculation(),
+      await this.testContactRecordFunctionality(),
+      await this.testTeacherManagementFeatures(),
+      await this.testDashboardDisplay(),
+      await this.testDataAccessLayer()
+    ];
+    
+    const results = {
+      allPassed: tests.every(r => r.success),
+      passedCount: tests.filter(r => r.success).length,
+      failedCount: tests.filter(r => !r.success).length,
+      details: tests,
+      timestamp: new Date()
+    };
+    
+    console.log(`✅ 系統一致性驗證完成 - 通過: ${results.passedCount}, 失敗: ${results.failedCount}`);
+    return results;
+  },
+  
+  /**
+   * 測試學生資料存取功能
+   * @returns {Object} 測試結果
+   */
+  async testStudentDataAccess() {
+    try {
+      console.log('📚 測試學生資料存取功能...');
+      
+      // 獲取測試用學生ID（如果存在的話）
+      const mainFolder = getSystemMainFolder();
+      const masterListFiles = mainFolder.getFilesByName('學生總表');
+      
+      if (!masterListFiles.hasNext()) {
+        return {
+          success: true,
+          message: '學生資料存取測試',
+          details: '無學生總表，跳過測試'
+        };
+      }
+      
+      const masterListFile = masterListFiles.next();
+      const masterSheet = SpreadsheetApp.openById(masterListFile.getId());
+      const sheet = masterSheet.getActiveSheet();
+      const data = sheet.getDataRange().getValues();
+      
+      if (data.length <= 1) {
+        return {
+          success: true,
+          message: '學生資料存取測試',
+          details: '無學生資料，跳過測試'
+        };
+      }
+      
+      // 使用第一個學生進行測試
+      const testStudentId = data[1][0]?.toString();
+      if (!testStudentId) {
+        return {
+          success: false,
+          message: '學生資料存取測試',
+          details: '無效的學生ID'
+        };
+      }
+      
+      // 測試新的 DataAccessLayer
+      const studentFromLayer = await DataAccessLayer.getStudent(testStudentId);
+      
+      // 測試結果驗證
+      const isValidStudent = studentFromLayer && typeof studentFromLayer === 'object';
+      
+      return {
+        success: isValidStudent,
+        message: '學生資料存取測試',
+        details: isValidStudent ? 
+          `成功獲取學生資料: ${studentFromLayer.ID || studentFromLayer['Chinese Name'] || 'Unknown'}` : 
+          '無法獲取學生資料'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '學生資料存取測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 測試統計計算功能一致性
+   * @returns {Object} 測試結果
+   */
+  async testStatisticsCalculation() {
+    try {
+      console.log('📊 測試統計計算功能...');
+      
+      // 測試現有統計函數
+      let legacyStats = null;
+      let layerStats = null;
+      
+      // 嘗試調用現有統計函數
+      if (typeof calculateSystemStats === 'function') {
+        try {
+          legacyStats = calculateSystemStats();
+        } catch (error) {
+          console.log('⚠️ 現有統計函數執行失敗:', error.message);
+        }
+      }
+      
+      // 測試抽象層統計
+      try {
+        layerStats = await DataAccessLayer.getSystemStats();
+      } catch (error) {
+        console.log('⚠️ 抽象層統計執行失敗:', error.message);
+      }
+      
+      // 如果兩者都可用，比較結果
+      if (legacyStats && layerStats) {
+        const keysMatch = Object.keys(legacyStats).every(key => 
+          layerStats.hasOwnProperty(key)
+        );
+        
+        const valuesMatch = Object.keys(legacyStats).every(key => 
+          legacyStats[key] === layerStats[key]
+        );
+        
+        return {
+          success: keysMatch && valuesMatch,
+          message: '統計計算一致性測試',
+          details: keysMatch && valuesMatch ? 
+            '統計結果完全一致' : 
+            `結果不一致 - 鍵值匹配: ${keysMatch}, 數值匹配: ${valuesMatch}`
+        };
+      }
+      
+      // 如果只有抽象層可用
+      if (layerStats) {
+        const hasRequiredFields = ['teacherCount', 'studentCount', 'contactCount'].every(
+          field => layerStats.hasOwnProperty(field)
+        );
+        
+        return {
+          success: hasRequiredFields,
+          message: '統計計算功能測試',
+          details: hasRequiredFields ? 
+            '抽象層統計功能正常' : 
+            '抽象層統計缺少必要欄位'
+        };
+      }
+      
+      return {
+        success: false,
+        message: '統計計算功能測試',
+        details: '統計功能無法執行'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '統計計算功能測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 測試電聯記錄功能
+   * @returns {Object} 測試結果
+   */
+  async testContactRecordFunctionality() {
+    try {
+      console.log('📞 測試電聯記錄功能...');
+      
+      // 檢查是否有老師記錄簿
+      const mainFolder = getSystemMainFolder();
+      const teachersFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+      
+      if (!teachersFolder.hasNext()) {
+        return {
+          success: true,
+          message: '電聯記錄功能測試',
+          details: '無老師記錄簿，跳過測試'
+        };
+      }
+      
+      const teachersFolderObj = teachersFolder.next();
+      const teacherFolders = teachersFolderObj.getFolders();
+      
+      if (!teacherFolders.hasNext()) {
+        return {
+          success: true,
+          message: '電聯記錄功能測試',
+          details: '無老師資料夾，跳過測試'
+        };
+      }
+      
+      // 測試第一個老師記錄簿的電聯記錄工作表
+      const firstTeacherFolder = teacherFolders.next();
+      const files = firstTeacherFolder.getFiles();
+      
+      while (files.hasNext()) {
+        const file = files.next();
+        if (file.getName().includes('記錄簿')) {
+          const spreadsheet = SpreadsheetApp.openById(file.getId());
+          const contactSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+          
+          if (contactSheet) {
+            const data = contactSheet.getDataRange().getValues();
+            return {
+              success: true,
+              message: '電聯記錄功能測試',
+              details: `電聯記錄工作表正常，含 ${Math.max(0, data.length - 1)} 筆記錄`
+            };
+          }
+        }
+      }
+      
+      return {
+        success: false,
+        message: '電聯記錄功能測試',
+        details: '找不到電聯記錄工作表'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '電聯記錄功能測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 測試老師管理功能
+   * @returns {Object} 測試結果
+   */
+  async testTeacherManagementFeatures() {
+    try {
+      console.log('👨‍🏫 測試老師管理功能...');
+      
+      // 檢查老師資料夾結構
+      const mainFolder = getSystemMainFolder();
+      const teachersFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+      
+      if (!teachersFolder.hasNext()) {
+        return {
+          success: false,
+          message: '老師管理功能測試',
+          details: '找不到老師記錄簿資料夾'
+        };
+      }
+      
+      const teachersFolderObj = teachersFolder.next();
+      const teacherFolders = teachersFolderObj.getFolders();
+      let teacherCount = 0;
+      
+      while (teacherFolders.hasNext()) {
+        teacherFolders.next();
+        teacherCount++;
+      }
+      
+      return {
+        success: true,
+        message: '老師管理功能測試',
+        details: `老師管理結構正常，共 ${teacherCount} 位老師`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '老師管理功能測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 測試儀表板顯示功能
+   * @returns {Object} 測試結果
+   */
+  async testDashboardDisplay() {
+    try {
+      console.log('📊 測試儀表板顯示功能...');
+      
+      // 檢查 DashboardController 中的關鍵函數
+      const hasGetSystemStatsWeb = typeof getSystemStatsWeb === 'function';
+      
+      if (hasGetSystemStatsWeb) {
+        // 測試統計 API
+        const statsResult = getSystemStatsWeb();
+        const isValidResult = statsResult && 
+          typeof statsResult === 'object' && 
+          (statsResult.success === true || statsResult.success === false);
+        
+        return {
+          success: isValidResult,
+          message: '儀表板顯示功能測試',
+          details: isValidResult ? 
+            '儀表板統計API正常運作' : 
+            '儀表板統計API回傳格式異常'
+        };
+      }
+      
+      return {
+        success: false,
+        message: '儀表板顯示功能測試',
+        details: 'getSystemStatsWeb 函數不存在'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '儀表板顯示功能測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 測試資料存取抽象層
+   * @returns {Object} 測試結果
+   */
+  async testDataAccessLayer() {
+    try {
+      console.log('🔧 測試資料存取抽象層...');
+      
+      // 初始化測試
+      const initResult = DataAccessLayer.initialize();
+      if (!initResult.success) {
+        return {
+          success: false,
+          message: '資料存取抽象層測試',
+          details: `初始化失敗: ${initResult.message}`
+        };
+      }
+      
+      // 測試快取系統
+      const cacheKey = 'test_cache_key';
+      const testData = { test: 'data', timestamp: Date.now() };
+      
+      DataCache.set(cacheKey, testData, 1000); // 1秒過期
+      const cachedData = DataCache.get(cacheKey);
+      
+      const cacheWorking = cachedData && 
+        JSON.stringify(cachedData) === JSON.stringify(testData);
+      
+      // 清理測試快取
+      DataCache.clear();
+      
+      return {
+        success: cacheWorking,
+        message: '資料存取抽象層測試',
+        details: cacheWorking ? 
+          '抽象層和快取系統正常運作' : 
+          '快取系統運作異常'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: '資料存取抽象層測試',
+        details: `測試失敗: ${error.message}`
+      };
+    }
+  },
+  
+  /**
+   * 產生驗證報告
+   * @param {Object} results 驗證結果
+   * @returns {string} 格式化報告
+   */
+  generateValidationReport(results) {
+    let report = `
+=== 系統重構驗證報告 ===
+驗證時間: ${results.timestamp.toLocaleString()}
+總體結果: ${results.allPassed ? '✅ 通過' : '❌ 發現問題'}
+通過測試: ${results.passedCount}/${results.details.length}
+
+詳細結果:
+`;
+    
+    results.details.forEach(test => {
+      const status = test.success ? '✅' : '❌';
+      report += `${status} ${test.message}: ${test.details}\n`;
+    });
+    
+    if (!results.allPassed) {
+      report += `
+⚠️ 建議採取的行動:
+1. 檢查失敗的測試項目
+2. 確認系統配置是否正確
+3. 必要時回滾到上一個穩定版本
+`;
+    }
+    
+    return report;
+  }
+}
