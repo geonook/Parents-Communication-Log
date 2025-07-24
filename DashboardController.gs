@@ -2312,3 +2312,293 @@ function validateClassExistsWeb(className) {
 }
 
 // 原 sortContactRecordsWeb 函數已移除，排序邏輯已整合到記錄簿建立過程中
+
+// ===== 優化統計系統 =====
+// 遵循 CLAUDE.md 規範：擴展現有功能，保持 API 不變，提升效能
+
+/**
+ * 優化版系統統計計算
+ * 保持與原 getSystemStatsWeb 完全相同的 API，但內部使用快取和批次處理優化
+ */
+function getOptimizedSystemStats() {
+  console.log('📊 使用優化版統計計算...');
+  
+  // 檢查快取
+  const cachedStats = DataCache.get('optimized_system_stats');
+  if (cachedStats && !DataCache.isExpired('optimized_system_stats')) {
+    console.log('✅ 使用快取的統計資料');
+    return cachedStats;
+  }
+  
+  try {
+    const startTime = new Date().getTime();
+    
+    // 使用批次處理獲取統計資料
+    const stats = calculateSystemStatsOptimized();
+    
+    // 快取結果（5分鐘）
+    DataCache.set('optimized_system_stats', stats, 300000);
+    
+    const executionTime = new Date().getTime() - startTime;
+    console.log(`⚡ 優化統計計算完成，耗時: ${executionTime}ms`);
+    
+    return stats;
+    
+  } catch (error) {
+    console.error('❌ 優化統計計算失敗，回到原始邏輯:', error);
+    
+    // 降級到原始統計邏輯
+    if (typeof calculateSystemStats === 'function') {
+      return calculateSystemStats();
+    }
+    
+    // 最後的安全網：使用 DataAccessLayer 的預設統計
+    return DataAccessLayer.getDefaultStats();
+  }
+}
+
+/**
+ * 優化版統計計算實現
+ * 使用批次處理和快取減少重複的檔案系統存取
+ */
+function calculateSystemStatsOptimized() {
+  let teacherCount = 0;
+  let studentCount = 0;
+  let contactCount = 0;
+  let semesterContactCount = 0;
+  let currentTermCompletedStudents = 0;
+  let currentTermTotalStudents = 0;
+  
+  try {
+    // 批次載入所有需要的資料
+    const batchData = loadSystemDataBatch();
+    
+    if (!batchData.success) {
+      throw new Error('批次資料載入失敗');
+    }
+    
+    // 統計老師數量
+    teacherCount = batchData.teacherBooks.length;
+    
+    // 統計學生和電聯記錄（使用預載入的資料）
+    batchData.teacherBooks.forEach(bookData => {
+      if (bookData.studentSheet && bookData.studentData) {
+        const studentDataCount = Math.max(0, bookData.studentData.length - 1);
+        studentCount += studentDataCount;
+        currentTermTotalStudents += studentDataCount;
+      }
+      
+      if (bookData.contactSheet && bookData.contactData) {
+        const contacts = bookData.contactData.slice(1); // 跳過標題行
+        contactCount += contacts.length;
+        
+        // 統計本學期電聯記錄
+        const currentSemester = SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_SEMESTER || 'Fall';
+        const currentTerm = SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_TERM || 'Beginning';
+        
+        semesterContactCount += contacts.filter(contact => {
+          const contactSemester = contact[5]?.toString(); // Semester 欄位
+          return contactSemester === currentSemester;
+        }).length;
+        
+        // 統計當前階段完成進度
+        const currentTermContacts = contacts.filter(contact => {
+          const contactSemester = contact[5]?.toString();
+          const contactTerm = contact[6]?.toString();
+          const contactType = contact[7]?.toString();
+          
+          return contactSemester === currentSemester && 
+                 contactTerm === currentTerm && 
+                 contactType === 'Scheduled Contact';
+        });
+        
+        // 計算完成進度的學生數
+        const completedStudentIds = new Set();
+        currentTermContacts.forEach(contact => {
+          const studentId = contact[0]?.toString();
+          if (studentId) {
+            completedStudentIds.add(studentId);
+          }
+        });
+        
+        currentTermCompletedStudents += completedStudentIds.size;
+      }
+    });
+    
+    // 計算進度百分比
+    const progressPercentage = currentTermTotalStudents > 0 ? 
+      Math.round((currentTermCompletedStudents / currentTermTotalStudents) * 100) : 0;
+    
+    // 返回與原始函數相同格式的結果
+    return {
+      teacherCount: teacherCount,
+      studentCount: studentCount,
+      contactCount: contactCount,
+      semesterContactCount: semesterContactCount,
+      currentTermProgress: progressPercentage,
+      currentSemester: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_SEMESTER || 'Fall',
+      currentTerm: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_TERM || 'Beginning',
+      currentTermCompleted: currentTermCompletedStudents,
+      currentTermTotal: currentTermTotalStudents,
+      semesterProgress: progressPercentage + '%'
+    };
+    
+  } catch (error) {
+    console.error('❌ 優化統計計算失敗:', error);
+    throw error;
+  }
+}
+
+/**
+ * 批次載入系統資料
+ * 一次性載入所有老師記錄簿的必要資料，減少重複的檔案系統存取
+ */
+function loadSystemDataBatch() {
+  try {
+    console.log('📦 開始批次載入系統資料...');
+    
+    const mainFolder = getSystemMainFolder();
+    const teachersFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME);
+    
+    if (!teachersFolder.hasNext()) {
+      return {
+        success: false,
+        error: '找不到老師記錄簿資料夾',
+        teacherBooks: []
+      };
+    }
+    
+    const teachersFolderObj = teachersFolder.next();
+    const teacherFolders = teachersFolderObj.getFolders();
+    const teacherBooks = [];
+    
+    // 批次處理所有老師記錄簿
+    while (teacherFolders.hasNext()) {
+      const teacherFolder = teacherFolders.next();
+      const files = teacherFolder.getFiles();
+      
+      while (files.hasNext()) {
+        const file = files.next();
+        if (file.getName().includes('記錄簿')) {
+          try {
+            const spreadsheet = SpreadsheetApp.openById(file.getId());
+            
+            // 預載入學生清單資料
+            const studentSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+            const studentData = studentSheet ? studentSheet.getDataRange().getValues() : null;
+            
+            // 預載入電聯記錄資料
+            const contactSheet = spreadsheet.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+            const contactData = contactSheet ? contactSheet.getDataRange().getValues() : null;
+            
+            teacherBooks.push({
+              name: file.getName(),
+              spreadsheet: spreadsheet,
+              studentSheet: studentSheet,
+              studentData: studentData,
+              contactSheet: contactSheet,
+              contactData: contactData
+            });
+            
+            break; // 找到記錄簿後跳出內層迴圈
+            
+          } catch (error) {
+            console.error(`❌ 處理老師記錄簿失敗: ${file.getName()}`, error);
+          }
+        }
+      }
+    }
+    
+    console.log(`✅ 批次載入完成，處理了 ${teacherBooks.length} 個老師記錄簿`);
+    
+    return {
+      success: true,
+      teacherBooks: teacherBooks,
+      loadTime: new Date()
+    };
+    
+  } catch (error) {
+    console.error('❌ 批次資料載入失敗:', error);
+    return {
+      success: false,
+      error: error.message,
+      teacherBooks: []
+    };
+  }
+}
+
+/**
+ * 統計快取管理
+ * 提供統計相關的快取操作和管理功能
+ */
+const StatisticsCache = {
+  /**
+   * 清除所有統計快取
+   */
+  clearAll() {
+    DataCache.clearPattern('stats');
+    DataCache.clearPattern('optimized');
+    console.log('🧹 已清除所有統計快取');
+  },
+  
+  /**
+   * 預熱統計快取
+   * 在系統啟動或資料更新後主動載入常用統計
+   */
+  async warmup() {
+    console.log('🔥 開始統計快取預熱...');
+    
+    try {
+      // 預載入系統統計
+      const systemStats = getOptimizedSystemStats();
+      console.log('✅ 系統統計快取預熱完成');
+      
+      return {
+        success: true,
+        message: '統計快取預熱完成',
+        cachedItems: ['system_stats']
+      };
+      
+    } catch (error) {
+      console.error('❌ 統計快取預熱失敗:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  },
+  
+  /**
+   * 獲取快取統計資訊
+   */
+  getInfo() {
+    const cacheStats = DataCache.getStats();
+    
+    return {
+      totalCacheItems: cacheStats.totalItems,
+      activeCacheItems: cacheStats.activeItems,
+      expiredCacheItems: cacheStats.expiredItems,
+      memoryUsage: cacheStats.memoryUsage,
+      lastUpdate: new Date().toLocaleString()
+    };
+  },
+  
+  /**
+   * 強制重新載入統計（清除快取後重新計算）
+   */
+  async forceReload() {
+    console.log('🔄 強制重新載入統計...');
+    
+    this.clearAll();
+    
+    // 重新計算並快取
+    const stats = getOptimizedSystemStats();
+    
+    return {
+      success: true,
+      message: '統計已強制重新載入',
+      stats: stats,
+      timestamp: new Date()
+    };
+  }
+}
