@@ -1019,15 +1019,8 @@ function performSystemRepair(healthReport) {
 
 /**
  * 統一的錯誤處理和日誌系統
+ * 注意：ERROR_LEVELS 常數已在 ErrorHandler.gs 中定義，此處不再重複宣告
  */
-
-// 錯誤級別常數
-const ERROR_LEVELS = {
-  INFO: 'INFO',
-  WARNING: 'WARNING',
-  ERROR: 'ERROR',
-  CRITICAL: 'CRITICAL'
-};
 
 // 日誌設定
 const LOG_CONFIG = {
