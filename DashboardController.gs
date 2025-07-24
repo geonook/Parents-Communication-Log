@@ -386,12 +386,57 @@ function initializeSystemWeb(config = {}) {
     const systemService = getSystemService();
     const result = systemService.initializeSystem(config);
     
-    return {
-      success: result.success,
-      message: result.message || '系統初始化完成',
-      data: result.data || {},
-      timestamp: new Date().toISOString()
-    };
+    // 檢查結果是否成功
+    if (result.success && result.data) {
+      // 嘗試創建必要的系統資源和獲取 URL
+      let mainFolderUrl = '';
+      let masterListUrl = '';
+      let adminSheetUrl = '';
+      
+      try {
+        // 確保系統資料夾存在並獲取 URL
+        const systemFolder = systemService.ensureSystemFolder();
+        if (systemFolder) {
+          mainFolderUrl = `https://drive.google.com/drive/folders/${systemFolder.getId()}`;
+        }
+        
+        // 嘗試查找或創建學生總表
+        const files = systemFolder ? systemFolder.getFilesByName('學生總表') : null;
+        if (files && files.hasNext()) {
+          const masterListFile = files.next();
+          masterListUrl = `https://docs.google.com/spreadsheets/d/${masterListFile.getId()}/edit`;
+        }
+        
+        // 管理控制台 URL (當前 Dashboard 的 URL)
+        adminSheetUrl = ScriptApp.getService().getUrl();
+        
+      } catch (urlError) {
+        Logger.log('獲取 URL 時發生錯誤: ' + urlError.toString());
+        // 即使 URL 獲取失敗，也不影響初始化成功
+      }
+      
+      return {
+        success: true,
+        message: result.message || '系統初始化完成！',
+        // 前端期望的 URL 字段 (放在頂層)
+        mainFolderUrl: mainFolderUrl,
+        masterListUrl: masterListUrl, 
+        adminSheetUrl: adminSheetUrl,
+        // 詳細初始化結果
+        details: result.data,
+        timestamp: new Date().toISOString()
+      };
+      
+    } else {
+      // 系統服務返回失敗
+      return {
+        success: false,
+        message: result.message || '系統初始化失敗，請檢查系統配置',
+        error: result.error || '未知錯誤',
+        details: result.data || {},
+        timestamp: new Date().toISOString()
+      };
+    }
     
   } catch (error) {
     Logger.log('initializeSystemWeb 錯誤: ' + error.toString());
@@ -399,8 +444,9 @@ function initializeSystemWeb(config = {}) {
     
     return {
       success: false,
+      message: '系統初始化失敗，請稍後重試',
       error: '系統初始化失敗: ' + error.message,
-      message: '系統初始化失敗，請稍後重試'
+      timestamp: new Date().toISOString()
     };
   }
 }
@@ -412,15 +458,8 @@ function setupCompleteSystemWeb() {
   try {
     Logger.log('Web API: setupCompleteSystemWeb 被調用');
     
-    const systemService = getSystemService();
-    const result = systemService.initializeSystem();
-    
-    return {
-      success: result.success,
-      message: result.message || '完整系統設置完成',
-      data: result.data || {},
-      timestamp: new Date().toISOString()
-    };
+    // 使用相同的邏輯作為 initializeSystemWeb
+    return initializeSystemWeb({ complete: true });
     
   } catch (error) {
     Logger.log('setupCompleteSystemWeb 錯誤: ' + error.toString());
@@ -428,8 +467,9 @@ function setupCompleteSystemWeb() {
     
     return {
       success: false,
+      message: '完整系統設置失敗，請稍後重試',
       error: '完整系統設置失敗: ' + error.message,
-      message: '系統設置失敗，請稍後重試'
+      timestamp: new Date().toISOString()
     };
   }
 }
