@@ -84,6 +84,18 @@
             -moz-osx-font-smoothing: grayscale;
         }
         
+        @media (max-width: 768px) {
+            body {
+                padding: var(--spacing-md);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: var(--spacing-sm);
+            }
+        }
+        
         /* ===== COMPONENT: APP CONTAINER ===== */
         .app-container {
             max-width: 1200px;
@@ -93,6 +105,20 @@
             box-shadow: var(--shadow-xl);
             overflow: hidden;
             animation: slideInUp 0.6s ease-out;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        @media (max-width: 768px) {
+            .app-container {
+                border-radius: var(--radius-lg);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .app-container {
+                border-radius: var(--radius-md);
+            }
         }
         
         @keyframes slideInUp {
@@ -195,12 +221,34 @@
             opacity: 0.8;
         }
         
-        /* Legacy section classes */
+        /* ===== COMPONENT: SECTION SYSTEM ===== */
         .section {
-            /* Redirected to content-section */
+            background: var(--color-white);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-xl);
+            margin-bottom: var(--spacing-xl);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--color-border);
         }
+        
         .section h2 {
-            /* Redirected to section-title */
+            color: var(--color-dark);
+            font-size: var(--font-size-xl);
+            font-weight: 600;
+            margin-bottom: var(--spacing-md);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+        
+        .section-description {
+            color: var(--color-text-secondary);
+            font-size: var(--font-size-sm);
+            margin-bottom: var(--spacing-lg);
+            padding: var(--spacing-sm) var(--spacing-md);
+            background: var(--color-bg-secondary);
+            border-radius: var(--radius-sm);
+            border-left: 4px solid var(--color-primary);
         }
         
         /* ===== COMPONENT: BUTTON GRID SYSTEM ===== */
@@ -209,12 +257,27 @@
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: var(--spacing-lg);
             margin-top: var(--spacing-lg);
+            width: 100%;
+        }
+        
+        @media (max-width: 768px) {
+            .button-grid {
+                grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+                gap: var(--spacing-md);
+            }
         }
         
         @media (max-width: 640px) {
             .button-grid {
                 grid-template-columns: 1fr;
                 gap: var(--spacing-md);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .button-grid {
+                gap: var(--spacing-sm);
+                margin-top: var(--spacing-md);
             }
         }
         
@@ -237,6 +300,27 @@
             position: relative;
             overflow: hidden;
             font-family: var(--font-family-base);
+            text-align: center;
+            word-wrap: break-word;
+            hyphens: auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        @media (max-width: 640px) {
+            .action-button {
+                min-height: 80px;
+                padding: var(--spacing-lg);
+                font-size: var(--font-size-sm);
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .action-button {
+                min-height: 70px;
+                padding: var(--spacing-md);
+                font-size: var(--font-size-sm);
+            }
         }
         
         .action-button::before {
@@ -849,6 +933,61 @@
         .update-btn:active {
             transform: translateY(0);
         }
+        
+        /* ===== FUNCTION STATUS INDICATORS ===== */
+        .function-status {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        
+        .status-available {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .status-checking {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .status-unavailable {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .function-tooltip {
+            position: absolute;
+            bottom: -25px;
+            right: 0;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 1000;
+        }
+        
+        .action-button:hover .function-tooltip {
+            opacity: 1;
+        }
+        
+        .button-with-status {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -903,51 +1042,83 @@
                 </div>
             </div>
             
-            <!-- 主要功能 -->
-            <section class="content-section section">
-                <h2 class="section-title"><span class="section-icon">🚀</span>主要功能</h2>
+            <!-- 1. 系統初始化 (首次使用) -->
+            <div class="section">
+                <h2>🚀 系統初始化</h2>
+                <p class="section-description">首次使用系統前，請先執行初始化和狀態檢查</p>
                 <div class="button-grid">
-                    <button class="action-button action-button--primary primary" onclick="showMasterListModal()">
-                        📋 從學生總表建立老師記錄簿
-                    </button>
-                    <button class="action-button" onclick="initializeSystem()">
+                    <button class="action-button primary button-with-status" onclick="initializeSystem()" data-function="initializeSystem">
                         🏗️ 初始化系統
+                        <span class="function-status status-available"></span>
+                        <span class="function-tooltip">核心功能 - 可用</span>
                     </button>
-                    <button class="action-button" onclick="showTeacherModal()">
-                        👨‍🏫 新增單一老師記錄簿
-                    </button>
-                    <button class="action-button secondary" onclick="openSystemFolder()">
-                        📁 開啟系統資料夾
+                    <button class="action-button secondary button-with-status" onclick="checkSystemStatus()" data-function="checkSystemStatus">
+                        📊 檢查系統狀態
+                        <span class="function-status status-available"></span>
+                        <span class="function-tooltip">核心功能 - 可用</span>
                     </button>
                 </div>
             </div>
             
-            <!-- 資料管理 -->
+            <!-- 2. 核心功能 (主要工作流程) -->
             <div class="section">
-                <h2>📝 資料管理</h2>
+                <h2>📋 核心功能</h2>
+                <p class="section-description">主要的系統功能和日常操作</p>
                 <div class="button-grid">
-                    <button class="action-button" onclick="importStudentData()">
+                    <button class="action-button action-button--primary primary button-with-status" onclick="showMasterListModal()" data-function="processMasterList">
+                        📋 從學生總表建立老師記錄簿
+                        <span class="function-status status-available"></span>
+                        <span class="function-tooltip">核心功能 - 可用</span>
+                    </button>
+                    <button class="action-button button-with-status" onclick="showTeacherModal()" data-function="createSingleTeacher">
+                        👨‍🏫 新增單一老師記錄簿
+                        <span class="function-status status-available"></span>
+                        <span class="function-tooltip">核心功能 - 可用</span>
+                    </button>
+                    <button class="action-button button-with-status" onclick="importStudentData()" data-function="importStudentData">
                         📥 匯入學生資料
+                        <span class="function-status status-checking"></span>
+                        <span class="function-tooltip">需檢查後端支援</span>
                     </button>
-                    <button class="action-button" onclick="exportStudentData()">
+                    <button class="action-button button-with-status" onclick="exportStudentData()" data-function="exportStudentData">
                         📤 匯出學生資料
+                        <span class="function-status status-checking"></span>
+                        <span class="function-tooltip">需檢查後端支援</span>
                     </button>
-                    <button class="action-button" onclick="updateTeachersList()">
-                        🔄 更新老師列表
-                    </button>
+                </div>
+            </div>
+            
+            <!-- 4. 監控與報告 (定期檢查) -->
+            <div class="section">
+                <h2>📊 監控與報告</h2>
+                <p class="section-description">定期檢查系統狀態和生成報告</p>
+                <div class="button-grid">
                     <button class="action-button secondary" onclick="checkAllProgress()">
                         📊 檢查全體進度
                     </button>
                     <button class="action-button secondary" onclick="generateProgressReport()">
                         📈 生成進度報告
                     </button>
+                    <button class="action-button" onclick="updateTeachersList()">
+                        🔄 更新老師列表
+                    </button>
+                    <button class="action-button secondary" onclick="executeSystemTest()">
+                        🧪 執行系統測試
+                    </button>
                 </div>
             </div>
             
-            <!-- 系統管理 -->
+            <!-- 5. 系統管理 (進階功能) -->
             <div class="section">
                 <h2>⚙️ 系統管理</h2>
+                <p class="section-description">進階系統管理和維護功能</p>
                 <div class="button-grid">
+                    <button class="action-button secondary" onclick="showSystemSettings()">
+                        ⚙️ 系統設定
+                    </button>
+                    <button class="action-button secondary" onclick="openSystemFolder()">
+                        📁 開啟系統資料夾
+                    </button>
                     <button class="action-button" onclick="setupAutomation()">
                         🔄 設定自動化
                     </button>
@@ -957,15 +1128,13 @@
                     <button class="action-button secondary" onclick="checkFileIntegrity()">
                         🔍 檢查檔案完整性
                     </button>
-                    <button class="action-button secondary" onclick="showSystemSettings()">
-                        ⚙️ 系統設定
-                    </button>
                 </div>
             </div>
             
-            <!-- 學生異動管理 -->
+            <!-- 3. 學生異動管理 (學生資料維護) -->
             <div class="section">
                 <h2>🔄 學生異動管理</h2>
+                <p class="section-description">學生轉學、轉班及資料更新管理</p>
                 
                 <!-- 學生搜尋器 -->
                 <div class="student-search-container">
@@ -1031,63 +1200,43 @@
                 </div>
             </div>
             
-            <!-- 系統監控 -->
-            <div class="section">
-                <h2>📊 系統監控</h2>
-                
-                <!-- 系統狀態指示 -->
-                <div id="systemStatusIndicator" style="margin-bottom: 20px;">
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6c757d;">
-                        <h3 style="color: #495057; margin-bottom: 10px;">🔄 檢查系統狀態中...</h3>
-                        <p style="color: #6c757d; margin: 0;">正在檢查系統初始化狀態，請稍候...</p>
-                    </div>
+            <!-- 系統狀態顯示區 -->
+            <div id="systemStatusIndicator" style="margin-bottom: 20px;">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6c757d;">
+                    <h3 style="color: #495057; margin-bottom: 10px;">🔄 檢查系統狀態中...</h3>
+                    <p style="color: #6c757d; margin: 0;">正在檢查系統初始化狀態，請稍候...</p>
                 </div>
-                
-                <!-- 快速設定區 - 動態生成 -->
-                <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
-                    <!-- 內容由 JavaScript 動態生成 -->
-                </div>
-                
-                <!-- 系統監控工具 -->
-                <div style="margin-bottom: 20px;">
-                    <h3 style="color: #495057; margin-bottom: 10px;">🔧 監控工具</h3>
-                    <div class="button-grid">
-                        <button class="action-button secondary" onclick="checkSystemStatus()">
-                            📊 檢查系統狀態
-                        </button>
-                        <button class="action-button secondary" onclick="executeSystemTest()">
-                            🧪 執行系統測試
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="instructions" style="margin-top: 20px;">
-                    <h3>📚 使用說明：</h3>
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; line-height: 1.6;">
-                        <p><strong>🔧 監控工具：</strong></p>
-                        <ul style="margin: 10px 0; padding-left: 20px;">
-                            <li><strong>檢查系統狀態：</strong>驗證系統初始化狀態和健康度</li>
-                            <li><strong>執行系統測試：</strong>測試核心功能：進度檢查、報告生成、備份、檔案完整性</li>
-                        </ul>
-                        <p style="color: #666; font-style: italic; margin-top: 10px;">
-                            💡 建議：首次使用或系統更新後執行系統測試驗證功能正常。
-                        </p>
-                    </div>
-                </div>
+            </div>
+            
+            <!-- 快速設定區 - 動態生成 -->
+            <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
+                <!-- 內容由 JavaScript 動態生成 -->
             </div>
             
             <!-- 使用說明 -->
             <div class="section">
                 <h2>📖 使用說明</h2>
                 <div class="instructions">
-                    <h3>快速開始指南：</h3>
+                    <h3>快速開始指南（按執行流程排列）：</h3>
                     <ol>
-                        <li><strong>系統初始化：</strong>首次使用請點擊「初始化系統」建立基本資料夾結構</li>
-                        <li><strong>批量建立：</strong>準備學生總表（包含 LT 欄位），使用「從學生總表建立老師記錄簿」功能</li>
-                        <li><strong>資料匯入：</strong>系統會自動從學生總表提取各老師對應的學生資料</li>
-                        <li><strong>日常使用：</strong>老師們可直接在各自的記錄簿中進行電聯記錄</li>
-                        <li><strong>進度追蹤：</strong>使用「檢查全體進度」監控整體電聯情況</li>
+                        <li><strong>🚀 系統初始化：</strong>首次使用請先「初始化系統」並「檢查系統狀態」</li>
+                        <li><strong>📋 核心功能：</strong>準備學生總表（包含 LT 欄位），使用「從學生總表建立老師記錄簿」</li>
+                        <li><strong>🔄 學生異動：</strong>如需學生轉學、轉班或資料更新，使用學生異動管理功能</li>
+                        <li><strong>📊 定期監控：</strong>定期使用「檢查全體進度」和「生成進度報告」了解電聯狀況</li>
+                        <li><strong>⚙️ 系統維護：</strong>使用系統管理功能進行備份、設定和維護</li>
                     </ol>
+                    
+                    <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <h4 style="color: #0066cc; margin: 0 0 10px 0;">💡 功能狀態說明：</h4>
+                        <p style="margin: 5px 0; font-size: 14px;">
+                            <span style="color: #28a745;">✅ 可用功能</span> | 
+                            <span style="color: #ffc107;">⚠️ 需檢查功能</span> | 
+                            <span style="color: #dc3545;">❌ 不可用功能</span>
+                        </p>
+                        <p style="margin: 5px 0; font-size: 13px; color: #666;">
+                            系統會自動檢測各功能的後端支援狀態，並在按鈕上顯示對應標示。
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1720,6 +1869,20 @@
                     button.disabled = false;
                     closeMasterListModal();
                     
+                    // 檢查結果是否為空
+                    if (!result) {
+                        console.error('processMasterList received null result');
+                        alert('❌ 系統錯誤：無法獲取處理結果，請稍後再試');
+                        return;
+                    }
+                    
+                    // 檢查結果格式
+                    if (typeof result !== 'object') {
+                        console.error('processMasterList received invalid result format:', result);
+                        alert('❌ 系統錯誤：返回資料格式異常');
+                        return;
+                    }
+                    
                     if (result.success) {
                         alert('✅ ' + result.message);
                         if (result.results && result.results.successCount > 0) {
@@ -1763,6 +1926,21 @@
                     button.textContent = originalText;
                     button.disabled = false;
                     closeTeacherModal();
+                    
+                    // 檢查結果是否為空
+                    if (!result) {
+                        console.error('createSingleTeacher received null result');
+                        alert('❌ 系統錯誤：無法獲取建立結果，請稍後再試');
+                        return;
+                    }
+                    
+                    // 檢查結果格式
+                    if (typeof result !== 'object') {
+                        console.error('createSingleTeacher received invalid result format:', result);
+                        alert('❌ 系統錯誤：返回資料格式異常');
+                        return;
+                    }
+                    
                     if (result.success) {
                         alert('老師記錄簿建立成功！\n' + result.message);
                         if (result.recordBookUrl) {
@@ -1787,6 +1965,20 @@
             if (confirm('確定要初始化系統嗎？這將建立必要的資料夾結構。')) {
                 google.script.run
                     .withSuccessHandler(function(result) {
+                        // 檢查結果是否為空
+                        if (!result) {
+                            console.error('initializeSystem received null result');
+                            alert('❌ 系統錯誤：無法獲取初始化結果，請稍後再試');
+                            return;
+                        }
+                        
+                        // 檢查結果格式
+                        if (typeof result !== 'object') {
+                            console.error('initializeSystem received invalid result format:', result);
+                            alert('❌ 系統錯誤：返回資料格式異常');
+                            return;
+                        }
+                        
                         if (result.success) {
                             alert('系統初始化完成！\n' + result.message);
                             
