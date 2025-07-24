@@ -5,13 +5,8 @@
  */
 
 /**
- * 部署環境枚舉
+ * 部署環境枚舉（已在 HealthCheckService.gs 中定義，此處不再重複宣告）
  */
-const DEPLOYMENT_ENVIRONMENTS = {
-  DEVELOPMENT: 'development',
-  STAGING: 'staging',
-  PRODUCTION: 'production'
-};
 
 /**
  * 部署狀態枚舉

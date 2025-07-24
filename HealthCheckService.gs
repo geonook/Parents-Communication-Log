@@ -49,15 +49,8 @@ const DEPLOYMENT_ENVIRONMENTS = {
 };
 
 /**
- * CI/CD 階段枚舉
+ * CI/CD 階段枚舉（未使用，已在 CiCdOrchestrator.gs 中定義相關常數）
  */
-const CICD_STAGES = {
-  BUILD: 'build',
-  TEST: 'test',
-  QUALITY_GATE: 'quality_gate',
-  DEPLOY: 'deploy',
-  MONITOR: 'monitor'
-};
 
 /**
  * 部署風險等級枚舉
