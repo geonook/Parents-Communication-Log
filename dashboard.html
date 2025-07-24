@@ -1670,23 +1670,71 @@
                 console.log(`${APP_CONFIG.name} v${APP_CONFIG.version} initializing...`);
                 
                 try {
-                    // 註冊模態框
+                    // 1. 註冊模態框
                     this.registerModals();
                     
-                    // 設置事件監聽器
+                    // 2. 設置事件監聽器
                     this.setupEventListeners();
                     
-                    // 初始化系統狀態
+                    // 3. 檢查系統狀態
+                    await this.checkSystemStatus();
+                    
+                    // 4. 初始化系統狀態
                     await this.initializeSystemState();
                     
-                    // 載入系統統計
+                    // 5. 載入系統統計 (確保最後執行)
                     await this.loadSystemStats();
                     
+                    // 6. 初始化完成標記
+                    StateManager.setState('appInitialized', true);
                     console.log('Application initialized successfully');
                 } catch (error) {
                     console.error('Application initialization failed:', error);
                     Utils.notify.error('初始化失敗', '應用程式初始化時發生錯誤，請重新載入頁面');
+                    
+                    // 即使初始化失敗，也設置預設狀態避免空白頁面
+                    this.setDefaultStatsDisplay();
                 }
+            },
+            
+            async checkSystemStatus() {
+                try {
+                    Utils.loading.show('檢查系統狀態...');
+                    
+                    // 檢查後端連線狀態
+                    const response = await Utils.api.call('getSystemStatsWeb');
+                    
+                    if (!response) {
+                        console.warn('System status check failed - backend may be unavailable');
+                        throw new Error('後端服務無回應');
+                    }
+                    
+                    console.log('System status check passed');
+                    StateManager.setState('systemOnline', true);
+                    
+                } catch (error) {
+                    console.error('System status check failed:', error);
+                    StateManager.setState('systemOnline', false);
+                    
+                    // 不拋出錯誤，允許離線模式運行
+                    Utils.notify.warning('系統狀態', '部分功能可能無法使用，請檢查網路連線');
+                } finally {
+                    Utils.loading.hide();
+                }
+            },
+            
+            setDefaultStatsDisplay() {
+                const defaultStats = {
+                    teacherCount: 0,
+                    studentCount: 0,
+                    contactCount: 0,
+                    semesterProgress: '0%',
+                    currentSemester: 'Fall',
+                    currentTerm: 'Beginning'
+                };
+                
+                this.updateStatsDisplay(defaultStats);
+                console.log('Default stats display set');
             },
             
             registerModals() {
@@ -1718,6 +1766,22 @@
                     }
                 });
                 
+                // 異動管理模態框關閉事件
+                document.querySelectorAll('.change-modal-close').forEach(closeBtn => {
+                    closeBtn.addEventListener('click', function() {
+                        this.closest('.change-modal').style.display = 'none';
+                    });
+                });
+                
+                // 點擊模態框外部關閉
+                document.querySelectorAll('.change-modal').forEach(modal => {
+                    modal.addEventListener('click', function(event) {
+                        if (event.target === this) {
+                            this.style.display = 'none';
+                        }
+                    });
+                });
+                
                 // 學期/階段選擇器
                 const semesterSelect = Utils.dom.$('#semesterSelect');
                 const termSelect = Utils.dom.$('#termSelect');
@@ -1733,6 +1797,16 @@
                     termSelect.addEventListener('change', (e) => {
                         StateManager.setState('currentTerm', e.target.value);
                         this.updateSystemStats();
+                    });
+                }
+                
+                // 設定選擇器事件監聽
+                const updateStatsBtn = document.getElementById('updateStatsBtn');
+                if (updateStatsBtn) {
+                    updateStatsBtn.addEventListener('click', function() {
+                        const semester = document.getElementById('semesterSelect').value;
+                        const term = document.getElementById('termSelect').value;
+                        updateStatsByStage(semester, term);
                     });
                 }
             },
@@ -1751,10 +1825,57 @@
             async loadSystemStats() {
                 try {
                     Utils.loading.show('載入系統統計中...');
-                    const stats = await Utils.api.call('getSystemStatsWeb');
-                    StateManager.setState('systemStats', stats);
+                    
+                    // 調用統計 API
+                    const response = await Utils.api.call('getSystemStatsWeb');
+                    
+                    // 檢查響應是否為空或無效
+                    if (!response) {
+                        console.error('Received null response from getSystemStatsWeb');
+                        throw new Error('無法獲取系統統計資料');
+                    }
+                    
+                    // 檢查響應格式是否正確
+                    if (typeof response !== 'object') {
+                        console.error('Invalid response format from getSystemStatsWeb:', response);
+                        throw new Error('系統統計資料格式異常');
+                    }
+                    
+                    // 檢查是否成功獲取資料
+                    if (response.success && response.stats) {
+                        StateManager.setState('systemStats', response.stats);
+                        this.updateStatsDisplay(response.stats);
+                        
+                        // 設定預設選擇器值
+                        const semesterSelect = document.getElementById('semesterSelect');
+                        const termSelect = document.getElementById('termSelect');
+                        
+                        if (semesterSelect && response.stats.currentSemester) {
+                            semesterSelect.value = response.stats.currentSemester;
+                        }
+                        if (termSelect && response.stats.currentTerm) {
+                            termSelect.value = response.stats.currentTerm;
+                        }
+                        
+                        console.log('System stats loaded successfully');
+                    } else {
+                        console.error('Failed to get system stats:', response.message);
+                        throw new Error(response.message || '無法獲取系統統計資料');
+                    }
                 } catch (error) {
                     console.error('Failed to load system stats:', error);
+                    Utils.notify.error('載入失敗', error.message || '統計資料載入失敗，請檢查網路連線或重新整理頁面');
+                    
+                    // 設置預設統計資料
+                    const defaultStats = {
+                        teacherCount: 0,
+                        studentCount: 0,
+                        contactCount: 0,
+                        semesterProgress: '0%',
+                        currentSemester: 'Fall',
+                        currentTerm: 'Beginning'
+                    };
+                    this.updateStatsDisplay(defaultStats);
                 } finally {
                     Utils.loading.hide();
                 }
@@ -1804,11 +1925,34 @@
                 };
                 
                 if (stats && typeof stats === 'object') {
+                    // 處理一般統計數據
                     Object.entries(elements).forEach(([key, element]) => {
-                        if (element && stats[key] !== undefined) {
-                            element.textContent = stats[key];
+                        if (element) {
+                            let value = stats[key];
+                            
+                            // 特殊處理進度百分比
+                            if (key === 'progressRate' && stats.semesterProgress !== undefined) {
+                                value = stats.semesterProgress;
+                            }
+                            
+                            // 確保有值且不為 undefined
+                            if (value !== undefined && value !== null) {
+                                element.textContent = value;
+                            } else {
+                                element.textContent = key === 'progressRate' ? '0%' : '0';
+                            }
                         }
                     });
+                    
+                    console.log('Stats display updated:', stats);
+                } else {
+                    // 設置預設值
+                    Object.entries(elements).forEach(([key, element]) => {
+                        if (element) {
+                            element.textContent = key === 'progressRate' ? '0%' : '0';
+                        }
+                    });
+                    console.log('Stats display set to default values');
                 }
             }
         };
@@ -2421,26 +2565,7 @@
                 .processStudentRollbackWeb(changeId);
         }
         
-        // 模態框關閉事件處理
-        document.addEventListener('DOMContentLoaded', function() {
-            // 現有的 DOMContentLoaded 事件處理...
-            
-            // 異動管理模態框關閉事件
-            document.querySelectorAll('.change-modal-close').forEach(closeBtn => {
-                closeBtn.addEventListener('click', function() {
-                    this.closest('.change-modal').style.display = 'none';
-                });
-            });
-            
-            // 點擊模態框外部關閉
-            document.querySelectorAll('.change-modal').forEach(modal => {
-                modal.addEventListener('click', function(event) {
-                    if (event.target === this) {
-                        this.style.display = 'none';
-                    }
-                });
-            });
-        });
+        // 模態框關閉事件處理 - 移動到 App.init() 中
 
         function checkAllProgress() {
             const button = event.target;
@@ -2949,22 +3074,7 @@
             alert(message);
         }
         
-        // 頁面載入時自動檢查系統狀態
-        window.addEventListener('DOMContentLoaded', function() {
-            // 延遲執行以確保頁面完全載入
-            setTimeout(function() {
-                google.script.run
-                    .withSuccessHandler(function(result) {
-                        if (result.success) {
-                            updateSystemStatusDisplay(result.systemStatus);
-                        }
-                    })
-                    .withFailureHandler(function(error) {
-                        console.log('初始狀態檢查失敗：', error);
-                    })
-                    .getSystemStatusWeb();
-            }, 1000);
-        });
+        // 頁面載入時自動檢查系統狀態 - 移動到 App.init() 中
 
         // ========== 詳細系統診斷 ==========
         
@@ -3256,27 +3366,7 @@
             }
         }
         
-        // 頁面載入時更新統計
-        document.addEventListener('DOMContentLoaded', function() {
-            updateStats();
-            
-            // 設定選擇器事件監聽
-            document.getElementById('updateStatsBtn').addEventListener('click', function() {
-                const semester = document.getElementById('semesterSelect').value;
-                const term = document.getElementById('termSelect').value;
-                updateStatsByStage(semester, term);
-            });
-            
-            // 設定預設選擇器值（使用系統配置）
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    if (result.success) {
-                        document.getElementById('semesterSelect').value = result.stats.currentSemester;
-                        document.getElementById('termSelect').value = result.stats.currentTerm;
-                    }
-                })
-                .getSystemStatsWeb();
-        });
+        // 頁面載入時更新統計 - 移動到 App.init() 中
         
         // ===== APPLICATION STARTUP =====
         // 統一的應用程式初始化
