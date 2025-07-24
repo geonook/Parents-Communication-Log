@@ -4,10 +4,40 @@
  * Version: 2.0.0 - Phase 2 重構版本，使用服務層架構
  */
 
-// 初始化服務實例
-const teacherService = new TeacherService();
-const studentService = new StudentService();
-const systemService = new SystemService();
+// 延遲初始化服務實例
+let teacherService = null;
+let studentService = null;
+let systemService = null;
+
+/**
+ * 獲取教師服務實例（延遲初始化）
+ */
+function getTeacherService() {
+  if (!teacherService) {
+    teacherService = new TeacherService();
+  }
+  return teacherService;
+}
+
+/**
+ * 獲取學生服務實例（延遲初始化）
+ */
+function getStudentService() {
+  if (!studentService) {
+    studentService = new StudentService();
+  }
+  return studentService;
+}
+
+/**
+ * 獲取系統服務實例（延遲初始化）
+ */
+function getSystemService() {
+  if (!systemService) {
+    systemService = new SystemService();
+  }
+  return systemService;
+}
 
 /**
  * 處理 GET 請求，返回 Dashboard HTML 頁面
@@ -47,7 +77,7 @@ function doPost(e) {
 function initializeApiRoutes() {
   // 教師相關路由
   ApiRouter.register('createFromMasterList', async (params) => {
-    return await teacherService.createFromMasterList(params.masterListId);
+    return await getTeacherService().createFromMasterList(params.masterListId);
   }, { description: '從學生總表創建教師記錄簿' });
   
   ApiRouter.register('createSingleTeacher', async (params) => {
@@ -56,86 +86,86 @@ function initializeApiRoutes() {
       subject: params.subject || 'English',
       classes: params.classes
     };
-    return await teacherService.createSingleTeacher(teacherInfo);
+    return await getTeacherService().createSingleTeacher(teacherInfo);
   }, { description: '創建單一教師記錄簿' });
   
   ApiRouter.register('batchCreateTeachers', async (params) => {
-    return await teacherService.batchCreateTeachers(params.teachersList);
+    return await getTeacherService().batchCreateTeachers(params.teachersList);
   }, { description: '批量創建教師記錄簿' });
   
   ApiRouter.register('getTeachersList', async (params) => {
-    return await teacherService.getTeachersList();
+    return await getTeacherService().getTeachersList();
   }, { description: '獲取教師列表' });
   
   ApiRouter.register('getTeacherDetails', async (params) => {
-    return await teacherService.getTeacherDetails(params.teacherId);
+    return await getTeacherService().getTeacherDetails(params.teacherId);
   }, { description: '獲取教師詳細資訊' });
   
   ApiRouter.register('repairTeacherRecordBook', async (params) => {
-    return await teacherService.repairTeacherRecordBook(params.teacherId);
+    return await getTeacherService().repairTeacherRecordBook(params.teacherId);
   }, { description: '修復教師記錄簿' });
   
   // 學生相關路由
   ApiRouter.register('getStudentData', async (params) => {
-    return await studentService.getStudentData(params.sheetId);
+    return await getStudentService().getStudentData(params.sheetId);
   }, { description: '獲取學生資料' });
   
   ApiRouter.register('importStudentData', async (params) => {
-    return await studentService.importStudentData(params.sourceSheetId, params.options);
+    return await getStudentService().importStudentData(params.sourceSheetId, params.options);
   }, { description: '導入學生資料' });
   
   ApiRouter.register('searchStudents', async (params) => {
-    return await studentService.searchStudents(params.searchCriteria);
+    return await getStudentService().searchStudents(params.searchCriteria);
   }, { description: '搜尋學生' });
   
   ApiRouter.register('getStudentDetails', async (params) => {
-    return await studentService.getStudentDetails(params.studentId);
+    return await getStudentService().getStudentDetails(params.studentId);
   }, { description: '獲取學生詳細資訊' });
   
   ApiRouter.register('updateStudentInfo', async (params) => {
-    return await studentService.updateStudentInfo(params.studentId, params.updateData);
+    return await getStudentService().updateStudentInfo(params.studentId, params.updateData);
   }, { description: '更新學生資訊' });
   
   ApiRouter.register('getClassStudents', async (params) => {
-    return await studentService.getClassStudents(params.className);
+    return await getStudentService().getClassStudents(params.className);
   }, { description: '獲取班級學生列表' });
   
   // 系統相關路由
   ApiRouter.register('getSystemStatus', async (params) => {
-    return await systemService.getSystemStatus();
+    return await getSystemService().getSystemStatus();
   }, { description: '獲取系統狀態' });
   
   ApiRouter.register('initializeSystem', async (params) => {
-    return await systemService.initializeSystem(params.config);
+    return await getSystemService().initializeSystem(params.config);
   }, { description: '系統初始化' });
   
   ApiRouter.register('runSystemDiagnostics', async (params) => {
-    return await systemService.runSystemDiagnostics(params.options);
+    return await getSystemService().runSystemDiagnostics(params.options);
   }, { description: '系統診斷' });
   
   ApiRouter.register('validateConfiguration', async (params) => {
-    return await systemService.validateConfiguration();
+    return await getSystemService().validateConfiguration();
   }, { description: '系統配置驗證' });
   
   ApiRouter.register('createSystemBackup', async (params) => {
-    return await systemService.createSystemBackup(params.options);
+    return await getSystemService().createSystemBackup(params.options);
   }, { description: '系統備份' });
   
   ApiRouter.register('resetSystem', async (params) => {
-    return await systemService.resetSystem(params.options);
+    return await getSystemService().resetSystem(params.options);
   }, { description: '系統重置' });
   
   // 向後兼容的別名路由
   ApiRouter.register('getStats', async (params) => {
-    return await systemService.getSystemStatus();
+    return await getSystemService().getSystemStatus();
   }, { description: '獲取系統統計（向後兼容）' });
   
   ApiRouter.register('setupCompleteSystem', async (params) => {
-    return await systemService.initializeSystem();
+    return await getSystemService().initializeSystem();
   }, { description: '完整系統設定（向後兼容）' });
   
   ApiRouter.register('getAvailableClasses', async (params) => {
-    const studentData = await studentService.getStudentData();
+    const studentData = await getStudentService().getStudentData();
     if (studentData.success && studentData.data.records) {
       const classIndex = studentData.data.headers.findIndex(h => 
         h && h.toString().toLowerCase().includes('english class')
