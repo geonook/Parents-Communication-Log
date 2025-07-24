@@ -2334,4 +2334,376 @@ const DataCache = {
       newestItem: Math.max(...items.map(item => item.created))
     };
   }
+}
+
+// ===== 未來資料庫適配器介面 =====
+// 遵循 CLAUDE.md 規範：預留未來擴展空間，不影響現有系統
+
+/**
+ * 未來資料庫支援系統
+ * 為 Airtable、Supabase 等資料庫預留標準化介面
+ */
+const FutureDatabaseAdapters = {
+  /**
+   * Airtable 適配器（預留實現）
+   */
+  airtable: {
+    enabled: false,
+    type: 'airtable',
+    
+    /**
+     * 初始化 Airtable 連接
+     */
+    initialize(config = {}) {
+      console.log('📋 Airtable 適配器初始化 (預留功能)');
+      
+      // 未來實現時的配置檢查
+      if (!config.apiKey || !config.baseId) {
+        return {
+          success: false,
+          message: 'Airtable 配置不完整 - 需要 apiKey 和 baseId'
+        };
+      }
+      
+      // 預留：未來的 Airtable API 初始化邏輯
+      console.log('⚠️ Airtable 適配器尚未實現');
+      return {
+        success: false,
+        message: 'Airtable 適配器尚未實現，預留給未來版本'
+      };
+    },
+    
+    /**
+     * 學生資料查詢（預留介面）
+     */
+    async getStudent(id) {
+      console.log(`📋 Airtable 學生查詢: ${id} (預留功能)`);
+      throw new Error('Airtable 適配器尚未實現');
+    },
+    
+    /**
+     * 班級學生查詢（預留介面）
+     */
+    async getStudentsByClass(className) {
+      console.log(`📋 Airtable 班級查詢: ${className} (預留功能)`);
+      throw new Error('Airtable 適配器尚未實現');
+    },
+    
+    /**
+     * 系統統計查詢（預留介面）
+     */
+    async getSystemStats() {
+      console.log('📋 Airtable 統計查詢 (預留功能)');
+      throw new Error('Airtable 適配器尚未實現');
+    },
+    
+    /**
+     * 學生資料更新（預留介面）
+     */
+    async updateStudent(id, data) {
+      console.log(`📋 Airtable 學生更新: ${id} (預留功能)`);
+      throw new Error('Airtable 適配器尚未實現');
+    },
+    
+    /**
+     * 批次操作（預留介面）
+     */
+    async batchOperation(operations) {
+      console.log(`📋 Airtable 批次操作: ${operations.length} 項目 (預留功能)`);
+      throw new Error('Airtable 適配器尚未實現');
+    },
+    
+    /**
+     * 連接測試（預留介面）
+     */
+    async testConnection() {
+      console.log('📋 Airtable 連接測試 (預留功能)');
+      return {
+        success: false,
+        message: 'Airtable 適配器尚未實現'
+      };
+    }
+  },
+  
+  /**
+   * Supabase 適配器（預留實現）
+   */
+  supabase: {
+    enabled: false,
+    type: 'supabase',
+    
+    /**
+     * 初始化 Supabase 連接
+     */
+    initialize(config = {}) {
+      console.log('🗄️ Supabase 適配器初始化 (預留功能)');
+      
+      // 未來實現時的配置檢查
+      if (!config.url || !config.apiKey) {
+        return {
+          success: false,
+          message: 'Supabase 配置不完整 - 需要 url 和 apiKey'
+        };
+      }
+      
+      // 預留：未來的 Supabase 客戶端初始化邏輯
+      console.log('⚠️ Supabase 適配器尚未實現');
+      return {
+        success: false,
+        message: 'Supabase 適配器尚未實現，預留給未來版本'
+      };
+    },
+    
+    /**
+     * 學生資料查詢（預留介面）
+     */
+    async getStudent(id) {
+      console.log(`🗄️ Supabase 學生查詢: ${id} (預留功能)`);
+      throw new Error('Supabase 適配器尚未實現');
+    },
+    
+    /**
+     * 班級學生查詢（預留介面）
+     */
+    async getStudentsByClass(className) {
+      console.log(`🗄️ Supabase 班級查詢: ${className} (預留功能)`);
+      throw new Error('Supabase 適配器尚未實現');
+    },
+    
+    /**
+     * 系統統計查詢（預留介面）
+     */
+    async getSystemStats() {
+      console.log('🗄️ Supabase 統計查詢 (預留功能)');
+      throw new Error('Supabase 適配器尚未實現');
+    },
+    
+    /**
+     * 學生資料更新（預留介面）
+     */
+    async updateStudent(id, data) {
+      console.log(`🗄️ Supabase 學生更新: ${id} (預留功能)`);
+      throw new Error('Supabase 適配器尚未實現');
+    },
+    
+    /**
+     * 批次操作（預留介面）
+     */
+    async batchOperation(operations) {
+      console.log(`🗄️ Supabase 批次操作: ${operations.length} 項目 (預留功能)`);
+      throw new Error('Supabase 適配器尚未實現');
+    },
+    
+    /**
+     * 連接測試（預留介面）
+     */
+    async testConnection() {
+      console.log('🗄️ Supabase 連接測試 (預留功能)');
+      return {
+        success: false,
+        message: 'Supabase 適配器尚未實現'
+      };
+    }
+  },
+  
+  /**
+   * 取得可用的資料庫適配器清單
+   */
+  getAvailableAdapters() {
+    return {
+      current: 'googlesheets',
+      available: ['googlesheets'],
+      reserved: ['airtable', 'supabase'],
+      message: '目前只支援 Google Sheets，Airtable 和 Supabase 為未來預留'
+    };
+  },
+  
+  /**
+   * 適配器切換準備（預留功能）
+   */
+  prepareDatabaseSwitch(targetAdapter) {
+    console.log(`🔄 準備切換到 ${targetAdapter} (預留功能)`);
+    
+    if (!['airtable', 'supabase'].includes(targetAdapter)) {
+      return {
+        success: false,
+        message: `不支援的資料庫類型: ${targetAdapter}`
+      };
+    }
+    
+    if (!this[targetAdapter].enabled) {
+      return {
+        success: false,
+        message: `${targetAdapter} 適配器尚未實現或啟用`
+      };
+    }
+    
+    // 未來實現：
+    // 1. 資料遷移規劃
+    // 2. 備份當前資料
+    // 3. 驗證目標資料庫連接
+    // 4. 執行資料遷移
+    // 5. 驗證遷移完整性
+    
+    return {
+      success: false,
+      message: '資料庫切換功能預留給未來版本'
+    };
+  }
+}
+
+/**
+ * 資料庫遷移工具（預留實現）
+ */
+const DatabaseMigrationTools = {
+  /**
+   * 規劃資料遷移
+   */
+  async planMigration(sourceDB, targetDB) {
+    console.log(`📋 規劃 ${sourceDB} → ${targetDB} 遷移 (預留功能)`);
+    
+    // 未來實現：分析資料量、估算時間、識別風險
+    return {
+      success: false,
+      message: '遷移規劃功能預留給未來版本',
+      estimatedTime: 0,
+      dataSize: 0,
+      risks: []
+    };
+  },
+  
+  /**
+   * 執行資料遷移
+   */
+  async executeMigration(sourceDB, targetDB, options = {}) {
+    console.log(`🚀 執行 ${sourceDB} → ${targetDB} 遷移 (預留功能)`);
+    
+    // 未來實現：
+    // 1. 建立遷移日誌
+    // 2. 備份源資料
+    // 3. 批次遷移資料
+    // 4. 驗證資料完整性
+    // 5. 更新系統配置
+    // 6. 清理和最佳化
+    
+    return {
+      success: false,
+      message: '資料遷移功能預留給未來版本',
+      migrationId: null,
+      log: []
+    };
+  },
+  
+  /**
+   * 驗證遷移結果
+   */
+  async validateMigration(sourceDB, targetDB) {
+    console.log(`✅ 驗證 ${sourceDB} → ${targetDB} 遷移結果 (預留功能)`);
+    
+    // 未來實現：比較源和目標資料庫的資料一致性
+    return {
+      success: false,
+      message: '遷移驗證功能預留給未來版本',
+      consistency: null,
+      issues: []
+    };
+  },
+  
+  /**
+   * 回滾遷移
+   */
+  async rollbackMigration(migrationId) {
+    console.log(`⏪ 回滾遷移 ${migrationId} (預留功能)`);
+    
+    // 未來實現：從備份恢復原始狀態
+    return {
+      success: false,
+      message: '遷移回滾功能預留給未來版本'
+    };
+  }
+}
+
+/**
+ * 外部系統整合介面（預留實現）
+ */
+const ExternalSystemIntegration = {
+  /**
+   * API 路由器（預留實現）
+   */
+  router: {
+    /**
+     * 處理 API 請求
+     */
+    handleRequest(path, method, params = {}) {
+      console.log(`🌐 API 請求: ${method} ${path} (預留功能)`);
+      
+      // 未來實現：根據 SYSTEM_CONFIG.API_STANDARDS 路由請求
+      return {
+        success: false,
+        message: 'API 路由功能預留給未來版本',
+        data: null
+      };
+    }
+  },
+  
+  /**
+   * Webhook 系統（預留實現）
+   */
+  webhooks: {
+    /**
+     * 註冊 Webhook
+     */
+    register(event, url, secret = null) {
+      console.log(`🔗 註冊 Webhook: ${event} → ${url} (預留功能)`);
+      return {
+        success: false,
+        message: 'Webhook 註冊功能預留給未來版本'
+      };
+    },
+    
+    /**
+     * 觸發 Webhook
+     */
+    trigger(event, data) {
+      console.log(`📡 觸發 Webhook: ${event} (預留功能)`);
+      return {
+        success: false,
+        message: 'Webhook 觸發功能預留給未來版本'
+      };
+    }
+  },
+  
+  /**
+   * 資料匯出（預留實現）
+   */
+  export: {
+    /**
+     * 匯出為標準格式
+     */
+    toStandardFormat(format = 'JSON', filters = {}) {
+      console.log(`📤 匯出資料 (${format}) (預留功能)`);
+      return {
+        success: false,
+        message: '資料匯出功能預留給未來版本',
+        data: null
+      };
+    }
+  },
+  
+  /**
+   * 資料匯入（預留實現）
+   */
+  import: {
+    /**
+     * 從外部系統匯入資料
+     */
+    fromExternalSystem(data, sourceSystem, mapping = {}) {
+      console.log(`📥 匯入資料來源: ${sourceSystem} (預留功能)`);
+      return {
+        success: false,
+        message: '資料匯入功能預留給未來版本',
+        imported: 0
+      };
+    }
+  }
 } 
