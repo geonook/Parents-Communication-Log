@@ -1597,52 +1597,8 @@ function calculateProgressForTeacherBook(teacherBook) {
  * 計算系統統計資料
  * @returns {Object} 系統統計
  */
-function calculateSystemStats() {
-  try {
-    const stats = {
-      totalStudents: 0,
-      totalTeachers: 0,
-      totalContacts: 0,
-      lastUpdated: new Date()
-    };
-    
-    // 統計學生總數
-    const mainFolder = getSystemMainFolder();
-    const masterListFiles = mainFolder.getFilesByName('學生總表');
-    if (masterListFiles.hasNext()) {
-      const masterListFile = masterListFiles.next();
-      const masterSheet = SpreadsheetApp.openById(masterListFile.getId());
-      const sheet = masterSheet.getActiveSheet();
-      stats.totalStudents = sheet.getLastRow() - 1; // 減去標題行
-    }
-    
-    // 統計老師和電聯記錄
-    const teacherBooks = getAllTeacherBooks();
-    stats.totalTeachers = teacherBooks.length;
-    
-    teacherBooks.forEach(book => {
-      try {
-        const contactSheet = book.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
-        if (contactSheet) {
-          stats.totalContacts += contactSheet.getLastRow() - 1; // 減去標題行
-        }
-      } catch (error) {
-        Logger.log(`❌ 處理老師記錄簿統計失敗：${book.getName()}`);
-      }
-    });
-    
-    return stats;
-    
-  } catch (error) {
-    Logger.log('❌ 計算系統統計失敗：' + error.message);
-    return {
-      totalStudents: 0,
-      totalTeachers: 0,
-      totalContacts: 0,
-      lastUpdated: new Date()
-    };
-  }
-}
+// calculateSystemStats 函數已移動到 DashboardController.gs
+// 避免重複定義導致函數調用衝突
 
 /**
  * 批量修復所有老師記錄簿的進度追蹤工作表

@@ -311,31 +311,56 @@ function initializeSystemWebBackup() {
  * 獲取系統統計資料
  */
 function getSystemStatsWeb() {
+  console.log('🔍 getSystemStatsWeb 開始執行...');
+  
   try {
     // 記錄開始時間用於性能監控
     const startTime = new Date().getTime();
     
+    // 詳細的系統狀態檢查
+    console.log('📋 檢查 SYSTEM_CONFIG...');
+    if (!SYSTEM_CONFIG) {
+      throw new Error('SYSTEM_CONFIG 未定義');
+    }
+    
+    console.log('📁 檢查主資料夾存取...');
+    const mainFolder = getSystemMainFolder();
+    if (!mainFolder) {
+      throw new Error('無法存取系統主資料夾');
+    }
+    console.log(`✅ 主資料夾存取成功: ${mainFolder.getName()}`);
+    
     // 獲取系統統計資料
+    console.log('📊 呼叫 calculateSystemStats...');
     const stats = calculateSystemStats();
     
     // 驗證stats對象不為空
     if (!stats || typeof stats !== 'object') {
+      console.error('❌ calculateSystemStats 返回了無效的統計資料:', stats);
       throw new Error('calculateSystemStats 返回了無效的統計資料');
     }
     
+    console.log('✅ calculateSystemStats 執行成功，返回統計資料:', stats);
+    
     // 記錄執行時間
     const executionTime = new Date().getTime() - startTime;
-    console.log(`getSystemStatsWeb executed in ${executionTime}ms`);
+    console.log(`⏱️ getSystemStatsWeb 執行時間: ${executionTime}ms`);
     
-    return {
+    const result = {
       success: true,
       stats: stats,
       executionTime: executionTime
     };
+    
+    console.log('🎉 getSystemStatsWeb 成功返回結果:', result);
+    return result;
+    
   } catch (error) {
     // 詳細錯誤記錄
-    console.error('getSystemStatsWeb error:', error);
-    console.error('Error stack:', error.stack);
+    console.error('❌ getSystemStatsWeb 錯誤:', error);
+    console.error('❌ 錯誤堆疊:', error.stack);
+    console.error('❌ 錯誤類型:', typeof error);
+    console.error('❌ 錯誤訊息:', error.message);
     
     // 安全的預設統計資料
     const defaultStats = {
@@ -347,15 +372,19 @@ function getSystemStatsWeb() {
       currentSemester: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_SEMESTER || 'Fall',
       currentTerm: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_TERM || 'Beginning',
       currentTermCompleted: 0,
-      currentTermTotal: 0
+      currentTermTotal: 0,
+      semesterProgress: '0%'
     };
     
-    return {
+    const errorResult = {
       success: false,
       message: `統計資料獲取失敗: ${error.message}`,
       error: error.toString(),
       stats: defaultStats
     };
+    
+    console.log('⚠️ getSystemStatsWeb 返回錯誤結果:', errorResult);
+    return errorResult;
   }
 }
 
