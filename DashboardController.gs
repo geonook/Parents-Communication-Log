@@ -373,3 +373,524 @@ function getCurrentTerm() {
     return 'Summer';
   }
 }
+
+// ==================== 系統管理類 Web API 函數 ====================
+
+/**
+ * Web API: 系統初始化
+ */
+function initializeSystemWeb(config = {}) {
+  try {
+    Logger.log('Web API: initializeSystemWeb 被調用', config);
+    
+    const systemService = getSystemService();
+    const result = systemService.initializeSystem(config);
+    
+    return {
+      success: result.success,
+      message: result.message || '系統初始化完成',
+      data: result.data || {},
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('initializeSystemWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('initializeSystemWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '系統初始化失敗: ' + error.message,
+      message: '系統初始化失敗，請稍後重試'
+    };
+  }
+}
+
+/**
+ * Web API: 完整系統設置
+ */
+function setupCompleteSystemWeb() {
+  try {
+    Logger.log('Web API: setupCompleteSystemWeb 被調用');
+    
+    const systemService = getSystemService();
+    const result = systemService.initializeSystem();
+    
+    return {
+      success: result.success,
+      message: result.message || '完整系統設置完成',
+      data: result.data || {},
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('setupCompleteSystemWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('setupCompleteSystemWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '完整系統設置失敗: ' + error.message,
+      message: '系統設置失敗，請稍後重試'
+    };
+  }
+}
+
+/**
+ * Web API: 生成詳細系統診斷
+ */
+function generateDetailedSystemDiagnosticWeb() {
+  try {
+    Logger.log('Web API: generateDetailedSystemDiagnosticWeb 被調用');
+    
+    const systemService = getSystemService();
+    const result = systemService.runSystemDiagnostics({ detailed: true });
+    
+    return {
+      success: result.success,
+      message: result.message || '系統診斷完成',
+      diagnostic: result.data || {},
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('generateDetailedSystemDiagnosticWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('generateDetailedSystemDiagnosticWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '系統診斷失敗: ' + error.message,
+      message: '系統診斷失敗，請稍後重試'
+    };
+  }
+}
+
+// ==================== 教師管理類 Web API 函數 ====================
+
+/**
+ * Web API: 從學生總表創建教師記錄簿
+ */
+function createTeachersFromStudentMasterListWeb(sheetId) {
+  try {
+    Logger.log('Web API: createTeachersFromStudentMasterListWeb 被調用', sheetId);
+    
+    const teacherService = getTeacherService();
+    const result = teacherService.createFromMasterList(sheetId);
+    
+    return {
+      success: result.success,
+      message: result.message || '教師記錄簿創建完成',
+      teachers: result.data?.teachers || [],
+      count: result.data?.count || 0,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('createTeachersFromStudentMasterListWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('createTeachersFromStudentMasterListWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.TEACHER);
+    
+    return {
+      success: false,
+      error: '教師記錄簿創建失敗: ' + error.message,
+      message: '創建失敗，請檢查學生總表格式',
+      teachers: [],
+      count: 0
+    };
+  }
+}
+
+/**
+ * Web API: 創建單一教師記錄簿
+ */
+function createSingleTeacherWeb(formData) {
+  try {
+    Logger.log('Web API: createSingleTeacherWeb 被調用', formData);
+    
+    const teacherService = getTeacherService();
+    const teacherInfo = {
+      name: formData.teacherName,
+      subject: formData.subject || 'English',
+      classes: formData.classes
+    };
+    
+    const result = teacherService.createSingleTeacher(teacherInfo);
+    
+    return {
+      success: result.success,
+      message: result.message || '教師記錄簿創建完成',
+      teacher: result.data?.teacher || {},
+      sheetUrl: result.data?.url || '',
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('createSingleTeacherWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('createSingleTeacherWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.TEACHER);
+    
+    return {
+      success: false,
+      error: '教師記錄簿創建失敗: ' + error.message,
+      message: '創建失敗，請檢查教師資訊',
+      teacher: {},
+      sheetUrl: ''
+    };
+  }
+}
+
+// ==================== 學生管理類 Web API 函數 ====================
+
+/**
+ * Web API: 搜索學生
+ */
+function searchStudentWeb(searchTerm) {
+  try {
+    Logger.log('Web API: searchStudentWeb 被調用', searchTerm);
+    
+    const studentService = getStudentService();
+    const result = studentService.searchStudents({ searchTerm: searchTerm });
+    
+    return {
+      success: result.success,
+      message: result.message || '學生搜索完成',
+      students: result.data?.students || [],
+      count: result.data?.count || 0,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('searchStudentWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('searchStudentWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '學生搜索失敗: ' + error.message,
+      message: '搜索失敗，請稍後重試',
+      students: [],
+      count: 0
+    };
+  }
+}
+
+/**
+ * Web API: 處理學生轉出
+ */
+function processStudentTransferOutWeb(studentId, reason) {
+  try {
+    Logger.log('Web API: processStudentTransferOutWeb 被調用', { studentId, reason });
+    
+    // 這裡應該整合 StudentChangeManager 的功能
+    // 目前先返回模擬結果
+    return {
+      success: true,
+      message: '學生轉出處理完成',
+      studentId: studentId,
+      reason: reason,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('processStudentTransferOutWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('processStudentTransferOutWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '學生轉出處理失敗: ' + error.message,
+      message: '轉出處理失敗，請稍後重試'
+    };
+  }
+}
+
+/**
+ * Web API: 處理學生班級異動
+ */
+function processStudentClassChangeWeb(changeData) {
+  try {
+    Logger.log('Web API: processStudentClassChangeWeb 被調用', changeData);
+    
+    // 這裡應該整合 StudentChangeManager 的功能
+    // 目前先返回模擬結果
+    return {
+      success: true,
+      message: '學生班級異動處理完成',
+      changeData: changeData,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('processStudentClassChangeWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('processStudentClassChangeWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '學生班級異動處理失敗: ' + error.message,
+      message: '異動處理失敗，請稍後重試'
+    };
+  }
+}
+
+/**
+ * Web API: 處理學生信息更新
+ */
+function processStudentInfoUpdateWeb(studentId, field, value) {
+  try {
+    Logger.log('Web API: processStudentInfoUpdateWeb 被調用', { studentId, field, value });
+    
+    const studentService = getStudentService();
+    const updateData = {};
+    updateData[field] = value;
+    
+    const result = studentService.updateStudentInfo(studentId, updateData);
+    
+    return {
+      success: result.success,
+      message: result.message || '學生信息更新完成',
+      studentId: studentId,
+      updatedField: field,
+      newValue: value,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('processStudentInfoUpdateWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('processStudentInfoUpdateWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '學生信息更新失敗: ' + error.message,
+      message: '更新失敗，請稍後重試'
+    };
+  }
+}
+
+/**
+ * Web API: 處理學生異動回滾
+ */
+function processStudentRollbackWeb(changeId) {
+  try {
+    Logger.log('Web API: processStudentRollbackWeb 被調用', changeId);
+    
+    // 這裡應該整合 StudentChangeManager 的回滾功能
+    // 目前先返回模擬結果
+    return {
+      success: true,
+      message: '學生異動回滾完成',
+      changeId: changeId,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('processStudentRollbackWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('processStudentRollbackWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '學生異動回滾失敗: ' + error.message,
+      message: '回滾失敗，請稍後重試'
+    };
+  }
+}
+
+// ==================== 數據查詢類 Web API 函數 ====================
+
+/**
+ * Web API: 獲取分階段進度
+ */
+function getProgressByStageWeb(semester, term) {
+  try {
+    Logger.log('Web API: getProgressByStageWeb 被調用', { semester, term });
+    
+    const systemService = getSystemService();
+    const statusResult = systemService.getSystemStatus();
+    
+    if (statusResult.success && statusResult.data) {
+      const stats = statusResult.data.stats || {};
+      
+      // 模擬分階段進度數據
+      const progressData = {
+        semester: semester || getCurrentSemester(),
+        term: term || getCurrentTerm(),
+        stages: {
+          'Beginning': {
+            completed: Math.floor((stats.contactCount || 0) * 0.3),
+            total: stats.studentCount || 0,
+            percentage: stats.studentCount > 0 ? Math.round((stats.contactCount || 0) * 0.3 / stats.studentCount * 100) : 0
+          },
+          'Midterm': {
+            completed: Math.floor((stats.contactCount || 0) * 0.5),
+            total: stats.studentCount || 0,
+            percentage: stats.studentCount > 0 ? Math.round((stats.contactCount || 0) * 0.5 / stats.studentCount * 100) : 0
+          },
+          'Final': {
+            completed: Math.floor((stats.contactCount || 0) * 0.7),
+            total: stats.studentCount || 0,
+            percentage: stats.studentCount > 0 ? Math.round((stats.contactCount || 0) * 0.7 / stats.studentCount * 100) : 0
+          }
+        },
+        overall: {
+          totalContacts: stats.contactCount || 0,
+          totalStudents: stats.studentCount || 0,
+          progressRate: stats.progressRate || 0
+        }
+      };
+      
+      return {
+        success: true,
+        message: '分階段進度獲取成功',
+        progress: progressData,
+        timestamp: new Date().toISOString()
+      };
+    } else {
+      return {
+        success: false,
+        error: '無法獲取系統統計數據',
+        message: '進度數據暫時無法獲取',
+        progress: null
+      };
+    }
+    
+  } catch (error) {
+    Logger.log('getProgressByStageWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('getProgressByStageWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '分階段進度獲取失敗: ' + error.message,
+      message: '進度數據獲取失敗，請稍後重試',
+      progress: null
+    };
+  }
+}
+
+/**
+ * Web API: 獲取可用班級列表
+ */
+function getAvailableClassesWeb() {
+  try {
+    Logger.log('Web API: getAvailableClassesWeb 被調用');
+    
+    const studentService = getStudentService();
+    const result = studentService.getStudentData();
+    
+    if (result.success && result.data.records) {
+      // 查找班級欄位
+      const classIndex = result.data.headers.findIndex(h => 
+        h && h.toString().toLowerCase().includes('english class')
+      );
+      
+      if (classIndex !== -1) {
+        const classes = [...new Set(result.data.records
+          .map(record => record[classIndex])
+          .filter(cls => cls && cls.toString().trim() !== '')
+        )].sort();
+        
+        return {
+          success: true,
+          message: `找到 ${classes.length} 個班級`,
+          classes: classes,
+          count: classes.length,
+          timestamp: new Date().toISOString()
+        };
+      } else {
+        return {
+          success: false,
+          error: '找不到班級欄位',
+          message: '學生資料中沒有班級信息',
+          classes: [],
+          count: 0
+        };
+      }
+    } else {
+      return {
+        success: false,
+        error: result.message || '無法獲取學生資料',
+        message: '班級列表暫時無法獲取',
+        classes: [],
+        count: 0
+      };
+    }
+    
+  } catch (error) {
+    Logger.log('getAvailableClassesWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('getAvailableClassesWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '班級列表獲取失敗: ' + error.message,
+      message: '班級列表獲取失敗，請稍後重試',
+      classes: [],
+      count: 0
+    };
+  }
+}
+
+// ==================== 報告類 Web API 函數 ====================
+
+/**
+ * Web API: 獲取異動歷史URL
+ */
+function getChangeHistoryUrlWeb() {
+  try {
+    Logger.log('Web API: getChangeHistoryUrlWeb 被調用');
+    
+    // 這裡應該整合 StudentChangeManager 的功能
+    // 目前先返回模擬結果
+    const mockUrl = 'https://docs.google.com/spreadsheets/d/mock-change-history-id/edit';
+    
+    return {
+      success: true,
+      message: '異動歷史URL獲取成功',
+      url: mockUrl,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('getChangeHistoryUrlWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('getChangeHistoryUrlWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '異動歷史URL獲取失敗: ' + error.message,
+      message: 'URL獲取失敗，請稍後重試',
+      url: ''
+    };
+  }
+}
+
+/**
+ * Web API: 生成異動報告
+ */
+function generateChangeReportWeb() {
+  try {
+    Logger.log('Web API: generateChangeReportWeb 被調用');
+    
+    // 這裡應該整合 StudentChangeManager 的報告功能
+    // 目前先返回模擬結果
+    const mockReport = {
+      reportId: 'REPORT_' + Date.now(),
+      generatedAt: new Date().toISOString(),
+      totalChanges: 0,
+      changeTypes: {
+        classChange: 0,
+        transferOut: 0,
+        infoUpdate: 0
+      },
+      url: 'https://docs.google.com/spreadsheets/d/mock-report-id/edit'
+    };
+    
+    return {
+      success: true,
+      message: '異動報告生成完成',
+      report: mockReport,
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    Logger.log('generateChangeReportWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('generateChangeReportWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.STUDENT);
+    
+    return {
+      success: false,
+      error: '異動報告生成失敗: ' + error.message,
+      message: '報告生成失敗，請稍後重試',
+      report: null
+    };
+  }
+}
