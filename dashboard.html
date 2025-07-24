@@ -1367,12 +1367,59 @@
                 async call(functionName, ...args) {
                     return new Promise((resolve, reject) => {
                         try {
+                            // 設置超時處理
+                            const timeoutId = setTimeout(() => {
+                                reject(new Error(`API調用超時: ${functionName} (30秒)`));
+                            }, 30000); // 30秒超時
+                            
+                            // 增強成功處理器
+                            const enhancedSuccessHandler = (result) => {
+                                clearTimeout(timeoutId);
+                                
+                                // 檢查結果是否為null或undefined
+                                if (result === null || result === undefined) {
+                                    console.warn(`API ${functionName} returned null/undefined`);
+                                    resolve({
+                                        success: false,
+                                        message: 'API返回空值',
+                                        error: 'NULL_RESPONSE'
+                                    });
+                                    return;
+                                }
+                                
+                                resolve(result);
+                            };
+                            
+                            // 增強失敗處理器
+                            const enhancedFailureHandler = (error) => {
+                                clearTimeout(timeoutId);
+                                console.error(`API ${functionName} failed:`, error);
+                                
+                                // 標準化錯誤格式
+                                const standardError = {
+                                    success: false,
+                                    message: error?.message || '未知錯誤',
+                                    error: error?.toString() || 'UNKNOWN_ERROR',
+                                    functionName: functionName
+                                };
+                                
+                                reject(standardError);
+                            };
+                            
+                            // 執行Google Apps Script調用
                             google.script.run
-                                .withSuccessHandler(resolve)
-                                .withFailureHandler(reject)
+                                .withSuccessHandler(enhancedSuccessHandler)
+                                .withFailureHandler(enhancedFailureHandler)
                                 [functionName](...args);
+                                
                         } catch (error) {
-                            reject(error);
+                            console.error(`API call setup failed for ${functionName}:`, error);
+                            reject({
+                                success: false,
+                                message: `API調用設置失敗: ${error.message}`,
+                                error: error.toString(),
+                                functionName: functionName
+                            });
                         }
                     });
                 }
@@ -1569,10 +1616,32 @@
                 const term = StateManager.getState('currentTerm');
                 
                 try {
-                    const stats = await Utils.api.call('getSystemStatsWeb', { semester, term });
-                    StateManager.setState('systemStats', stats);
+                    const response = await Utils.api.call('getSystemStatsWeb', { semester, term });
+                    
+                    // 檢查響應是否為空或無效
+                    if (!response) {
+                        console.error('Received null response from getSystemStatsWeb');
+                        Utils.notify.error('系統錯誤', '無法獲取系統統計資料，請稍後再試');
+                        return;
+                    }
+                    
+                    // 檢查響應格式是否正確
+                    if (typeof response !== 'object') {
+                        console.error('Invalid response format from getSystemStatsWeb:', response);
+                        Utils.notify.error('資料格式錯誤', '系統統計資料格式異常');
+                        return;
+                    }
+                    
+                    // 檢查是否成功獲取資料
+                    if (response.success) {
+                        StateManager.setState('systemStats', response.stats);
+                    } else {
+                        console.error('Failed to get system stats:', response.message);
+                        Utils.notify.error('獲取失敗', response.message || '無法獲取系統統計資料');
+                    }
                 } catch (error) {
                     console.error('Failed to update system stats:', error);
+                    Utils.notify.error('系統錯誤', '統計資料更新失敗，請檢查網路連線');
                 }
             },
             

@@ -312,28 +312,49 @@ function initializeSystemWebBackup() {
  */
 function getSystemStatsWeb() {
   try {
+    // 記錄開始時間用於性能監控
+    const startTime = new Date().getTime();
+    
     // 獲取系統統計資料
     const stats = calculateSystemStats();
     
+    // 驗證stats對象不為空
+    if (!stats || typeof stats !== 'object') {
+      throw new Error('calculateSystemStats 返回了無效的統計資料');
+    }
+    
+    // 記錄執行時間
+    const executionTime = new Date().getTime() - startTime;
+    console.log(`getSystemStatsWeb executed in ${executionTime}ms`);
+    
     return {
       success: true,
-      stats: stats
+      stats: stats,
+      executionTime: executionTime
     };
   } catch (error) {
+    // 詳細錯誤記錄
+    console.error('getSystemStatsWeb error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // 安全的預設統計資料
+    const defaultStats = {
+      teacherCount: 0,
+      studentCount: 0,
+      contactCount: 0,
+      semesterContactCount: 0,
+      currentTermProgress: 0,
+      currentSemester: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_SEMESTER || 'Fall',
+      currentTerm: SYSTEM_CONFIG?.ACADEMIC_YEAR?.CURRENT_TERM || 'Beginning',
+      currentTermCompleted: 0,
+      currentTermTotal: 0
+    };
+    
     return {
       success: false,
-      message: error.message,
-      stats: {
-        teacherCount: 0,
-        studentCount: 0,
-        contactCount: 0,
-        semesterContactCount: 0,
-        currentTermProgress: 0,
-        currentSemester: SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_SEMESTER,
-        currentTerm: SYSTEM_CONFIG.ACADEMIC_YEAR.CURRENT_TERM,
-        currentTermCompleted: 0,
-        currentTermTotal: 0
-      }
+      message: `統計資料獲取失敗: ${error.message}`,
+      error: error.toString(),
+      stats: defaultStats
     };
   }
 }
