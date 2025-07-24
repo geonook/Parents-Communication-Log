@@ -225,3 +225,151 @@ initializeApiRoutes();
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
+
+/**
+ * Web API: 獲取系統統計數據
+ * 前端 Dashboard 專用 API 端點
+ * @param {Object} params - 可選參數 {semester, term}
+ * @return {Object} 系統統計數據
+ */
+function getSystemStatsWeb(params = {}) {
+  try {
+    Logger.log('Web API: getSystemStatsWeb 被調用', params);
+    
+    const systemService = getSystemService();
+    const result = systemService.getSystemStatus();
+    
+    if (result.success && result.data) {
+      // 提取並格式化前端需要的統計數據
+      const stats = result.data.stats || {};
+      const health = result.data.health || {};
+      
+      return {
+        success: true,
+        teacherCount: stats.teacherCount || 0,
+        studentCount: stats.studentCount || 0,
+        contactCount: stats.contactCount || 0,
+        progressRate: stats.progressRate || 0,
+        systemHealth: health.status || 'unknown',
+        timestamp: new Date().toISOString(),
+        // 附加信息
+        cacheStats: result.data.cache || {},
+        semester: params.semester || getCurrentSemester(),
+        term: params.term || getCurrentTerm()
+      };
+    } else {
+      return {
+        success: false,
+        error: result.message || '無法獲取系統統計數據',
+        teacherCount: 0,
+        studentCount: 0,
+        contactCount: 0,
+        progressRate: 0
+      };
+    }
+    
+  } catch (error) {
+    Logger.log('getSystemStatsWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('getSystemStatsWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '系統統計數據獲取失敗: ' + error.message,
+      teacherCount: 0,
+      studentCount: 0,
+      contactCount: 0,
+      progressRate: 0
+    };
+  }
+}
+
+/**
+ * Web API: 獲取系統狀態信息
+ * 前端 Dashboard 專用 API 端點
+ * @return {Object} 系統狀態信息
+ */
+function getSystemStatusWeb() {
+  try {
+    Logger.log('Web API: getSystemStatusWeb 被調用');
+    
+    const systemService = getSystemService();
+    const result = systemService.getSystemStatus();
+    
+    if (result.success && result.data) {
+      return {
+        success: true,
+        systemStatus: {
+          overall: result.data.health?.status || 'unknown',
+          health: result.data.health || {},
+          stats: result.data.stats || {},
+          cache: result.data.cache || {},
+          version: result.data.version || '2.0.0',
+          timestamp: result.data.timestamp || new Date().toISOString()
+        },
+        message: '系統狀態獲取成功'
+      };
+    } else {
+      return {
+        success: false,
+        error: result.message || '無法獲取系統狀態',
+        systemStatus: {
+          overall: 'error',
+          health: {},
+          stats: {},
+          cache: {},
+          version: '2.0.0',
+          timestamp: new Date().toISOString()
+        }
+      };
+    }
+    
+  } catch (error) {
+    Logger.log('getSystemStatusWeb 錯誤: ' + error.toString());
+    ErrorHandler.handle('getSystemStatusWeb', error, ERROR_LEVELS.ERROR, ERROR_CATEGORIES.SYSTEM);
+    
+    return {
+      success: false,
+      error: '系統狀態獲取失敗: ' + error.message,
+      systemStatus: {
+        overall: 'error',
+        health: {},
+        stats: {},
+        cache: {},
+        version: '2.0.0',
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+}
+
+/**
+ * 輔助函數: 獲取當前學期
+ */
+function getCurrentSemester() {
+  // 簡單的學期判斷邏輯，可根據需要調整
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // JavaScript months are 0-indexed
+  
+  if (month >= 9 || month <= 1) {
+    return `${year}-${year + 1}`;
+  } else {
+    return `${year - 1}-${year}`;
+  }
+}
+
+/**
+ * 輔助函數: 獲取當前學期階段
+ */
+function getCurrentTerm() {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  
+  if (month >= 9 && month <= 12) {
+    return 'Fall';
+  } else if (month >= 1 && month <= 6) {
+    return 'Spring';
+  } else {
+    return 'Summer';
+  }
+}
