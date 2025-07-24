@@ -617,6 +617,23 @@ class PerformanceMonitor {
     
     return recommendations;
   }
+  
+  /**
+   * 獲取性能統計資料（為與 MetricsCollector 兼容而新增）
+   * @returns {Object} 包含測量數據的統計資料
+   */
+  static getStats() {
+    const measurements = Array.from(this.measurements.values());
+    return {
+      measurements: measurements,
+      health: this.getSystemHealth(),
+      alerts: this.alerts,
+      totalMeasurements: measurements.length,
+      averageResponseTime: measurements.length > 0 
+        ? measurements.reduce((sum, m) => sum + m.duration, 0) / measurements.length 
+        : 0
+    };
+  }
 }
 
 // ============ 便利函數 ============

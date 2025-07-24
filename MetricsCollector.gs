@@ -662,7 +662,7 @@ class MetricsCollector {
     this.aggregator = new MetricsAggregator();
     this.exporter = new MetricsExporter();
     this.eventBus = globalEventBus;
-    this.performanceMonitor = globalPerformanceMonitor;
+    this.performanceMonitor = null; // PerformanceMonitor 使用靜態方法，不需要實例
     this.cache = globalCache;
     this.errorHandler = ErrorHandler;
     
@@ -871,13 +871,15 @@ class MetricsCollector {
       const memoryUsage = this.estimateMemoryUsage();
       this.recordMetric('system_memory_usage', memoryUsage);
       
-      // 從性能監控器收集指標
-      if (this.performanceMonitor) {
-        const perfStats = this.performanceMonitor.getStats();
+      // 從性能監控器收集指標（使用靜態方法）
+      try {
+        const perfStats = PerformanceMonitor.getStats();
         if (perfStats.measurements && perfStats.measurements.length > 0) {
-          const avgResponseTime = perfStats.measurements.reduce((sum, m) => sum + m.duration, 0) / perfStats.measurements.length;
-          this.recordMetric('system_response_time', avgResponseTime);
+          this.recordMetric('system_response_time', perfStats.averageResponseTime);
+          this.recordMetric('system_performance_measurements_total', perfStats.totalMeasurements);
         }
+      } catch (error) {
+        // 性能監控器可能尚未初始化，安靜地忽略此錯誤
       }
       
     } catch (error) {
