@@ -640,6 +640,21 @@
             }
         }
         
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+            50% {
+                opacity: 0.8;
+                box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+            }
+            100% {
+                opacity: 1;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }
+        }
+        
         .success-popup h3 {
             color: #155724;
             margin-bottom: 15px;
@@ -1042,6 +1057,19 @@
                 </div>
             </div>
             
+            <!-- 系統狀態顯示區 -->
+            <div id="systemStatusIndicator" style="margin: 20px 0; padding: 0;">
+                <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 12px; border-left: 4px solid #007bff; box-shadow: 0 4px 8px rgba(0,0,0,0.1); animation: pulse 2s infinite;">
+                    <h3 style="color: #007bff; margin-bottom: 10px; font-size: 1.1rem; font-weight: 600;">🔄 檢查系統狀態中...</h3>
+                    <p style="color: #6c757d; margin: 0; font-size: 0.95rem;">正在檢查系統初始化狀態，請稍候...</p>
+                </div>
+            </div>
+            
+            <!-- 快速設定區 - 動態生成 -->
+            <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
+                <!-- 內容由 JavaScript 動態生成 -->
+            </div>
+            
             <!-- 1. 系統初始化 (首次使用) -->
             <div class="section">
                 <h2>🚀 系統初始化</h2>
@@ -1193,19 +1221,6 @@
                         </p>
                     </div>
                 </div>
-            </div>
-            
-            <!-- 系統狀態顯示區 -->
-            <div id="systemStatusIndicator" style="margin-bottom: 20px;">
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #6c757d;">
-                    <h3 style="color: #495057; margin-bottom: 10px;">🔄 檢查系統狀態中...</h3>
-                    <p style="color: #6c757d; margin: 0;">正在檢查系統初始化狀態，請稍候...</p>
-                </div>
-            </div>
-            
-            <!-- 快速設定區 - 動態生成 -->
-            <div id="quickSetupSection" style="display: none; margin-bottom: 20px;">
-                <!-- 內容由 JavaScript 動態生成 -->
             </div>
             
             <!-- 使用說明 -->
