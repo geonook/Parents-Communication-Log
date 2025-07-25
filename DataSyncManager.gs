@@ -1143,13 +1143,14 @@ function addStudentToTeacher(studentData, newTeacher) {
     // 同步更新學生總表中的 LT (Leading Teacher) 欄位
     updateStudentTeacherInMasterList(studentData.ID || studentData['Student ID'], newTeacher);
     
-    // 🔧 修復問題5：更新新老師記錄簿的學生人數統計
-    updateStudentCountInNewTeacherBook(targetBook);
+    // 🔧 修復問題5：更新新老師記錄簿的學生人數統計（增強版）
+    const statsUpdateResult = updateStudentCountInNewTeacherBook(targetBook);
     
     // 🆕 新增：同步轉移學生的 Scheduled Contact 記錄
     Logger.log(`📋 開始為轉班學生 ${updatedStudentData.ID || updatedStudentData['Student ID']} 同步 Scheduled Contact 記錄`);
+    let contactTransferResult = null;
     try {
-      const contactTransferResult = transferScheduledContactRecords(updatedStudentData, targetBook, newTeacher);
+      contactTransferResult = transferScheduledContactRecords(updatedStudentData, targetBook, newTeacher);
       if (contactTransferResult.success) {
         Logger.log(`✅ 成功轉移 ${contactTransferResult.recordCount} 筆 Scheduled Contact 記錄`);
       } else {
@@ -1157,9 +1158,15 @@ function addStudentToTeacher(studentData, newTeacher) {
       }
     } catch (contactError) {
       Logger.log(`❌ Scheduled Contact 記錄轉移發生錯誤：${contactError.message}`);
+      contactTransferResult = {
+        success: false,
+        message: contactError.message,
+        recordCount: 0
+      };
       // 不影響整體轉班操作，繼續執行
     }
     
+    // 🎯 返回增強的結果（包含統計更新詳情）
     return {
       success: true,
       teacherName: newTeacher,
@@ -1167,7 +1174,11 @@ function addStudentToTeacher(studentData, newTeacher) {
       details: {
         newEnglishClass: newEnglishClass,
         updatedFields: newEnglishClass ? ['English Class'] : []
-      }
+      },
+      // 🆕 新增統計更新結果
+      updateResult: statsUpdateResult,
+      // 🆕 新增電聯記錄轉移結果
+      contactTransferResult: contactTransferResult
     };
     
   } catch (error) {
@@ -1771,23 +1782,120 @@ function generateFixReport(fixResults) {
  * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 新老師記錄簿
  */
 function updateStudentCountInNewTeacherBook(teacherBook) {
+  const updateResult = {
+    success: false,
+    teacherBook: teacherBook.getName(),
+    actualStudentCount: 0,
+    updateDetails: {},
+    validationResults: {},
+    errors: [],
+    recommendedActions: []
+  };
+  
   try {
-    Logger.log(`📊 更新新老師記錄簿的學生人數統計：${teacherBook.getName()}`);
+    Logger.log(`📊 [強化版] 更新新老師記錄簿的學生人數統計：${teacherBook.getName()}`);
     
-    // 調用已有的學生人數統計更新函數
+    // 🎯 使用改進後的標準化統計更新函數
     if (typeof updateStudentCountInSheets === 'function') {
-      updateStudentCountInSheets(teacherBook);
-    } else {
-      // 備用實現
-      const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
-      const actualStudentCount = studentSheet && studentSheet.getLastRow() > 1 ? 
-                                 studentSheet.getLastRow() - 1 : 0;
+      const detailedUpdateResult = updateStudentCountInSheets(teacherBook);
       
-      Logger.log(`📊 新老師記錄簿學生人數：${actualStudentCount}`);
+      if (detailedUpdateResult && typeof detailedUpdateResult === 'object') {
+        // 新版本函數返回詳細結果
+        updateResult.success = detailedUpdateResult.success;
+        updateResult.actualStudentCount = detailedUpdateResult.actualStudentCount;
+        updateResult.updateDetails = {
+          updatedSheets: detailedUpdateResult.updatedSheets || [],
+          dataStandardsCompliant: detailedUpdateResult.dataStandardsCompliant || false,
+          errors: detailedUpdateResult.errors || []
+        };
+        
+        // 📊 詳細日誌輸出
+        Logger.log(`📈 統計更新結果詳情：`);
+        Logger.log(`   • 成功狀態：${detailedUpdateResult.success ? '✅ 成功' : '❌ 失敗'}`);
+        Logger.log(`   • 學生人數：${detailedUpdateResult.actualStudentCount} 人`);
+        Logger.log(`   • 更新工作表：${detailedUpdateResult.updatedSheets.length} 個`);
+        Logger.log(`   • DATA_STANDARDS 合規：${detailedUpdateResult.dataStandardsCompliant ? '✅ 是' : '⚠️ 否'}`);
+        
+        if (detailedUpdateResult.errors && detailedUpdateResult.errors.length > 0) {
+          Logger.log(`   • 錯誤/警告：${detailedUpdateResult.errors.length} 個`);
+          detailedUpdateResult.errors.forEach((error, index) => {
+            Logger.log(`     ${index + 1}. ${error}`);
+          });
+          updateResult.errors.push(...detailedUpdateResult.errors);
+        }
+        
+      } else {
+        // 舊版本函數或無返回值，使用備用驗證
+        Logger.log('⚠️ updateStudentCountInSheets 未返回詳細結果，使用備用驗證');
+        updateResult.success = true; // 假設執行成功
+        updateResult.actualStudentCount = getActualStudentCountFromSheet(teacherBook);
+        updateResult.recommendedActions.push('建議升級到新版統計更新函數');
+      }
+      
+    } else {
+      // 🔄 備用實現（如果主函數不存在）
+      Logger.log('⚠️ updateStudentCountInSheets 函數不存在，使用備用實現');
+      
+      const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+      if (!studentSheet) {
+        updateResult.errors.push('找不到學生清單工作表');
+        Logger.log('❌ 找不到學生清單工作表');
+        return updateResult;
+      }
+      
+      updateResult.actualStudentCount = studentSheet.getLastRow() > 1 ? 
+                                       studentSheet.getLastRow() - 1 : 0;
+      
+      // 使用基本方法更新統計
+      try {
+        updateSummaryStudentCount(teacherBook, updateResult.actualStudentCount);
+        updateProgressTrackingStudentCount(teacherBook, updateResult.actualStudentCount);
+        updateResult.success = true;
+        updateResult.updateDetails.updatedSheets = ['總覽工作表（基本版）', '進度追蹤工作表（基本版）'];
+        updateResult.recommendedActions.push('建議安裝完整的 updateStudentCountInSheets 函數');
+        Logger.log(`📊 備用實現完成 - 新老師記錄簿學生人數：${updateResult.actualStudentCount}`);
+      } catch (basicUpdateError) {
+        updateResult.errors.push(`備用實現失敗: ${basicUpdateError.message}`);
+        Logger.log(`❌ 備用實現失敗：${basicUpdateError.message}`);
+      }
     }
     
+    // 🔍 執行後驗證（關鍵步驟）
+    if (updateResult.success) {
+      Logger.log('🔍 執行統計更新後驗證...');
+      
+      const validationResult = performPostUpdateValidation(teacherBook, updateResult.actualStudentCount);
+      updateResult.validationResults = validationResult;
+      
+      if (!validationResult.allValid) {
+        updateResult.success = false;
+        updateResult.errors.push(`後驗證失敗: ${validationResult.issues.join('; ')}`);
+        updateResult.recommendedActions.push('需要手動檢查和修復統計數據');
+        Logger.log(`❌ 後驗證失敗：發現 ${validationResult.issues.length} 個問題`);
+      } else {
+        Logger.log(`✅ 後驗證通過：所有統計數據正確更新`);
+      }
+    }
+    
+    // 🏁 最終結果報告
+    const statusIcon = updateResult.success ? '✅' : '❌';
+    const complianceIcon = updateResult.updateDetails.dataStandardsCompliant ? '🎯' : '⚠️';
+    
+    Logger.log(`${statusIcon} 新老師記錄簿統計更新${updateResult.success ? '完成' : '失敗'}：${updateResult.actualStudentCount} 人 ${complianceIcon}`);
+    
+    if (updateResult.recommendedActions.length > 0) {
+      Logger.log(`💡 建議行動：`);
+      updateResult.recommendedActions.forEach((action, index) => {
+        Logger.log(`   ${index + 1}. ${action}`);
+      });
+    }
+    
+    return updateResult;
+    
   } catch (error) {
+    updateResult.errors.push(`系統錯誤: ${error.message}`);
     Logger.log(`❌ 更新新老師記錄簿學生人數統計失敗：${error.message}`);
+    return updateResult;
   }
 }
 
@@ -1909,4 +2017,303 @@ function generateScheduledContactsForStudent(studentData) {
     Logger.log(`❌ 生成 Scheduled Contact 記錄失敗：${error.message}`);
     return [];
   }
+}
+
+// ============ 支援函數：統計更新驗證相關 ============
+
+/**
+ * 從學生清單工作表獲取實際學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @returns {number} 實際學生人數
+ */
+function getActualStudentCountFromSheet(teacherBook) {
+  try {
+    const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    if (!studentSheet) {
+      Logger.log('⚠️ 找不到學生清單工作表，返回 0');
+      return 0;
+    }
+    
+    const studentCount = studentSheet.getLastRow() > 1 ? studentSheet.getLastRow() - 1 : 0;
+    Logger.log(`📊 從學生清單工作表獲取學生人數：${studentCount}`);
+    return studentCount;
+    
+  } catch (error) {
+    Logger.log(`❌ 獲取實際學生人數失敗：${error.message}`);
+    return 0;
+  }
+}
+
+/**
+ * 執行統計更新後驗證
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} expectedCount 預期學生人數
+ * @returns {Object} 驗證結果
+ */
+function performPostUpdateValidation(teacherBook, expectedCount) {
+  const validationResult = {
+    allValid: true,
+    issues: [],
+    validatedSheets: [],
+    expectedCount: expectedCount,
+    summarySheetCount: null,
+    progressSheetCount: null,
+    consistencyCheck: null
+  };
+  
+  try {
+    Logger.log(`🔍 執行統計更新後驗證 - 預期學生人數：${expectedCount}`);
+    
+    // 🎯 驗證1：總覽工作表中的學生人數
+    try {
+      const summaryValidation = validateSummarySheetCount(teacherBook, expectedCount);
+      validationResult.summarySheetCount = summaryValidation.actualCount;
+      validationResult.validatedSheets.push('總覽工作表');
+      
+      if (!summaryValidation.valid) {
+        validationResult.allValid = false;
+        validationResult.issues.push(`總覽工作表學生人數不正確: 預期 ${expectedCount}, 實際 ${summaryValidation.actualCount}`);
+      }
+    } catch (summaryError) {
+      validationResult.allValid = false;
+      validationResult.issues.push(`總覽工作表驗證失敗: ${summaryError.message}`);
+    }
+    
+    // 🎯 驗證2：進度追蹤工作表中的學生人數
+    try {
+      const progressValidation = validateProgressSheetCount(teacherBook, expectedCount);
+      validationResult.progressSheetCount = progressValidation.actualCount;
+      validationResult.validatedSheets.push('進度追蹤工作表');
+      
+      if (!progressValidation.valid) {
+        validationResult.allValid = false;
+        validationResult.issues.push(`進度追蹤工作表學生人數不正確: 預期 ${expectedCount}, 實際 ${progressValidation.actualCount}`);
+      }
+    } catch (progressError) {
+      validationResult.allValid = false;
+      validationResult.issues.push(`進度追蹤工作表驗證失敗: ${progressError.message}`);
+    }
+    
+    // 🎯 驗證3：與學生總表的一致性檢查
+    try {
+      const consistencyValidation = validateConsistencyWithMasterList(teacherBook, expectedCount);
+      validationResult.consistencyCheck = consistencyValidation;
+      
+      if (!consistencyValidation.consistent) {
+        validationResult.allValid = false;
+        validationResult.issues.push(`與學生總表不一致: ${consistencyValidation.message}`);
+      }
+    } catch (consistencyError) {
+      validationResult.allValid = false;
+      validationResult.issues.push(`一致性檢查失敗: ${consistencyError.message}`);
+    }
+    
+    // 📊 輸出驗證結果
+    if (validationResult.allValid) {
+      Logger.log(`✅ 統計更新後驗證通過 - 所有工作表學生人數正確: ${expectedCount}`);
+    } else {
+      Logger.log(`❌ 統計更新後驗證失敗 - 發現 ${validationResult.issues.length} 個問題:`);
+      validationResult.issues.forEach((issue, index) => {
+        Logger.log(`   ${index + 1}. ${issue}`);
+      });
+    }
+    
+  } catch (error) {
+    validationResult.allValid = false;
+    validationResult.issues.push(`驗證過程錯誤: ${error.message}`);
+    Logger.log(`❌ 統計更新後驗證過程失敗：${error.message}`);
+  }
+  
+  return validationResult;
+}
+
+/**
+ * 驗證總覽工作表中的學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} expectedCount 預期學生人數
+ * @returns {Object} 驗證結果
+ */
+function validateSummarySheetCount(teacherBook, expectedCount) {
+  const result = {
+    valid: false,
+    actualCount: null,
+    foundAt: null
+  };
+  
+  try {
+    const summarySheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.SUMMARY);
+    if (!summarySheet) {
+      result.actualCount = -1;
+      return result;
+    }
+    
+    // 搜尋學生人數欄位
+    const standardStudentCountLabels = [
+      '學生人數', '總學生數', '學生總數', '班級人數', '學生數量', '人數'
+    ];
+    
+    for (let row = 1; row <= 20; row++) {
+      for (let col = 1; col <= 10; col++) {
+        try {
+          const labelValue = summarySheet.getRange(row, col).getValue();
+          
+          if (labelValue && typeof labelValue === 'string') {
+            const labelText = labelValue.toString().trim();
+            
+            const isStudentCountLabel = standardStudentCountLabels.some(label => 
+              labelText.includes(label)
+            );
+            
+            if (isStudentCountLabel) {
+              const valueCell = summarySheet.getRange(row, col + 1);
+              const actualValue = valueCell.getValue();
+              
+              if (typeof actualValue === 'number') {
+                result.actualCount = actualValue;
+                result.foundAt = `${String.fromCharCode(65 + col)}${row + 1}`;
+                result.valid = (actualValue === expectedCount);
+                Logger.log(`🔍 總覽工作表學生人數驗證：${result.foundAt} = ${actualValue} (標籤: "${labelText}")`);
+                return result;
+              }
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    // 如果沒找到，設為未找到
+    result.actualCount = -2; // 表示未找到學生人數欄位
+    
+  } catch (error) {
+    Logger.log(`❌ 驗證總覽工作表學生人數失敗：${error.message}`);
+    result.actualCount = -3; // 表示驗證過程出錯
+  }
+  
+  return result;
+}
+
+/**
+ * 驗證進度追蹤工作表中的學生人數
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} expectedCount 預期學生人數
+ * @returns {Object} 驗證結果
+ */
+function validateProgressSheetCount(teacherBook, expectedCount) {
+  const result = {
+    valid: false,
+    actualCount: null,
+    checkedRows: 0
+  };
+  
+  try {
+    const progressSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+    if (!progressSheet) {
+      result.actualCount = -1;
+      return result;
+    }
+    
+    // 檢查是否為標準學期制結構
+    const hasStandardStructure = checkProgressSheetStructure ? 
+                                checkProgressSheetStructure(progressSheet) : false;
+    
+    if (!hasStandardStructure) {
+      result.actualCount = -2; // 結構不標準
+      return result;
+    }
+    
+    // 驗證學期行中的學生總數（第3欄）
+    const lastRow = progressSheet.getLastRow();
+    let foundCount = null;
+    
+    for (let row = 5; row <= lastRow; row++) {
+      const semesterValue = progressSheet.getRange(row, 1).getValue();
+      const termValue = progressSheet.getRange(row, 2).getValue();
+      
+      if (semesterValue && termValue) {
+        const studentCountValue = progressSheet.getRange(row, 3).getValue();
+        if (typeof studentCountValue === 'number') {
+          if (foundCount === null) {
+            foundCount = studentCountValue;
+            result.checkedRows++;
+          } else if (foundCount !== studentCountValue) {
+            // 如果不同行的學生人數不一致，這是個問題
+            Logger.log(`⚠️ 進度工作表學生人數不一致：第 ${row} 行 = ${studentCountValue}, 預期 = ${foundCount}`);
+          }
+        }
+      }
+    }
+    
+    result.actualCount = foundCount;
+    result.valid = (foundCount === expectedCount);
+    
+    Logger.log(`🔍 進度追蹤工作表學生人數驗證：檢查了 ${result.checkedRows} 行，找到學生人數 ${result.actualCount}`);
+    
+  } catch (error) {
+    Logger.log(`❌ 驗證進度追蹤工作表學生人數失敗：${error.message}`);
+    result.actualCount = -3; // 表示驗證過程出錯
+  }
+  
+  return result;
+}
+
+/**
+ * 驗證與學生總表的一致性
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook 老師記錄簿
+ * @param {number} expectedCount 預期學生人數
+ * @returns {Object} 驗證結果
+ */
+function validateConsistencyWithMasterList(teacherBook, expectedCount) {
+  const result = {
+    consistent: false,
+    message: '',
+    teacherBookCount: expectedCount,
+    masterListCount: 0
+  };
+  
+  try {
+    const teacherName = extractTeacherNameFromFileName(teacherBook.getName());
+    
+    // 獲取學生總表數據
+    const masterListData = getSystemMasterList();
+    if (!masterListData || masterListData.length < 4) {
+      result.message = '無法獲取學生總表數據';
+      return result;
+    }
+    
+    const headers = masterListData[2];
+    const studentData = masterListData.slice(3);
+    const ltColumnIndex = findLTColumnIndex(headers);
+    
+    if (ltColumnIndex === -1) {
+      result.message = '學生總表中找不到LT欄位';
+      return result;
+    }
+    
+    // 統計該老師的學生數
+    let masterListCount = 0;
+    studentData.forEach(row => {
+      if (row.length > ltColumnIndex) {
+        const teacher = row[ltColumnIndex]?.toString().trim();
+        if (teacher === teacherName) {
+          masterListCount++;
+        }
+      }
+    });
+    
+    result.masterListCount = masterListCount;
+    result.consistent = (expectedCount === masterListCount);
+    result.message = result.consistent ? 
+                    `數據一致：記錄簿 ${expectedCount} = 學生總表 ${masterListCount}` :
+                    `數據不一致：記錄簿 ${expectedCount} ≠ 學生總表 ${masterListCount}`;
+    
+    Logger.log(`🔍 一致性驗證：${teacherName} - ${result.message}`);
+    
+  } catch (error) {
+    result.message = `一致性驗證錯誤: ${error.message}`;
+    Logger.log(`❌ 一致性驗證失敗：${error.message}`);
+  }
+  
+  return result;
 }
