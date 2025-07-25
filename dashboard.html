@@ -1045,17 +1045,12 @@
             <!-- 1. 系統初始化 (首次使用) -->
             <div class="section">
                 <h2>🚀 系統初始化</h2>
-                <p class="section-description">首次使用系統前，請先執行初始化和狀態檢查</p>
+                <p class="section-description">首次使用系統前，請執行一鍵完整設定</p>
                 <div class="button-grid">
-                    <button class="action-button primary button-with-status" onclick="initializeSystem()" data-function="initializeSystem">
-                        🏗️ 初始化系統
+                    <button class="action-button primary button-with-status" onclick="setupCompleteSystem()" data-function="setupCompleteSystem">
+                        🚀 一鍵完整設定
                         <span class="function-status status-available"></span>
-                        <span class="function-tooltip">核心功能 - 可用</span>
-                    </button>
-                    <button class="action-button secondary button-with-status" onclick="checkSystemStatus()" data-function="checkSystemStatus">
-                        📊 檢查系統狀態
-                        <span class="function-status status-available"></span>
-                        <span class="function-tooltip">核心功能 - 可用</span>
+                        <span class="function-tooltip">核心功能 - 包含初始化和系統檢查</span>
                     </button>
                 </div>
             </div>
@@ -1678,17 +1673,15 @@
                     Utils.loading.show('⚙️ 設置互動功能...');
                     this.setupEventListeners();
                     
-                    // 3. 檢查系統狀態
-                    await this.checkSystemStatus();
-                    
-                    // 4. 初始化系統狀態
+                    // 3. 初始化系統狀態 (移除自動系統狀態檢查，避免載入卡住)
                     Utils.loading.show('📋 初始化系統設定...');
                     await this.initializeSystemState();
                     
-                    // 5. 載入系統統計 (確保最後執行)
-                    await this.loadSystemStats();
+                    // 4. 載入系統統計 (設置預設值，不調用後端)
+                    Utils.loading.show('📊 設置預設統計...');
+                    this.setDefaultStatsDisplay();
                     
-                    // 6. 初始化完成
+                    // 5. 初始化完成
                     Utils.loading.show('✅ 初始化完成...');
                     StateManager.setState('appInitialized', true);
                     console.log('Application initialized successfully');
@@ -1708,31 +1701,6 @@
                 }
             },
             
-            async checkSystemStatus() {
-                try {
-                    Utils.loading.show('🔍 檢查系統連線狀態...');
-                    
-                    // 檢查後端連線狀態
-                    const response = await Utils.api.call('getSystemStatsWeb');
-                    
-                    if (!response) {
-                        console.warn('System status check failed - backend may be unavailable');
-                        throw new Error('後端服務無回應');
-                    }
-                    
-                    console.log('System status check passed');
-                    StateManager.setState('systemOnline', true);
-                    
-                } catch (error) {
-                    console.error('System status check failed:', error);
-                    StateManager.setState('systemOnline', false);
-                    
-                    // 不拋出錯誤，允許離線模式運行
-                    Utils.notify.warning('系統狀態', '部分功能可能無法使用，請檢查網路連線');
-                } finally {
-                    Utils.loading.hide();
-                }
-            },
             
             setDefaultStatsDisplay() {
                 const defaultStats = {
@@ -2116,58 +2084,6 @@
                 .createSingleTeacherWeb(formData);
         }
 
-        function initializeSystem() {
-            if (confirm('確定要初始化系統嗎？這將建立必要的資料夾結構。')) {
-                google.script.run
-                    .withSuccessHandler(function(result) {
-                        // 檢查結果是否為空
-                        if (!result) {
-                            console.error('initializeSystem received null result');
-                            alert('❌ 系統錯誤：無法獲取初始化結果，請稍後再試');
-                            return;
-                        }
-                        
-                        // 檢查結果格式
-                        if (typeof result !== 'object') {
-                            console.error('initializeSystem received invalid result format:', result);
-                            alert('❌ 系統錯誤：返回資料格式異常');
-                            return;
-                        }
-                        
-                        if (result.success) {
-                            alert('系統初始化完成！\n' + result.message);
-                            
-                            // 提供多個選項讓使用者選擇要開啟的檔案
-                            const options = [];
-                            if (result.mainFolderUrl) options.push('系統主資料夾');
-                            if (result.masterListUrl) options.push('學生總表');
-                            if (result.adminSheetUrl) options.push('管理控制台');
-                            
-                            if (options.length > 0) {
-                                const choice = prompt('選擇要開啟的檔案：\n1. 系統主資料夾\n2. 學生總表（建議先開啟這個）\n3. 管理控制台\n\n請輸入數字 (1-3)：');
-                                
-                                switch(choice) {
-                                    case '1':
-                                        if (result.mainFolderUrl) window.open(result.mainFolderUrl, '_blank');
-                                        break;
-                                    case '2':
-                                        if (result.masterListUrl) window.open(result.masterListUrl, '_blank');
-                                        break;
-                                    case '3':
-                                        if (result.adminSheetUrl) window.open(result.adminSheetUrl, '_blank');
-                                        break;
-                                }
-                            }
-                        } else {
-                            alert('初始化失敗：' + result.message);
-                        }
-                    })
-                    .withFailureHandler(function(error) {
-                        alert('初始化失敗：' + error.message);
-                    })
-                    .initializeSystemWeb();
-            }
-        }
 
         function openSystemFolder() {
             google.script.run
@@ -2887,31 +2803,6 @@
 
         // ========== 系統狀態檢查和設定相關函數 ==========
 
-        function checkSystemStatus() {
-            const button = event.target;
-            const originalText = button.textContent;
-            button.textContent = '檢查中...';
-            button.disabled = true;
-            
-            google.script.run
-                .withSuccessHandler(function(result) {
-                    button.textContent = originalText;
-                    button.disabled = false;
-                    
-                    if (result.success) {
-                        updateSystemStatusDisplay(result.systemStatus);
-                        displaySystemStatusDetails(result.systemStatus);
-                    } else {
-                        alert('系統狀態檢查失敗：' + result.message);
-                    }
-                })
-                .withFailureHandler(function(error) {
-                    button.textContent = originalText;
-                    button.disabled = false;
-                    alert('系統狀態檢查失敗：' + error.message);
-                })
-                .getSystemStatusWeb();
-        }
         
         function setupCompleteSystem() {
             if (confirm('確定要執行一鍵完整設定嗎？\n\n這將執行以下步驟：\n• 初始化生產環境（資料夾結構、範本檔案、管理控制台）\n• 執行系統健康檢查\n\n整個過程需要幾分鐘時間。')) {
@@ -2928,7 +2819,7 @@
                         
                         if (result.success) {
                             displayCompleteSetupResults(result);
-                            checkSystemStatus(); // 重新檢查系統狀態
+                            // 移除自動檢查，讓用戶手動查看結果
                         } else {
                             alert('一鍵設定失敗：' + result.message);
                         }
@@ -2993,11 +2884,8 @@
                     <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107;">
                         <h3 style="color: #856404; margin-bottom: 10px;">⚡ 快速設定</h3>
                         <p style="color: #856404; margin-bottom: 15px;">系統尚未完整初始化，建議先執行完整設定：</p>
-                        <button class="action-button primary" onclick="setupCompleteSystem()" style="margin-right: 10px;">
+                        <button class="action-button primary" onclick="setupCompleteSystem()">
                             🚀 一鍵完整設定
-                        </button>
-                        <button class="action-button secondary" onclick="initializeSystem()">
-                            🏗️ 初始化系統
                         </button>
                     </div>
                 `;
