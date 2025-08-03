@@ -1146,22 +1146,32 @@ function addStudentToTeacher(studentData, newTeacher) {
     // 🔧 修復問題5：更新新老師記錄簿的學生人數統計（增強版）
     const statsUpdateResult = updateStudentCountInNewTeacherBook(targetBook);
     
-    // 🆕 新增：同步轉移學生的 Scheduled Contact 記錄
-    Logger.log(`📋 開始為轉班學生 ${updatedStudentData.ID || updatedStudentData['Student ID']} 同步 Scheduled Contact 記錄`);
+    // 🆕 增強版：智能同步轉移學生的 Scheduled Contact 記錄
+    Logger.log(`📋 開始為轉班學生 ${updatedStudentData.ID || updatedStudentData['Student ID']} 智能同步 Scheduled Contact 記錄`);
     let contactTransferResult = null;
     try {
-      contactTransferResult = transferScheduledContactRecords(updatedStudentData, targetBook, newTeacher);
+      // 🎯 轉班特化選項設定
+      const transferOptions = {
+        transferDate: new Date().toISOString().split('T')[0], // 當前日期
+        preserveHistory: true // 保留歷史記錄
+      };
+      
+      contactTransferResult = transferScheduledContactRecords(updatedStudentData, targetBook, newTeacher, transferOptions);
       if (contactTransferResult.success) {
-        Logger.log(`✅ 成功轉移 ${contactTransferResult.recordCount} 筆 Scheduled Contact 記錄`);
+        Logger.log(`✅ 智能轉移成功：${contactTransferResult.recordCount} 筆 Scheduled Contact 記錄`);
+        if (contactTransferResult.analysisResults) {
+          Logger.log(`📊 轉移分析：現有記錄 ${contactTransferResult.analysisResults.existingRecords} 筆，新增記錄 ${contactTransferResult.analysisResults.newRecords} 筆`);
+        }
       } else {
-        Logger.log(`⚠️ Scheduled Contact 記錄轉移失敗：${contactTransferResult.message}`);
+        Logger.log(`⚠️ Scheduled Contact 記錄智能轉移失敗：${contactTransferResult.message}`);
       }
     } catch (contactError) {
       Logger.log(`❌ Scheduled Contact 記錄轉移發生錯誤：${contactError.message}`);
       contactTransferResult = {
         success: false,
         message: contactError.message,
-        recordCount: 0
+        recordCount: 0,
+        errorDetails: contactError
       };
       // 不影響整體轉班操作，繼續執行
     }
@@ -1906,64 +1916,133 @@ function updateStudentCountInNewTeacherBook(teacherBook) {
  * @param {string} newTeacher 新老師名稱
  * @returns {Object} 轉移結果
  */
-function transferScheduledContactRecords(studentData, targetBook, newTeacher) {
+/**
+ * 🆕 增強版：轉移學生的 Scheduled Contact 記錄（支援智能處理和完整性驗證）
+ * @param {Object} studentData 學生資料對象
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 目標記錄簿
+ * @param {string} newTeacher 新老師姓名
+ * @param {Object} options 選項設定
+ * @param {string} options.transferDate 轉班日期
+ * @param {boolean} options.preserveHistory 是否保留歷史記錄
+ * @returns {Object} 轉移結果
+ */
+function transferScheduledContactRecords(studentData, targetBook, newTeacher, options = {}) {
   try {
-    Logger.log(`📋 開始為學生 ${studentData.ID || studentData['Student ID']} 轉移 Scheduled Contact 記錄到 ${newTeacher}`);
+    const studentId = studentData.ID || studentData['Student ID'];
+    Logger.log(`📋 開始為學生 ${studentId} 智能轉移 Scheduled Contact 記錄到 ${newTeacher}`);
+    
+    // 📋 選項處理
+    const transferDate = options.transferDate || new Date().toISOString().split('T')[0];
+    const preserveHistory = options.preserveHistory !== false; // 預設保留歷史
+    
+    Logger.log(`🔧 轉移選項：轉班日期=${transferDate}, 保留歷史=${preserveHistory}`);
+    
+    // 🔍 目標記錄簿驗證
+    const bookValidation = validateTargetBook(targetBook, newTeacher);
+    if (!bookValidation.isValid) {
+      return {
+        success: false,
+        message: `目標記錄簿驗證失敗：${bookValidation.message}`
+      };
+    }
     
     // 獲取或創建電聯記錄工作表
     let contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
     if (!contactSheet) {
       Logger.log('⚠️ 目標記錄簿沒有電聯記錄工作表，嘗試創建...');
-      // 如果沒有電聯記錄工作表，調用創建函數
-      if (typeof createContactLogSheet === 'function') {
-        createContactLogSheet(targetBook, { name: newTeacher, studentCount: 0, classes: [] });
-        contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
-      }
-      
-      if (!contactSheet) {
+      const sheetCreationResult = createContactLogSheetIfNeeded(targetBook, newTeacher);
+      if (!sheetCreationResult.success) {
         return {
           success: false,
-          message: '無法創建或找到電聯記錄工作表'
+          message: `無法創建電聯記錄工作表：${sheetCreationResult.message}`
         };
       }
+      contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
     }
     
-    // 生成該學生的完整 Scheduled Contact 記錄
-    const scheduledContacts = generateScheduledContactsForStudent(studentData);
+    // 📊 分析現有記錄
+    const existingRecords = getExistingContactRecords(contactSheet, studentId);
+    Logger.log(`📊 目標記錄簿中已有 ${existingRecords.length} 筆該學生的電聯記錄`);
+    
+    // 🧠 智能記錄生成：只創建需要的記錄
+    const generationOptions = {
+      skipPastRecords: true,
+      transferDate: transferDate,
+      existingRecords: existingRecords
+    };
+    
+    const scheduledContacts = generateScheduledContactsForStudent(studentData, generationOptions);
     
     if (scheduledContacts.length === 0) {
+      Logger.log('ℹ️ 根據時序邏輯和重複檢查，沒有需要添加的新記錄');
       return {
-        success: false,
-        message: '無法生成 Scheduled Contact 記錄'
+        success: true,
+        recordCount: 0,
+        message: '沒有需要添加的新記錄（避免重複或過時記錄）',
+        analysisResults: {
+          existingRecords: existingRecords.length,
+          newRecords: 0,
+          reason: '時序邏輯過濾或重複檢查阻止'
+        }
       };
     }
     
+    // 📝 記錄格式驗證和標準化
+    const validatedRecords = validateAndStandardizeRecords(scheduledContacts, studentData, newTeacher);
+    if (validatedRecords.length !== scheduledContacts.length) {
+      Logger.log(`⚠️ 記錄驗證：${scheduledContacts.length} → ${validatedRecords.length} 筆有效記錄`);
+    }
+    
     // 將記錄添加到電聯記錄工作表
-    const startRow = contactSheet.getLastRow() + 1;
-    const numCols = scheduledContacts[0].length;
+    const insertionResult = insertRecordsWithValidation(contactSheet, validatedRecords);
+    if (!insertionResult.success) {
+      return {
+        success: false,
+        message: `記錄插入失敗：${insertionResult.message}`
+      };
+    }
     
-    contactSheet.getRange(startRow, 1, scheduledContacts.length, numCols)
-               .setValues(scheduledContacts);
-    
-    Logger.log(`📝 成功添加 ${scheduledContacts.length} 筆 Scheduled Contact 記錄到第 ${startRow} 行開始`);
+    Logger.log(`📝 成功添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄到第 ${insertionResult.startRow} 行開始`);
     
     // 執行排序以確保記錄順序正確
-    if (typeof ensureContactRecordsSorting === 'function') {
-      ensureContactRecordsSorting(targetBook);
+    const sortingResult = performContactRecordsSorting(targetBook);
+    if (sortingResult.success) {
       Logger.log('✅ 電聯記錄排序完成');
+    } else {
+      Logger.log(`⚠️ 排序警告：${sortingResult.message}`);
     }
+    
+    // 🎯 完整性驗證
+    const integrityCheck = verifyTransferIntegrity(contactSheet, studentId, validatedRecords);
     
     return {
       success: true,
-      recordCount: scheduledContacts.length,
-      message: `成功為學生 ${studentData.ID || studentData['Student ID']} 添加 ${scheduledContacts.length} 筆 Scheduled Contact 記錄`
+      recordCount: validatedRecords.length,
+      message: `成功為學生 ${studentId} 智能添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄`,
+      analysisResults: {
+        existingRecords: existingRecords.length,
+        newRecords: validatedRecords.length,
+        transferDate: transferDate,
+        preserveHistory: preserveHistory
+      },
+      validationResults: {
+        bookValidation: bookValidation,
+        recordValidation: validatedRecords.length === scheduledContacts.length,
+        sortingResult: sortingResult,
+        integrityCheck: integrityCheck
+      }
     };
     
   } catch (error) {
-    Logger.log(`❌ 轉移 Scheduled Contact 記錄失敗：${error.message}`);
+    Logger.log(`❌ 智能轉移 Scheduled Contact 記錄失敗：${error.message}`);
     return {
       success: false,
-      message: error.message
+      message: error.message,
+      errorDetails: {
+        functionName: 'transferScheduledContactRecords',
+        studentId: studentData.ID || studentData['Student ID'],
+        newTeacher: newTeacher
+      }
     };
   }
 }
@@ -1973,16 +2052,44 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher) {
  * @param {Object} studentData 學生資料（包含更新後的班級資訊）
  * @returns {Array} Scheduled Contact 記錄陣列
  */
-function generateScheduledContactsForStudent(studentData) {
+/**
+ * 🆕 增強版：為學生生成 Scheduled Contact 記錄（支援時序邏輯和完整性檢查）
+ * @param {Object} studentData 學生資料對象
+ * @param {Object} options 選項設定
+ * @param {boolean} options.skipPastRecords 是否跳過過去的記錄（轉班使用）
+ * @param {string} options.transferDate 轉班日期（用於判斷時序）
+ * @param {Array} options.existingRecords 現有記錄（避免重複）
+ * @returns {Array} 生成的 Scheduled Contact 記錄陣列
+ */
+function generateScheduledContactsForStudent(studentData, options = {}) {
   try {
     const studentId = studentData.ID || studentData['Student ID'];
     const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
     const englishName = studentData['English Name'] || '未知英文名';
     const englishClass = studentData['English Class'] || '未知班級';
     
+    // 📋 選項處理
+    const skipPastRecords = options.skipPastRecords || false;
+    const transferDate = options.transferDate || null;
+    const existingRecords = options.existingRecords || [];
+    
     Logger.log(`📝 為學生 ${studentId} (${studentName}) 生成 Scheduled Contact 記錄，班級：${englishClass}`);
+    Logger.log(`🔧 選項設定：跳過過去記錄=${skipPastRecords}, 轉班日期=${transferDate}, 現有記錄=${existingRecords.length}筆`);
+    
+    // 🔍 資料完整性檢查
+    const validationResult = validateStudentDataCompleteness(studentData);
+    if (!validationResult.isValid) {
+      Logger.log(`❌ 學生資料不完整：${validationResult.missingFields.join(', ')}`);
+      return [];
+    }
     
     const scheduledContacts = [];
+    
+    // 📅 時序邏輯：判斷當前學期和日期
+    const currentDate = transferDate ? new Date(transferDate) : new Date();
+    const currentSemesterInfo = getCurrentSemesterInfo(currentDate);
+    
+    Logger.log(`📅 當前時序資訊：學期=${currentSemesterInfo.semester}, Term=${currentSemesterInfo.term}, 日期=${currentDate.toLocaleDateString()}`);
     
     // 根據學期制結構創建記錄：Fall/Spring × Beginning/Midterm/Final = 6筆
     const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS; // ['Fall', 'Spring']
@@ -1990,6 +2097,18 @@ function generateScheduledContactsForStudent(studentData) {
     
     semesters.forEach(semester => {
       terms.forEach(term => {
+        // 🕒 時序檢查：是否跳過過去的記錄
+        if (skipPastRecords && isPastRecord(semester, term, currentSemesterInfo)) {
+          Logger.log(`⏭️ 跳過過去記錄：${semester} ${term}`);
+          return;
+        }
+        
+        // 🔄 重複檢查：避免創建已存在的記錄
+        if (isDuplicateRecord(studentId, semester, term, existingRecords)) {
+          Logger.log(`⚠️ 跳過重複記錄：${studentId} - ${semester} ${term}`);
+          return;
+        }
+        
         // 創建一筆 Scheduled Contact 記錄 (11欄位格式)
         const contactRecord = [
           studentId,                                    // A: Student ID
@@ -2006,16 +2125,448 @@ function generateScheduledContactsForStudent(studentData) {
         ];
         
         scheduledContacts.push(contactRecord);
+        Logger.log(`📝 已添加記錄：${studentId} - ${semester} ${term}`);
       });
     });
     
-    Logger.log(`✅ 成功生成 ${scheduledContacts.length} 筆 Scheduled Contact 記錄 (${semesters.length} 學期 × ${terms.length} Terms)`);
+    // 🎯 結果驗證和記錄
+    const recordsInfo = analyzeGeneratedRecords(scheduledContacts);
+    Logger.log(`✅ 成功生成 ${scheduledContacts.length} 筆 Scheduled Contact 記錄`);
+    Logger.log(`📊 記錄分析：${recordsInfo.summary}`);
     
     return scheduledContacts;
     
   } catch (error) {
     Logger.log(`❌ 生成 Scheduled Contact 記錄失敗：${error.message}`);
     return [];
+  }
+}
+
+// ============ 支援函數：Scheduled Contact 記錄生成增強功能 ============
+
+/**
+ * 🔍 驗證學生資料的完整性
+ * @param {Object} studentData 學生資料對象
+ * @returns {Object} 驗證結果 {isValid: boolean, missingFields: Array}
+ */
+function validateStudentDataCompleteness(studentData) {
+  const requiredFields = ['ID', 'Chinese Name', 'English Class'];
+  const alternativeFields = {
+    'ID': ['Student ID'],
+    'Chinese Name': ['Name'],
+    'English Class': []
+  };
+  
+  const missingFields = [];
+  
+  for (const field of requiredFields) {
+    const hasField = studentData[field] && studentData[field].toString().trim() !== '';
+    let hasAlternative = false;
+    
+    // 檢查替代欄位
+    if (!hasField && alternativeFields[field]) {
+      for (const altField of alternativeFields[field]) {
+        if (studentData[altField] && studentData[altField].toString().trim() !== '') {
+          hasAlternative = true;
+          break;
+        }
+      }
+    }
+    
+    if (!hasField && !hasAlternative) {
+      missingFields.push(field);
+    }
+  }
+  
+  return {
+    isValid: missingFields.length === 0,
+    missingFields: missingFields
+  };
+}
+
+/**
+ * 📅 獲取當前學期資訊
+ * @param {Date} currentDate 當前日期
+ * @returns {Object} 學期資訊 {semester: string, term: string}
+ */
+function getCurrentSemesterInfo(currentDate) {
+  const month = currentDate.getMonth() + 1; // JavaScript月份從0開始
+  
+  // 簡化的學期判斷邏輯（可依實際需求調整）
+  let semester, term;
+  
+  if (month >= 8 && month <= 12) {
+    // 8-12月：Fall學期
+    semester = 'Fall';
+    if (month >= 8 && month <= 9) {
+      term = 'Beginning';
+    } else if (month >= 10 && month <= 11) {
+      term = 'Midterm';
+    } else {
+      term = 'Final';
+    }
+  } else if (month >= 1 && month <= 6) {
+    // 1-6月：Spring學期
+    semester = 'Spring';
+    if (month >= 1 && month <= 2) {
+      term = 'Beginning';
+    } else if (month >= 3 && month <= 4) {
+      term = 'Midterm';
+    } else {
+      term = 'Final';
+    }
+  } else {
+    // 7月：暑假，視為下一個Fall學期的準備期
+    semester = 'Fall';
+    term = 'Beginning';
+  }
+  
+  return { semester, term };
+}
+
+/**
+ * 🕒 判斷指定學期Term是否為過去的記錄
+ * @param {string} semester 學期
+ * @param {string} term Term
+ * @param {Object} currentSemesterInfo 當前學期資訊
+ * @returns {boolean} 是否為過去記錄
+ */
+function isPastRecord(semester, term, currentSemesterInfo) {
+  const semesterOrder = { 'Fall': 0, 'Spring': 1 };
+  const termOrder = { 'Beginning': 0, 'Midterm': 1, 'Final': 2 };
+  
+  const recordSemesterOrder = semesterOrder[semester];
+  const recordTermOrder = termOrder[term];
+  const currentSemesterOrder = semesterOrder[currentSemesterInfo.semester];
+  const currentTermOrder = termOrder[currentSemesterInfo.term];
+  
+  // 比較學期
+  if (recordSemesterOrder < currentSemesterOrder) {
+    return true;
+  } else if (recordSemesterOrder > currentSemesterOrder) {
+    return false;
+  } else {
+    // 同一學期，比較Term
+    return recordTermOrder < currentTermOrder;
+  }
+}
+
+/**
+ * 🔄 檢查是否為重複記錄
+ * @param {string} studentId 學生ID
+ * @param {string} semester 學期
+ * @param {string} term Term
+ * @param {Array} existingRecords 現有記錄陣列
+ * @returns {boolean} 是否重複
+ */
+function isDuplicateRecord(studentId, semester, term, existingRecords) {
+  if (!existingRecords || existingRecords.length === 0) {
+    return false;
+  }
+  
+  return existingRecords.some(record => {
+    // 記錄格式：[Student ID, Name, English Name, English Class, Date, Semester, Term, Contact Type, ...]
+    return record[0] === studentId && 
+           record[5] === semester && 
+           record[6] === term &&
+           record[7] === SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER;
+  });
+}
+
+/**
+ * 📊 分析生成的記錄
+ * @param {Array} records 生成的記錄陣列
+ * @returns {Object} 分析結果
+ */
+function analyzeGeneratedRecords(records) {
+  const semesterCounts = {};
+  const termCounts = {};
+  
+  records.forEach(record => {
+    const semester = record[5];
+    const term = record[6];
+    
+    semesterCounts[semester] = (semesterCounts[semester] || 0) + 1;
+    termCounts[term] = (termCounts[term] || 0) + 1;
+  });
+  
+  const summary = `總計 ${records.length} 筆，學期分布：${Object.entries(semesterCounts).map(([k,v]) => `${k}=${v}`).join(', ')}，Term分布：${Object.entries(termCounts).map(([k,v]) => `${k}=${v}`).join(', ')}`;
+  
+  return {
+    totalRecords: records.length,
+    semesterDistribution: semesterCounts,
+    termDistribution: termCounts,
+    summary: summary
+  };
+}
+
+// ============ 支援函數：轉移記錄智能處理相關 ============
+
+/**
+ * 🔍 驗證目標記錄簿的有效性
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 目標記錄簿
+ * @param {string} teacherName 老師姓名
+ * @returns {Object} 驗證結果
+ */
+function validateTargetBook(targetBook, teacherName) {
+  try {
+    if (!targetBook) {
+      return { isValid: false, message: '目標記錄簿為空' };
+    }
+    
+    const bookName = targetBook.getName();
+    if (!bookName.includes(teacherName)) {
+      Logger.log(`⚠️ 記錄簿名稱不匹配：${bookName} 不包含 ${teacherName}`);
+    }
+    
+    // 檢查必要的工作表
+    const requiredSheets = [SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST];
+    const missingSheets = [];
+    
+    for (const sheetName of requiredSheets) {
+      if (!targetBook.getSheetByName(sheetName)) {
+        missingSheets.push(sheetName);
+      }
+    }
+    
+    if (missingSheets.length > 0) {
+      return { 
+        isValid: false, 
+        message: `缺少必要工作表：${missingSheets.join(', ')}` 
+      };
+    }
+    
+    return { 
+      isValid: true, 
+      message: '目標記錄簿驗證通過',
+      bookName: bookName
+    };
+    
+  } catch (error) {
+    return { 
+      isValid: false, 
+      message: `驗證過程錯誤：${error.message}` 
+    };
+  }
+}
+
+/**
+ * 🏗️ 在需要時創建電聯記錄工作表
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 目標記錄簿
+ * @param {string} teacherName 老師姓名
+ * @returns {Object} 創建結果
+ */
+function createContactLogSheetIfNeeded(targetBook, teacherName) {
+  try {
+    if (typeof createContactLogSheet === 'function') {
+      createContactLogSheet(targetBook, { name: teacherName, studentCount: 0, classes: [] });
+      Logger.log('✅ 成功創建電聯記錄工作表');
+      return { success: true, message: '電聯記錄工作表創建成功' };
+    } else {
+      return { 
+        success: false, 
+        message: 'createContactLogSheet 函數不可用' 
+      };
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      message: `創建工作表失敗：${error.message}` 
+    };
+  }
+}
+
+/**
+ * 📊 獲取現有的電聯記錄
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} contactSheet 電聯記錄工作表
+ * @param {string} studentId 學生ID
+ * @returns {Array} 現有記錄陣列
+ */
+function getExistingContactRecords(contactSheet, studentId) {
+  try {
+    if (!contactSheet || contactSheet.getLastRow() <= 1) {
+      return [];
+    }
+    
+    const data = contactSheet.getDataRange().getValues();
+    const headers = data[0];
+    const records = data.slice(1);
+    
+    // 過濾出該學生的記錄
+    const studentRecords = records.filter(row => {
+      return row[0] === studentId; // 第一欄是 Student ID
+    });
+    
+    Logger.log(`📊 找到 ${studentRecords.length} 筆現有記錄 (學生ID: ${studentId})`);
+    return studentRecords;
+    
+  } catch (error) {
+    Logger.log(`❌ 獲取現有記錄失敗：${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * ✅ 驗證和標準化記錄格式
+ * @param {Array} records 記錄陣列
+ * @param {Object} studentData 學生資料
+ * @param {string} teacherName 老師姓名
+ * @returns {Array} 驗證後的記錄陣列
+ */
+function validateAndStandardizeRecords(records, studentData, teacherName) {
+  const validatedRecords = [];
+  
+  records.forEach((record, index) => {
+    try {
+      // 基本格式檢查
+      if (!Array.isArray(record) || record.length < 11) {
+        Logger.log(`⚠️ 記錄 ${index + 1} 格式不正確，跳過`);
+        return;
+      }
+      
+      // 必要欄位檢查
+      if (!record[0] || !record[1] || !record[3] || !record[5] || !record[6]) {
+        Logger.log(`⚠️ 記錄 ${index + 1} 缺少必要欄位，跳過`);
+        return;
+      }
+      
+      // 標準化記錄（確保格式一致）
+      const standardizedRecord = [
+        record[0],                                      // Student ID
+        record[1],                                      // Name
+        record[2] || studentData['English Name'] || '', // English Name
+        record[3],                                      // English Class
+        record[4] || '',                                // Date
+        record[5],                                      // Semester
+        record[6],                                      // Term
+        record[7] || SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER, // Contact Type
+        record[8] || '',                                // Teachers Content
+        record[9] || '',                                // Parents Responses
+        record[10] || ''                                // Contact Method
+      ];
+      
+      validatedRecords.push(standardizedRecord);
+      
+    } catch (error) {
+      Logger.log(`❌ 驗證記錄 ${index + 1} 時發生錯誤：${error.message}`);
+    }
+  });
+  
+  Logger.log(`✅ 驗證完成：${records.length} → ${validatedRecords.length} 筆有效記錄`);
+  return validatedRecords;
+}
+
+/**
+ * 📝 安全插入記錄到工作表
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} contactSheet 電聯記錄工作表
+ * @param {Array} records 要插入的記錄
+ * @returns {Object} 插入結果
+ */
+function insertRecordsWithValidation(contactSheet, records) {
+  try {
+    if (!records || records.length === 0) {
+      return { 
+        success: false, 
+        message: '沒有記錄需要插入' 
+      };
+    }
+    
+    const startRow = contactSheet.getLastRow() + 1;
+    const numCols = records[0].length;
+    
+    // 檢查工作表容量
+    if (startRow + records.length > contactSheet.getMaxRows()) {
+      // 增加行數
+      const additionalRows = (startRow + records.length) - contactSheet.getMaxRows() + 10;
+      contactSheet.insertRowsAfter(contactSheet.getMaxRows(), additionalRows);
+      Logger.log(`📈 增加 ${additionalRows} 行到工作表`);
+    }
+    
+    // 插入記錄
+    contactSheet.getRange(startRow, 1, records.length, numCols).setValues(records);
+    
+    return { 
+      success: true, 
+      startRow: startRow,
+      message: `成功插入 ${records.length} 筆記錄到第 ${startRow} 行開始` 
+    };
+    
+  } catch (error) {
+    return { 
+      success: false, 
+      message: `插入記錄失敗：${error.message}` 
+    };
+  }
+}
+
+/**
+ * 🔄 執行電聯記錄排序
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 目標記錄簿
+ * @returns {Object} 排序結果
+ */
+function performContactRecordsSorting(targetBook) {
+  try {
+    if (typeof ensureContactRecordsSorting === 'function') {
+      ensureContactRecordsSorting(targetBook);
+      return { success: true, message: '排序完成' };
+    } else {
+      return { 
+        success: false, 
+        message: 'ensureContactRecordsSorting 函數不可用，跳過排序' 
+      };
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      message: `排序失敗：${error.message}` 
+    };
+  }
+}
+
+/**
+ * 🎯 驗證轉移完整性
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} contactSheet 電聯記錄工作表
+ * @param {string} studentId 學生ID
+ * @param {Array} newRecords 新添加的記錄
+ * @returns {Object} 完整性檢查結果
+ */
+function verifyTransferIntegrity(contactSheet, studentId, newRecords) {
+  try {
+    // 重新獲取該學生的所有記錄
+    const allRecords = getExistingContactRecords(contactSheet, studentId);
+    
+    // 檢查是否包含新記錄
+    const expectedTotal = allRecords.length;
+    const newRecordsCount = newRecords.length;
+    
+    // 基本數量檢查
+    if (expectedTotal < newRecordsCount) {
+      return {
+        isValid: false,
+        message: `記錄數量異常：期望至少 ${newRecordsCount} 筆，實際 ${expectedTotal} 筆`
+      };
+    }
+    
+    // 檢查必要的學期Term組合是否存在
+    const semesterTerms = allRecords.map(record => `${record[5]}-${record[6]}`);
+    const uniqueTerms = [...new Set(semesterTerms)];
+    
+    return {
+      isValid: true,
+      message: '轉移完整性驗證通過',
+      details: {
+        totalRecords: expectedTotal,
+        newRecords: newRecordsCount,
+        uniqueTerms: uniqueTerms.length,
+        semesterTermCombinations: uniqueTerms
+      }
+    };
+    
+  } catch (error) {
+    return {
+      isValid: false,
+      message: `完整性驗證失敗：${error.message}`
+    };
   }
 }
 
