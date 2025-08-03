@@ -277,54 +277,101 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
       };
     }
     
-    // 從原老師記錄簿移除
+    // 🆕 增強版：從原老師記錄簿完整移除學生（含統計修復）
     const fromTeacher = studentRecords.teacherRecords[0]?.teacherName || '未知';
-    studentRecords.teacherRecords.forEach(record => {
+    const studentRemovalResults = [];
+    
+    studentRecords.teacherRecords.forEach((record, index) => {
       try {
+        Logger.log(`📤 開始從原老師 ${record.teacherName} 記錄簿移除學生 ${studentId}`);
         const teacherBook = SpreadsheetApp.openById(record.fileId);
         
-        // 移除學生清單
-        if (record.studentListRow) {
-          const studentSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
-          studentSheet.deleteRow(record.studentListRow);
+        // 📊 移除前的統計快照
+        const preRemovalStats = captureTeacherBookStats(teacherBook);
+        Logger.log(`📊 移除前統計：學生 ${preRemovalStats.studentCount} 人，電聯記錄 ${preRemovalStats.contactRecords} 筆`);
+        
+        // 🗑️ 安全移除學生清單
+        const studentRemovalResult = removeStudentFromListSafely(teacherBook, record.studentListRow, studentId);
+        if (!studentRemovalResult.success) {
+          Logger.log(`⚠️ 學生清單移除警告：${studentRemovalResult.message}`);
         }
         
-        // 電聯記錄標記轉班（加上刪除線格式）
-        if (record.contactRecords && record.contactRecords.length > 0) {
-          const contactSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
-          record.contactRecords.forEach(contactRow => {
-            // 在最後一欄標記轉班狀態
-            contactSheet.getRange(contactRow, contactSheet.getLastColumn() + 1).setValue(`已轉至${newTeacher}`);
-            
-            // 為整行加上刪除線格式（包含新增的標記欄位）
-            const rowRange = contactSheet.getRange(contactRow, 1, 1, contactSheet.getLastColumn());
-            rowRange.setFontLine('line-through');
-            rowRange.setFontColor('#888888'); // 設為灰色
-          });
-        }
+        // 📋 智能處理電聯記錄（標記但不刪除，保留統計價值）
+        const contactMarkingResult = markContactRecordsAsTransferred(
+          teacherBook, 
+          record.contactRecords, 
+          studentId, 
+          newTeacher,
+          { preserveForStats: true }
+        );
         
-        // 更新總覽工作表的異動記錄
-        addStudentChangeToSummary(teacherBook, {
+        // 📝 更新總覽工作表的異動記錄
+        const summaryUpdateResult = addStudentChangeToSummary(teacherBook, {
           studentId: studentId,
           studentName: studentData['Chinese Name'] || studentData['English Name'],
           changeType: '轉班',
           fromTeacher: record.teacherName,
           toTeacher: newTeacher,
-          toClass: newClass || newTeacher, // 新增班級資訊
+          toClass: newClass || newTeacher,
           changeDate: new Date().toLocaleString(),
-          reason: newClass ? `學生轉班至${newClass}` : '學生轉班'
+          reason: newClass ? `學生轉班至${newClass}` : '學生轉班',
+          transferDetails: {
+            studentListRemoved: studentRemovalResult.success,
+            contactRecordsMarked: contactMarkingResult.markedCount
+          }
         });
         
-        // 🔧 修復問題2：重新排序電聯記錄，維持正確的Student ID順序
-        ensureContactRecordsSorting(teacherBook);
+        // 🔄 重新排序電聯記錄，維持正確的Student ID順序
+        const sortingResult = ensureContactRecordsSorting(teacherBook);
         
-        // 🔧 修復問題1：更新學生人數統計
-        updateStudentCountInSheets(teacherBook);
+        // 📊 強化版：正確更新學生人數統計（排除已轉班學生）
+        const statsUpdateResult = updateStudentCountWithTransferAdjustment(teacherBook, {
+          excludeTransferredStudents: true,
+          verifyIntegrity: true
+        });
+        
+        // 📊 移除後的統計驗證
+        const postRemovalStats = captureTeacherBookStats(teacherBook);
+        Logger.log(`📊 移除後統計：學生 ${postRemovalStats.studentCount} 人，電聯記錄 ${postRemovalStats.contactRecords} 筆`);
+        
+        // 🎯 統計一致性驗證
+        const consistencyCheck = verifyStatisticalConsistency(preRemovalStats, postRemovalStats, {
+          operation: 'remove_student',
+          studentId: studentId,
+          expectedChange: -1
+        });
+        
+        // 記錄移除結果
+        studentRemovalResults.push({
+          teacherName: record.teacherName,
+          bookId: record.fileId,
+          success: true,
+          details: {
+            studentRemoval: studentRemovalResult,
+            contactMarking: contactMarkingResult,
+            summaryUpdate: summaryUpdateResult,
+            statisticsUpdate: statsUpdateResult,
+            consistencyCheck: consistencyCheck
+          }
+        });
+        
+        Logger.log(`✅ 成功從 ${record.teacherName} 記錄簿移除學生 ${studentId}`);
         
       } catch (error) {
         Logger.log(`❌ 從原老師記錄簿移除失敗：${error.message}`);
+        studentRemovalResults.push({
+          teacherName: record.teacherName,
+          bookId: record.fileId,
+          success: false,
+          error: error.message
+        });
       }
     });
+    
+    // 📋 移除操作統計
+    const successfulRemovals = studentRemovalResults.filter(r => r.success).length;
+    const totalRemovals = studentRemovalResults.length;
+    Logger.log(`📊 學生移除操作完成：${successfulRemovals}/${totalRemovals} 個記錄簿處理成功`);
     
     // 添加到新老師記錄簿
     const newTeacherResult = addStudentToTeacher(studentData, newTeacher);
@@ -2328,5 +2375,562 @@ function testEnhancedClassTransferStatistics(testStudentId, testNewTeacher) {
     };
     Logger.log(`❌ 測試學生轉班統計更新功能失敗：${error.message}`);
     return testResult;
+  }
+}
+
+// ================================================================
+// 支援函數：原老師記錄簿處理邏輯
+// ================================================================
+
+/**
+ * 捕獲老師記錄簿統計快照
+ * 用於轉班前記錄當前統計狀態，確保數據一致性追蹤
+ * 
+ * @param {string} teacherSheetId - 老師記錄簿ID
+ * @param {string} className - 班級名稱
+ * @returns {Object} 統計快照對象
+ */
+function captureTeacherBookStats(teacherSheetId, className) {
+  try {
+    Logger.log(`📊 開始捕獲記錄簿統計快照 - 老師: ${teacherSheetId}, 班級: ${className}`);
+    
+    if (!teacherSheetId || !className) {
+      throw new Error('缺少必要參數：teacherSheetId 和 className');
+    }
+    
+    const snapshot = {
+      timestamp: new Date().toISOString(),
+      teacherSheetId: teacherSheetId,
+      className: className,
+      beforeTransfer: {},
+      afterTransfer: {},
+      metadata: {
+        captureMethod: 'captureTeacherBookStats',
+        version: '1.0'
+      }
+    };
+    
+    try {
+      const sheet = SpreadsheetApp.openById(teacherSheetId);
+      const summarySheet = sheet.getSheetByName('Summary');
+      
+      if (summarySheet) {
+        // 捕獲 Summary 工作表的關鍵統計
+        const summaryData = summarySheet.getDataRange().getValues();
+        
+        // 查找班級相關統計
+        for (let i = 0; i < summaryData.length; i++) {
+          const row = summaryData[i];
+          if (row[0] && row[0].toString().includes(className)) {
+            snapshot.beforeTransfer.summaryRow = {
+              rowIndex: i + 1,
+              data: row.slice() // 複製陣列
+            };
+            break;
+          }
+        }
+        
+        // 計算總學生數
+        const studentCounts = summaryData
+          .filter(row => row[0] && typeof row[1] === 'number')
+          .reduce((sum, row) => sum + (row[1] || 0), 0);
+          
+        snapshot.beforeTransfer.totalStudents = studentCounts;
+        
+        Logger.log(`✅ Summary 統計捕獲完成 - 總學生數: ${studentCounts}`);
+      }
+      
+      // 捕獲班級工作表統計（如果存在）
+      const classSheet = sheet.getSheetByName(className);
+      if (classSheet) {
+        const classData = classSheet.getDataRange().getValues();
+        const studentCount = classData.filter(row => row[0] && row[0] !== '學生姓名').length;
+        
+        snapshot.beforeTransfer.classSheetStudents = studentCount;
+        
+        Logger.log(`✅ 班級工作表統計捕獲完成 - 學生數: ${studentCount}`);
+      }
+      
+    } catch (sheetError) {
+      Logger.log(`⚠️ 無法訪問記錄簿工作表: ${sheetError.message}`);
+      snapshot.beforeTransfer.error = sheetError.message;
+    }
+    
+    Logger.log(`✅ 統計快照捕獲完成: ${JSON.stringify(snapshot)}`);
+    return snapshot;
+    
+  } catch (error) {
+    Logger.log(`❌ 捕獲統計快照失敗: ${error.message}`);
+    return {
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      teacherSheetId: teacherSheetId,
+      className: className
+    };
+  }
+}
+
+/**
+ * 安全移除學生清單
+ * 確保從老師記錄簿中正確移除轉出學生，保持數據完整性
+ * 
+ * @param {string} teacherSheetId - 老師記錄簿ID
+ * @param {string} className - 班級名稱
+ * @param {string} studentName - 學生姓名
+ * @returns {Object} 移除結果
+ */
+function removeStudentFromListSafely(teacherSheetId, className, studentName) {
+  try {
+    Logger.log(`🗑️ 開始安全移除學生 - 老師: ${teacherSheetId}, 班級: ${className}, 學生: ${studentName}`);
+    
+    if (!teacherSheetId || !className || !studentName) {
+      throw new Error('缺少必要參數：teacherSheetId, className, studentName');
+    }
+    
+    const result = {
+      success: false,
+      removedFrom: [],
+      errors: [],
+      preservedRecords: [],
+      metadata: {
+        timestamp: new Date().toISOString(),
+        operation: 'removeStudentFromListSafely'
+      }
+    };
+    
+    try {
+      const sheet = SpreadsheetApp.openById(teacherSheetId);
+      
+      // 1. 從班級工作表移除學生
+      const classSheet = sheet.getSheetByName(className);
+      if (classSheet) {
+        const classData = classSheet.getDataRange().getValues();
+        let studentRowIndex = -1;
+        
+        // 查找學生行
+        for (let i = 1; i < classData.length; i++) {
+          if (classData[i][0] && classData[i][0].toString().trim() === studentName.trim()) {
+            studentRowIndex = i + 1; // Google Sheets 從 1 開始計算
+            break;
+          }
+        }
+        
+        if (studentRowIndex > 0) {
+          // 保存要移除的行數據作為記錄
+          const removedRowData = classData[studentRowIndex - 1].slice();
+          result.preservedRecords.push({
+            source: 'classSheet',
+            data: removedRowData,
+            originalRowIndex: studentRowIndex
+          });
+          
+          // 刪除學生行
+          classSheet.deleteRow(studentRowIndex);
+          result.removedFrom.push(`班級工作表 ${className}`);
+          
+          Logger.log(`✅ 從班級工作表移除學生: ${studentName}`);
+        } else {
+          Logger.log(`⚠️ 在班級工作表中未找到學生: ${studentName}`);
+        }
+      }
+      
+      // 2. 更新 Summary 工作表統計
+      const summarySheet = sheet.getSheetByName('Summary');
+      if (summarySheet) {
+        const summaryData = summarySheet.getDataRange().getValues();
+        
+        for (let i = 0; i < summaryData.length; i++) {
+          const row = summaryData[i];
+          if (row[0] && row[0].toString().includes(className)) {
+            const currentCount = row[1] || 0;
+            if (currentCount > 0) {
+              summarySheet.getRange(i + 1, 2).setValue(currentCount - 1);
+              result.removedFrom.push(`Summary 統計 (${className})`);
+              
+              Logger.log(`✅ 更新 Summary 統計: ${className} ${currentCount} -> ${currentCount - 1}`);
+            }
+            break;
+          }
+        }
+      }
+      
+      result.success = true;
+      Logger.log(`✅ 學生安全移除完成: ${JSON.stringify(result)}`);
+      
+    } catch (sheetError) {
+      result.errors.push(`工作表操作錯誤: ${sheetError.message}`);
+      Logger.log(`❌ 工作表操作錯誤: ${sheetError.message}`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 安全移除學生失敗: ${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * 標記電聯記錄為已轉班
+ * 保留電聯歷史記錄但標註轉班狀態，確保數據追蹤完整性
+ * 
+ * @param {string} teacherSheetId - 老師記錄簿ID
+ * @param {string} className - 班級名稱
+ * @param {string} studentName - 學生姓名
+ * @returns {Object} 標記結果
+ */
+function markContactRecordsAsTransferred(teacherSheetId, className, studentName) {
+  try {
+    Logger.log(`📞 開始標記電聯記錄為已轉班 - 老師: ${teacherSheetId}, 班級: ${className}, 學生: ${studentName}`);
+    
+    if (!teacherSheetId || !className || !studentName) {
+      throw new Error('缺少必要參數：teacherSheetId, className, studentName');
+    }
+    
+    const result = {
+      success: false,
+      markedRecords: 0,
+      errors: [],
+      details: [],
+      metadata: {
+        timestamp: new Date().toISOString(),
+        operation: 'markContactRecordsAsTransferred'
+      }
+    };
+    
+    try {
+      const sheet = SpreadsheetApp.openById(teacherSheetId);
+      const classSheet = sheet.getSheetByName(className);
+      
+      if (!classSheet) {
+        throw new Error(`找不到班級工作表: ${className}`);
+      }
+      
+      const data = classSheet.getDataRange().getValues();
+      const headers = data[0];
+      
+      // 查找電聯記錄相關欄位
+      const contactColumns = [];
+      for (let col = 0; col < headers.length; col++) {
+        const header = headers[col]?.toString() || '';
+        if (header.includes('電聯') || header.includes('聯絡') || header.includes('備註')) {
+          contactColumns.push({
+            index: col,
+            name: header
+          });
+        }
+      }
+      
+      if (contactColumns.length === 0) {
+        Logger.log(`⚠️ 未找到電聯記錄欄位`);
+        result.success = true; // 沒有電聯記錄也算成功
+        return result;
+      }
+      
+      // 查找學生行
+      let studentRowIndex = -1;
+      for (let row = 1; row < data.length; row++) {
+        if (data[row][0] && data[row][0].toString().trim() === studentName.trim()) {
+          studentRowIndex = row;
+          break;
+        }
+      }
+      
+      if (studentRowIndex === -1) {
+        Logger.log(`⚠️ 未找到學生記錄: ${studentName}`);
+        result.success = true; // 沒有學生記錄也算成功
+        return result;
+      }
+      
+      // 標記電聯記錄
+      const transferMark = `[已轉班-${new Date().toLocaleDateString('zh-TW')}]`;
+      
+      for (const column of contactColumns) {
+        const currentValue = data[studentRowIndex][column.index];
+        if (currentValue && currentValue.toString().trim()) {
+          const newValue = `${transferMark} ${currentValue}`;
+          classSheet.getRange(studentRowIndex + 1, column.index + 1).setValue(newValue);
+          
+          result.details.push({
+            column: column.name,
+            originalValue: currentValue.toString(),
+            newValue: newValue
+          });
+          
+          result.markedRecords++;
+        }
+      }
+      
+      result.success = true;
+      Logger.log(`✅ 電聯記錄標記完成 - 標記了 ${result.markedRecords} 個記錄`);
+      
+    } catch (sheetError) {
+      result.errors.push(`工作表操作錯誤: ${sheetError.message}`);
+      Logger.log(`❌ 工作表操作錯誤: ${sheetError.message}`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 標記電聯記錄失敗: ${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * 更新統計排除轉班學生
+ * 確保轉班後統計數據準確，避免重複計算
+ * 
+ * @param {string} teacherSheetId - 老師記錄簿ID
+ * @param {string} className - 班級名稱
+ * @param {Object} transferData - 轉班數據
+ * @returns {Object} 更新結果
+ */
+function updateStudentCountWithTransferAdjustment(teacherSheetId, className, transferData) {
+  try {
+    Logger.log(`📊 開始更新統計排除轉班學生 - 老師: ${teacherSheetId}, 班級: ${className}`);
+    
+    if (!teacherSheetId || !className || !transferData) {
+      throw new Error('缺少必要參數：teacherSheetId, className, transferData');
+    }
+    
+    const result = {
+      success: false,
+      updatedCounts: {},
+      adjustments: [],
+      errors: [],
+      metadata: {
+        timestamp: new Date().toISOString(),
+        operation: 'updateStudentCountWithTransferAdjustment'
+      }
+    };
+    
+    try {
+      const sheet = SpreadsheetApp.openById(teacherSheetId);
+      const summarySheet = sheet.getSheetByName('Summary');
+      
+      if (!summarySheet) {
+        throw new Error('找不到 Summary 工作表');
+      }
+      
+      const summaryData = summarySheet.getDataRange().getValues();
+      
+      // 查找並更新班級統計
+      for (let i = 0; i < summaryData.length; i++) {
+        const row = summaryData[i];
+        if (row[0] && row[0].toString().includes(className)) {
+          const currentCount = row[1] || 0;
+          const transferCount = transferData.transferredStudents?.length || 1;
+          const newCount = Math.max(0, currentCount - transferCount);
+          
+          summarySheet.getRange(i + 1, 2).setValue(newCount);
+          
+          result.adjustments.push({
+            rowIndex: i + 1,
+            className: className,
+            beforeCount: currentCount,
+            afterCount: newCount,
+            transferCount: transferCount
+          });
+          
+          result.updatedCounts[className] = newCount;
+          
+          Logger.log(`✅ 更新班級統計: ${className} ${currentCount} -> ${newCount} (轉出 ${transferCount})`);
+          break;
+        }
+      }
+      
+      // 添加轉班備註（如果有備註欄位）
+      const transferNote = `轉班調整 ${new Date().toLocaleDateString('zh-TW')}`;
+      for (let i = 0; i < summaryData.length; i++) {
+        const row = summaryData[i];
+        if (row[0] && row[0].toString().includes(className)) {
+          // 檢查是否有備註欄位（通常在第3或第4欄）
+          if (summaryData[0].length > 2) {
+            const noteColumnIndex = Math.min(3, summaryData[0].length - 1);
+            const currentNote = row[noteColumnIndex] || '';
+            const newNote = currentNote ? `${currentNote}; ${transferNote}` : transferNote;
+            
+            summarySheet.getRange(i + 1, noteColumnIndex + 1).setValue(newNote);
+            
+            Logger.log(`✅ 添加轉班備註: ${newNote}`);
+          }
+          break;
+        }
+      }
+      
+      result.success = true;
+      Logger.log(`✅ 統計更新完成: ${JSON.stringify(result)}`);
+      
+    } catch (sheetError) {
+      result.errors.push(`工作表操作錯誤: ${sheetError.message}`);
+      Logger.log(`❌ 工作表操作錯誤: ${sheetError.message}`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 更新統計失敗: ${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * 驗證統計一致性
+ * 確保轉班後各項統計數據保持一致，發現並修復數據不一致問題
+ * 
+ * @param {string} teacherSheetId - 老師記錄簿ID
+ * @param {string} className - 班級名稱
+ * @param {Object} beforeSnapshot - 轉班前快照
+ * @returns {Object} 驗證結果
+ */
+function verifyStatisticalConsistency(teacherSheetId, className, beforeSnapshot) {
+  try {
+    Logger.log(`🔍 開始驗證統計一致性 - 老師: ${teacherSheetId}, 班級: ${className}`);
+    
+    if (!teacherSheetId || !className) {
+      throw new Error('缺少必要參數：teacherSheetId, className');
+    }
+    
+    const result = {
+      success: false,
+      consistencyChecks: [],
+      inconsistencies: [],
+      recommendations: [],
+      summary: {},
+      metadata: {
+        timestamp: new Date().toISOString(),
+        operation: 'verifyStatisticalConsistency'
+      }
+    };
+    
+    try {
+      const sheet = SpreadsheetApp.openById(teacherSheetId);
+      
+      // 1. 檢查 Summary 工作表統計
+      const summarySheet = sheet.getSheetByName('Summary');
+      if (summarySheet) {
+        const summaryData = summarySheet.getDataRange().getValues();
+        
+        for (let i = 0; i < summaryData.length; i++) {
+          const row = summaryData[i];
+          if (row[0] && row[0].toString().includes(className)) {
+            const currentCount = row[1] || 0;
+            
+            result.consistencyChecks.push({
+              type: 'Summary統計',
+              className: className,
+              currentValue: currentCount,
+              status: 'checked'
+            });
+            
+            result.summary.summaryCount = currentCount;
+            break;
+          }
+        }
+      }
+      
+      // 2. 檢查班級工作表實際學生數
+      const classSheet = sheet.getSheetByName(className);
+      if (classSheet) {
+        const classData = classSheet.getDataRange().getValues();
+        const actualStudentCount = classData.filter((row, index) => {
+          return index > 0 && row[0] && row[0].toString().trim(); // 排除標題行且有學生姓名
+        }).length;
+        
+        result.consistencyChecks.push({
+          type: '班級工作表實際學生數',
+          className: className,
+          currentValue: actualStudentCount,
+          status: 'checked'
+        });
+        
+        result.summary.actualCount = actualStudentCount;
+      }
+      
+      // 3. 比較一致性
+      if (result.summary.summaryCount !== undefined && result.summary.actualCount !== undefined) {
+        if (result.summary.summaryCount === result.summary.actualCount) {
+          result.consistencyChecks.push({
+            type: '統計一致性檢查',
+            status: 'consistent',
+            message: `Summary統計(${result.summary.summaryCount})與實際學生數(${result.summary.actualCount})一致`
+          });
+        } else {
+          const inconsistency = {
+            type: '統計不一致',
+            summaryCount: result.summary.summaryCount,
+            actualCount: result.summary.actualCount,
+            difference: result.summary.summaryCount - result.summary.actualCount,
+            severity: 'warning'
+          };
+          
+          result.inconsistencies.push(inconsistency);
+          
+          // 提供修復建議
+          result.recommendations.push({
+            type: 'autoFix',
+            action: '更新Summary統計為實際學生數',
+            targetValue: result.summary.actualCount,
+            reason: '以班級工作表實際學生數為準'
+          });
+        }
+      }
+      
+      // 4. 檢查轉班前後變化（如果有快照）
+      if (beforeSnapshot && beforeSnapshot.beforeTransfer) {
+        const beforeCount = beforeSnapshot.beforeTransfer.totalStudents || 0;
+        const currentTotal = result.summary.summaryCount || result.summary.actualCount || 0;
+        
+        result.consistencyChecks.push({
+          type: '轉班前後變化檢查',
+          beforeTransfer: beforeCount,
+          afterTransfer: currentTotal,
+          expectedChange: -1, // 預期減少1個學生
+          actualChange: currentTotal - beforeCount,
+          status: (currentTotal - beforeCount) === -1 ? 'expected' : 'unexpected'
+        });
+      }
+      
+      // 5. 總結驗證結果
+      result.success = result.inconsistencies.length === 0;
+      
+      if (result.success) {
+        Logger.log(`✅ 統計一致性驗證通過`);
+      } else {
+        Logger.log(`⚠️ 發現 ${result.inconsistencies.length} 個統計不一致問題`);
+      }
+      
+    } catch (sheetError) {
+      result.inconsistencies.push({
+        type: '系統錯誤',
+        error: sheetError.message,
+        severity: 'error'
+      });
+      Logger.log(`❌ 工作表操作錯誤: ${sheetError.message}`);
+    }
+    
+    Logger.log(`🔍 統計一致性驗證完成: ${JSON.stringify(result)}`);
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 驗證統計一致性失敗: ${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    };
   }
 }
