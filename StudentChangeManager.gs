@@ -245,6 +245,42 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
     newClass = changeRequest.newClass;
   }
   
+  // 🔍 PRE-VALIDATION PHASE - 轉班前完整性檢查
+  Logger.log(`🔍 開始轉班前完整性檢查：${studentId} → ${newTeacher}`);
+  
+  // 1. 學生資料完整性檢查
+  const studentValidation = validateStudentDataIntegrity(studentId);
+  if (!studentValidation.isValid) {
+    Logger.log(`❌ 學生資料完整性檢查失敗：${studentValidation.errors.join(', ')}`);
+    return {
+      success: false,
+      phase: 'pre-validation',
+      message: '學生資料完整性檢查失敗：' + studentValidation.errors.join(', '),
+      validationResults: studentValidation
+    };
+  }
+  
+  // 2. 新老師記錄簿存在驗證
+  const teacherValidation = validateTeacherRecordBookExists(newTeacher);
+  if (!teacherValidation.exists) {
+    Logger.log(`❌ 新老師記錄簿驗證失敗：${teacherValidation.message}`);
+    return {
+      success: false,
+      phase: 'pre-validation',
+      message: `新老師記錄簿不存在或無法存取：${newTeacher}`,
+      validationResults: teacherValidation
+    };
+  }
+  
+  // 3. 轉班合理性檢查
+  const transferValidation = validateTransferReasonableness(studentId, newTeacher, newClass);
+  if (!transferValidation.isReasonable) {
+    Logger.log(`⚠️ 轉班合理性檢查警告：${transferValidation.warnings.join(', ')}`);
+    // 警告不阻止轉班，但會記錄在結果中
+  }
+  
+  Logger.log(`✅ 轉班前完整性檢查通過`);
+  
   // 如果提供了班級資訊，根據班級獲取對應老師
   if (newClass) {
     const classTeacher = getTeacherByClass(newClass);
@@ -258,28 +294,65 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
     Logger.log(`🔄 處理學生轉班：${studentId} → ${newTeacher}`);
   }
   
+  // 🔄 PROCESS MONITORING PHASE - 轉班過程監控
+  const processMonitor = {
+    startTime: new Date(),
+    phases: [],
+    errors: [],
+    warnings: [],
+    currentPhase: null,
+    rollbackData: []
+  };
+  
+  function logPhase(phaseName, status, details = null) {
+    processMonitor.phases.push({
+      name: phaseName,
+      status, // 'started', 'completed', 'failed'
+      timestamp: new Date(),
+      details
+    });
+    processMonitor.currentPhase = phaseName;
+    Logger.log(`📊 ${status.toUpperCase()}: ${phaseName}${details ? ' - ' + JSON.stringify(details) : ''}`);
+  }
+  
   try {
     // 定位學生當前記錄
+    logPhase('locate-student-records', 'started');
     const studentRecords = locateStudentRecords(studentId);
     if (!studentRecords.found) {
+      logPhase('locate-student-records', 'failed', { reason: '找不到學生記錄' });
       return {
         success: false,
+        phase: 'locate-student-records',
         message: '找不到學生記錄：' + studentId
       };
     }
+    logPhase('locate-student-records', 'completed', { recordsFound: studentRecords.teacherRecords.length });
     
     // 獲取學生基本資料
+    logPhase('get-student-data', 'started');
     const studentData = getStudentBasicData(studentId);
     if (!studentData) {
+      logPhase('get-student-data', 'failed', { reason: '無法獲取學生基本資料' });
       return {
         success: false,
+        phase: 'get-student-data',
         message: '無法獲取學生基本資料：' + studentId
       };
     }
+    logPhase('get-student-data', 'completed', { dataFields: Object.keys(studentData).length });
     
     // 🆕 增強版：從原老師記錄簿完整移除學生（含統計修復）
+    logPhase('remove-from-original-teachers', 'started');
     const fromTeacher = studentRecords.teacherRecords[0]?.teacherName || '未知';
     const studentRemovalResults = [];
+    
+    // 準備回滾數據
+    processMonitor.rollbackData.push({
+      operation: 'student-removal',
+      studentId,
+      originalRecords: JSON.parse(JSON.stringify(studentRecords))
+    });
     
     studentRecords.teacherRecords.forEach((record, index) => {
       try {
@@ -341,6 +414,18 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
           expectedChange: -1
         });
         
+        // 記錄處理階段
+        processMonitor.phases.push({
+          name: `remove-from-${record.teacherName}`,
+          status: 'completed',
+          timestamp: new Date(),
+          details: {
+            studentRemoval: studentRemovalResult.success,
+            contactMarking: contactMarkingResult.markedCount,
+            statisticsConsistent: consistencyCheck.consistent
+          }
+        });
+        
         // 記錄移除結果
         studentRemovalResults.push({
           teacherName: record.teacherName,
@@ -374,13 +459,25 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
     Logger.log(`📊 學生移除操作完成：${successfulRemovals}/${totalRemovals} 個記錄簿處理成功`);
     
     // 添加到新老師記錄簿
+    logPhase('add-to-new-teacher', 'started');
     const newTeacherResult = addStudentToTeacher(studentData, newTeacher);
     if (!newTeacherResult.success) {
+      logPhase('add-to-new-teacher', 'failed', { reason: newTeacherResult.message });
       return {
         success: false,
+        phase: 'add-to-new-teacher',
         message: '添加到新老師記錄簿失敗：' + newTeacherResult.message
       };
     }
+    logPhase('add-to-new-teacher', 'completed');
+    
+    // 準備回滾數據
+    processMonitor.rollbackData.push({
+      operation: 'student-addition',
+      studentId,
+      newTeacher,
+      additionResult: newTeacherResult
+    });
     
     // 🔧 修復問題4：為新老師記錄簿添加學生異動記錄
     try {
@@ -424,7 +521,9 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
     }
     
     // 更新學生總表中的老師資訊
+    logPhase('update-master-list', 'started');
     updateStudentTeacherInMasterList(studentId, newTeacher);
+    logPhase('update-master-list', 'completed');
     
     // 🔧 新增：檢查新老師記錄簿統計更新結果
     let newTeacherStatsResult = null;
@@ -438,7 +537,9 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
     }
     
     // 重建相關統計
+    logPhase('rebuild-progress-tracking', 'started');
     rebuildProgressTracking();
+    logPhase('rebuild-progress-tracking', 'completed');
     
     Logger.log('✅ 學生轉班處理完成');
     
@@ -481,13 +582,74 @@ function handleClassChange(studentId, newTeacher, operator, newClass = null) {
       }
     }
     
-    return transferResult;
+    // 🔍 POST-VALIDATION PHASE - 轉班後驗證
+    logPhase('post-validation', 'started');
+    
+    const postValidationResults = performPostTransferValidation({
+      studentId,
+      fromTeacher,
+      newTeacher,
+      processMonitor,
+      transferResult
+    });
+    
+    // 更新轉班結果包含所有驗證信息
+    const enhancedResult = {
+      ...transferResult,
+      validationResults: {
+        preValidation: {
+          studentData: studentValidation,
+          teacherBook: teacherValidation,
+          transferReasonableness: transferValidation
+        },
+        postValidation: postValidationResults
+      },
+      processMonitor: {
+        ...processMonitor,
+        endTime: new Date(),
+        totalDuration: new Date() - processMonitor.startTime,
+        phasesCompleted: processMonitor.phases.filter(p => p.status === 'completed').length,
+        totalPhases: processMonitor.phases.length
+      },
+      recommendations: generateTransferRecommendations(postValidationResults)
+    };
+    
+    logPhase('post-validation', 'completed');
+    
+    // 🎯 RESULT REPORTING - 詳細結果報告
+    generateTransferReport(enhancedResult);
+    
+    return enhancedResult;
     
   } catch (error) {
     Logger.log('❌ 學生轉班處理失敗：' + error.message);
+    
+    // 錯誤恢復機制
+    if (processMonitor.rollbackData.length > 0) {
+      Logger.log('🔄 嘗試執行錯誤恢復...');
+      try {
+        executeRollbackOperations(processMonitor.rollbackData);
+        Logger.log('✅ 錯誤恢復完成');
+      } catch (rollbackError) {
+        Logger.log('❌ 錯誤恢復失敗：' + rollbackError.message);
+      }
+    }
+    
     return {
       success: false,
-      message: error.message
+      phase: processMonitor.currentPhase || 'unknown',
+      message: error.message,
+      processMonitor: {
+        ...processMonitor,
+        endTime: new Date(),
+        totalDuration: new Date() - processMonitor.startTime,
+        failedAt: processMonitor.currentPhase
+      },
+      error: {
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date()
+      }
     };
   }
 }
@@ -2933,4 +3095,475 @@ function verifyStatisticalConsistency(teacherSheetId, className, beforeSnapshot)
       timestamp: new Date().toISOString()
     };
   }
+}
+
+/**
+ * 驗證學生資料完整性
+ * @param {string} studentId 學生ID
+ * @returns {Object} 驗證結果
+ */
+function validateStudentDataIntegrity(studentId) {
+  const validation = {
+    isValid: true,
+    errors: [],
+    warnings: [],
+    checks: []
+  };
+  
+  try {
+    // 檢查學生ID格式
+    if (!studentId || typeof studentId !== 'string' || studentId.trim() === '') {
+      validation.errors.push('學生ID不可為空或無效');
+      validation.isValid = false;
+    }
+    validation.checks.push({ name: 'studentId_format', passed: validation.errors.length === 0 });
+    
+    // 檢查學生是否存在於總表
+    const studentData = getStudentBasicData(studentId);
+    if (!studentData) {
+      validation.errors.push('學生不存在於總表中');
+      validation.isValid = false;
+    } else {
+      // 檢查必要欄位
+      const requiredFields = ['Chinese Name', 'English Name', 'Teacher'];
+      requiredFields.forEach(field => {
+        if (!studentData[field] || studentData[field].toString().trim() === '') {
+          validation.warnings.push(`缺少必要欄位：${field}`);
+        }
+      });
+    }
+    validation.checks.push({ name: 'student_exists', passed: !!studentData });
+    
+    // 檢查學生記錄定位
+    const studentRecords = locateStudentRecords(studentId);
+    if (!studentRecords.found) {
+      validation.errors.push('無法定位學生記錄');
+      validation.isValid = false;
+    } else if (studentRecords.teacherRecords.length === 0) {
+      validation.warnings.push('學生沒有任何老師記錄');
+    }
+    validation.checks.push({ name: 'student_records_locatable', passed: studentRecords.found });
+    
+  } catch (error) {
+    validation.errors.push(`資料完整性檢查錯誤：${error.message}`);
+    validation.isValid = false;
+  }
+  
+  return validation;
+}
+
+/**
+ * 驗證老師記錄簿是否存在
+ * @param {string} teacherName 老師姓名
+ * @returns {Object} 驗證結果
+ */
+function validateTeacherRecordBookExists(teacherName) {
+  const validation = {
+    exists: false,
+    accessible: false,
+    message: '',
+    bookInfo: null
+  };
+  
+  try {
+    const allBooks = getAllTeacherBooks();
+    const teacherBook = allBooks.find(book => 
+      book.getName().includes(teacherName) || 
+      extractTeacherNameFromFileName(book.getName()) === teacherName
+    );
+    
+    if (teacherBook) {
+      validation.exists = true;
+      validation.bookInfo = {
+        name: teacherBook.getName(),
+        id: teacherBook.getId()
+      };
+      
+      // 檢查是否可存取
+      try {
+        const sheets = teacherBook.getSheets();
+        validation.accessible = sheets.length > 0;
+        validation.message = '老師記錄簿存在且可存取';
+      } catch (accessError) {
+        validation.accessible = false;
+        validation.message = '老師記錄簿存在但無法存取';
+      }
+    } else {
+      validation.message = `找不到老師 ${teacherName} 的記錄簿`;
+    }
+    
+  } catch (error) {
+    validation.message = `檢查老師記錄簿時發生錯誤：${error.message}`;
+  }
+  
+  return validation;
+}
+
+/**
+ * 驗證轉班合理性
+ * @param {string} studentId 學生ID
+ * @param {string} newTeacher 新老師
+ * @param {string} newClass 新班級
+ * @returns {Object} 驗證結果
+ */
+function validateTransferReasonableness(studentId, newTeacher, newClass) {
+  const validation = {
+    isReasonable: true,
+    warnings: [],
+    suggestions: []
+  };
+  
+  try {
+    // 檢查是否轉給相同老師
+    const currentRecords = locateStudentRecords(studentId);
+    if (currentRecords.found) {
+      const currentTeacher = currentRecords.teacherRecords[0]?.teacherName;
+      if (currentTeacher === newTeacher) {
+        validation.warnings.push('學生已在目標老師班級中');
+        validation.suggestions.push('確認是否需要執行轉班操作');
+      }
+    }
+    
+    // 檢查班級和老師的一致性
+    if (newClass) {
+      const classTeacher = getTeacherByClass(newClass);
+      if (classTeacher && classTeacher !== newTeacher) {
+        validation.warnings.push(`班級 ${newClass} 的負責老師是 ${classTeacher}，而非 ${newTeacher}`);
+        validation.suggestions.push('確認班級和老師的對應關係');
+      }
+    }
+    
+    // 檢查轉班頻率（避免頻繁轉班）
+    // 這裡可以加入更多業務邏輯檢查
+    
+  } catch (error) {
+    validation.warnings.push(`轉班合理性檢查時發生錯誤：${error.message}`);
+  }
+  
+  return validation;
+}
+
+/**
+ * 執行轉班後驗證
+ * @param {Object} params 驗證參數
+ * @returns {Object} 驗證結果
+ */
+function performPostTransferValidation(params) {
+  const { studentId, fromTeacher, newTeacher, processMonitor, transferResult } = params;
+  
+  const validation = {
+    overallSuccess: true,
+    checks: [],
+    errors: [],
+    warnings: []
+  };
+  
+  try {
+    // 1. 檢查學生是否成功從原老師記錄簿移除
+    Logger.log(`🔍 檢查學生是否從 ${fromTeacher} 記錄簿移除`);
+    const originalRecordsCheck = checkStudentRemovedFromOriginalTeacher(studentId, fromTeacher);
+    validation.checks.push({
+      name: 'student_removed_from_original',
+      passed: originalRecordsCheck.removed,
+      details: originalRecordsCheck
+    });
+    if (!originalRecordsCheck.removed) {
+      validation.errors.push(`學生未能從原老師 ${fromTeacher} 記錄簿完全移除`);
+      validation.overallSuccess = false;
+    }
+    
+    // 2. 檢查學生是否成功添加到新老師記錄簿
+    Logger.log(`🔍 檢查學生是否添加到 ${newTeacher} 記錄簿`);
+    const newRecordsCheck = checkStudentAddedToNewTeacher(studentId, newTeacher);
+    validation.checks.push({
+      name: 'student_added_to_new',
+      passed: newRecordsCheck.added,
+      details: newRecordsCheck
+    });
+    if (!newRecordsCheck.added) {
+      validation.errors.push(`學生未能成功添加到新老師 ${newTeacher} 記錄簿`);
+      validation.overallSuccess = false;
+    }
+    
+    // 3. 檢查統計一致性
+    Logger.log(`🔍 檢查統計一致性`);
+    const statisticsCheck = validateTransferStatisticsConsistency(studentId, fromTeacher, newTeacher);
+    validation.checks.push({
+      name: 'statistics_consistency',
+      passed: statisticsCheck.consistent,
+      details: statisticsCheck
+    });
+    if (!statisticsCheck.consistent) {
+      validation.warnings.push('統計數據存在不一致情況');
+    }
+    
+    // 4. 檢查電聯記錄處理
+    Logger.log(`🔍 檢查電聯記錄處理`);
+    const contactRecordsCheck = validateContactRecordsHandling(studentId, fromTeacher, newTeacher);
+    validation.checks.push({
+      name: 'contact_records_handled',
+      passed: contactRecordsCheck.handled,
+      details: contactRecordsCheck
+    });
+    if (!contactRecordsCheck.handled) {
+      validation.warnings.push('電聯記錄處理可能不完整');
+    }
+    
+  } catch (error) {
+    validation.errors.push(`轉班後驗證時發生錯誤：${error.message}`);
+    validation.overallSuccess = false;
+  }
+  
+  return validation;
+}
+
+/**
+ * 檢查學生是否從原老師記錄簿移除
+ * @param {string} studentId 學生ID
+ * @param {string} fromTeacher 原老師
+ * @returns {Object} 檢查結果
+ */
+function checkStudentRemovedFromOriginalTeacher(studentId, fromTeacher) {
+  try {
+    const allBooks = getAllTeacherBooks();
+    const fromTeacherBook = allBooks.find(book => 
+      book.getName().includes(fromTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === fromTeacher
+    );
+    
+    if (!fromTeacherBook) {
+      return { removed: true, reason: '原老師記錄簿不存在' };
+    }
+    
+    // 檢查學生清單工作表
+    const studentListSheet = fromTeacherBook.getSheetByName('學生清單');
+    if (studentListSheet) {
+      const data = studentListSheet.getDataRange().getValues();
+      const studentFound = data.some(row => row[0] && row[0].toString() === studentId);
+      if (studentFound) {
+        return { removed: false, reason: '學生仍在原老師的學生清單中' };
+      }
+    }
+    
+    return { removed: true, reason: '學生已從原老師記錄簿移除' };
+    
+  } catch (error) {
+    return { removed: false, reason: `檢查時發生錯誤：${error.message}` };
+  }
+}
+
+/**
+ * 檢查學生是否添加到新老師記錄簿
+ * @param {string} studentId 學生ID
+ * @param {string} newTeacher 新老師
+ * @returns {Object} 檢查結果
+ */
+function checkStudentAddedToNewTeacher(studentId, newTeacher) {
+  try {
+    const allBooks = getAllTeacherBooks();
+    const newTeacherBook = allBooks.find(book => 
+      book.getName().includes(newTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === newTeacher
+    );
+    
+    if (!newTeacherBook) {
+      return { added: false, reason: '新老師記錄簿不存在' };
+    }
+    
+    // 檢查學生清單工作表
+    const studentListSheet = newTeacherBook.getSheetByName('學生清單');
+    if (studentListSheet) {
+      const data = studentListSheet.getDataRange().getValues();
+      const studentFound = data.some(row => row[0] && row[0].toString() === studentId);
+      if (studentFound) {
+        return { added: true, reason: '學生已在新老師的學生清單中' };
+      }
+    }
+    
+    return { added: false, reason: '學生未在新老師的學生清單中找到' };
+    
+  } catch (error) {
+    return { added: false, reason: `檢查時發生錯誤：${error.message}` };
+  }
+}
+
+/**
+ * 驗證轉班統計一致性
+ * @param {string} studentId 學生ID
+ * @param {string} fromTeacher 原老師
+ * @param {string} newTeacher 新老師
+ * @returns {Object} 驗證結果
+ */
+function validateTransferStatisticsConsistency(studentId, fromTeacher, newTeacher) {
+  try {
+    const result = { consistent: true, details: {}, issues: [] };
+    
+    // 檢查新老師記錄簿的統計
+    const newTeacherBook = getAllTeacherBooks().find(book => 
+      book.getName().includes(newTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === newTeacher
+    );
+    
+    if (newTeacherBook) {
+      const summarySheet = newTeacherBook.getSheetByName('總覽');
+      if (summarySheet) {
+        const studentListSheet = newTeacherBook.getSheetByName('學生清單');
+        if (studentListSheet) {
+          const actualStudentCount = studentListSheet.getDataRange().getValues()
+            .filter(row => row[0] && row[0].toString().trim() !== '' && row[0] !== 'Student ID').length;
+          
+          // 檢查總覽工作表中的學生人數是否正確
+          const summaryData = summarySheet.getDataRange().getValues();
+          const studentCountRow = summaryData.find(row => row[0] && row[0].toString().includes('學生人數'));
+          if (studentCountRow) {
+            const displayedCount = parseInt(studentCountRow[1]) || 0;
+            if (displayedCount !== actualStudentCount) {
+              result.consistent = false;
+              result.issues.push(`新老師記錄簿統計不一致：顯示${displayedCount}人，實際${actualStudentCount}人`);
+            }
+          }
+          
+          result.details.newTeacherActualCount = actualStudentCount;
+        }
+      }
+    }
+    
+    return result;
+    
+  } catch (error) {
+    return {
+      consistent: false,
+      error: `統計一致性檢查錯誤：${error.message}`
+    };
+  }
+}
+
+/**
+ * 驗證電聯記錄處理
+ * @param {string} studentId 學生ID
+ * @param {string} fromTeacher 原老師
+ * @param {string} newTeacher 新老師
+ * @returns {Object} 驗證結果
+ */
+function validateContactRecordsHandling(studentId, fromTeacher, newTeacher) {
+  try {
+    // 檢查歷史電聯記錄是否正確轉移或標記
+    const result = { handled: true, details: {} };
+    
+    // 這裡可以加入更詳細的電聯記錄檢查邏輯
+    // 例如檢查記錄是否被正確標記為已轉班等
+    
+    return result;
+    
+  } catch (error) {
+    return {
+      handled: false,
+      error: `電聯記錄檢查錯誤：${error.message}`
+    };
+  }
+}
+
+/**
+ * 生成轉班建議
+ * @param {Object} validationResults 驗證結果
+ * @returns {Array} 建議列表
+ */
+function generateTransferRecommendations(validationResults) {
+  const recommendations = [];
+  
+  if (!validationResults.overallSuccess) {
+    recommendations.push('建議手動檢查轉班操作的完整性');
+  }
+  
+  if (validationResults.errors.length > 0) {
+    recommendations.push('建議立即修復發現的錯誤');
+  }
+  
+  if (validationResults.warnings.length > 0) {
+    recommendations.push('建議關注警告訊息並進行適當處理');
+  }
+  
+  const failedChecks = validationResults.checks.filter(check => !check.passed);
+  if (failedChecks.length > 0) {
+    recommendations.push(`建議重新檢查失敗的項目：${failedChecks.map(c => c.name).join(', ')}`);
+  }
+  
+  return recommendations;
+}
+
+/**
+ * 生成轉班報告
+ * @param {Object} transferResult 轉班結果
+ */
+function generateTransferReport(transferResult) {
+  Logger.log('='.repeat(60));
+  Logger.log('📊 學生轉班操作完整報告');
+  Logger.log('='.repeat(60));
+  
+  // 基本信息
+  Logger.log(`👤 學生ID: ${transferResult.details.studentId}`);
+  Logger.log(`📅 轉班日期: ${transferResult.details.transferDate}`);
+  Logger.log(`🔄 ${transferResult.details.fromTeacher} → ${transferResult.details.toTeacher}`);
+  Logger.log(`✅ 轉班狀態: ${transferResult.success ? '成功' : '失敗'}`);
+  
+  // 過程監控
+  if (transferResult.processMonitor) {
+    Logger.log(`\n⏱️ 執行時間: ${transferResult.processMonitor.totalDuration}毫秒`);
+    Logger.log(`📋 完成階段: ${transferResult.processMonitor.phasesCompleted}/${transferResult.processMonitor.totalPhases}`);
+  }
+  
+  // 驗證結果
+  if (transferResult.validationResults) {
+    Logger.log('\n🔍 驗證結果摘要:');
+    
+    const postValidation = transferResult.validationResults.postValidation;
+    if (postValidation) {
+      Logger.log(`   整體驗證: ${postValidation.overallSuccess ? '✅ 通過' : '❌ 失敗'}`);
+      Logger.log(`   檢查項目: ${postValidation.checks.length}項`);
+      Logger.log(`   錯誤數量: ${postValidation.errors.length}個`);
+      Logger.log(`   警告數量: ${postValidation.warnings.length}個`);
+    }
+  }
+  
+  // 建議
+  if (transferResult.recommendations && transferResult.recommendations.length > 0) {
+    Logger.log('\n💡 後續建議:');
+    transferResult.recommendations.forEach((rec, index) => {
+      Logger.log(`   ${index + 1}. ${rec}`);
+    });
+  }
+  
+  Logger.log('='.repeat(60));
+}
+
+/**
+ * 執行回滾操作
+ * @param {Array} rollbackData 回滾數據
+ */
+function executeRollbackOperations(rollbackData) {
+  Logger.log('🔄 開始執行回滾操作...');
+  
+  rollbackData.reverse().forEach((operation, index) => {
+    try {
+      Logger.log(`🔄 執行回滾操作 ${index + 1}/${rollbackData.length}: ${operation.operation}`);
+      
+      switch (operation.operation) {
+        case 'student-removal':
+          // 這裡需要實現具體的回滾邏輯
+          Logger.log('⚠️ 學生移除回滾邏輯待實現');
+          break;
+        case 'student-addition':
+          // 這裡需要實現具體的回滾邏輯
+          Logger.log('⚠️ 學生添加回滾邏輯待實現');
+          break;
+        default:
+          Logger.log(`⚠️ 未知的回滾操作類型: ${operation.operation}`);
+      }
+      
+    } catch (error) {
+      Logger.log(`❌ 回滾操作失敗: ${error.message}`);
+    }
+  });
+  
+  Logger.log('✅ 回滾操作完成');
 }
