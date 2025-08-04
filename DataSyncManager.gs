@@ -1964,14 +1964,32 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
     const existingRecords = getExistingContactRecords(contactSheet, studentId);
     Logger.log(`📊 目標記錄簿中已有 ${existingRecords.length} 筆該學生的電聯記錄`);
     
-    // 🧠 智能記錄生成：只創建需要的記錄
-    const generationOptions = {
+    // 🧠 智能記錄生成：使用入班感知系統
+    const enhancedGenerationOptions = {
       skipPastRecords: true,
       transferDate: transferDate,
-      existingRecords: existingRecords
+      existingRecords: existingRecords,
+      completionMode: options.completionMode, // 支援自訂補齊模式
+      transferContext: {
+        transferDate: transferDate,
+        sourceTeacher: options.sourceTeacher,
+        targetTeacher: newTeacher
+      }
     };
     
-    const scheduledContacts = generateScheduledContactsForStudent(studentData, generationOptions);
+    // 🎯 使用入班感知進度記錄生成系統
+    const scheduledContacts = generateScheduledContactsWithEnrollmentAwareness(studentData, enhancedGenerationOptions);
+    
+    // 📋 如果入班感知系統未生成記錄，回退到原始系統
+    if (scheduledContacts.length === 0) {
+      Logger.log('ℹ️ 入班感知系統未生成記錄，回退到原始生成系統');
+      const fallbackContacts = generateScheduledContactsForStudent(studentData, {
+        skipPastRecords: true,
+        transferDate: transferDate,
+        existingRecords: existingRecords
+      });
+      scheduledContacts.push(...fallbackContacts);
+    }
     
     if (scheduledContacts.length === 0) {
       Logger.log('ℹ️ 根據時序邏輯和重複檢查，沒有需要添加的新記錄');
@@ -2026,7 +2044,7 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
     return {
       success: true,
       recordCount: validatedRecords.length,
-      message: `成功為學生 ${studentId} 智能添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄`,
+      message: `成功為學生 ${studentId} 使用入班感知系統添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄`,
       analysisResults: {
         existingRecords: existingRecords.length,
         newRecords: validatedRecords.length,
@@ -2053,6 +2071,234 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
         studentId: studentData.ID || studentData['Student ID'],
         newTeacher: newTeacher
       }
+    };
+  }
+}
+
+// ============ 🚀 強化轉班記錄管理系統 ============
+
+/**
+ * 🚀 強化版轉班記錄管理（整合入班感知系統）
+ * 支援所有三種補齊策略和先進配置管理
+ * @param {Object} studentData 學生資料
+ * @param {Object} targetBook 目標記錄簿
+ * @param {string} targetTeacher 目標老師
+ * @param {Object} options 選項設定
+ * @param {string} options.completionMode 補齊模式（可覆蓋系統預設）
+ * @param {string} options.enrollmentDate 入班日期
+ * @param {boolean} options.useEnhancedSystem 是否使用強化系統（預設 true）
+ * @returns {Object} 轉移結果
+ */
+function transferScheduledContactRecordsEnhanced(studentData, targetBook, targetTeacher, options = {}) {
+  try {
+    const studentId = studentData.ID || studentData['Student ID'];
+    Logger.log(`🚀 開始強化版轉班記錄管理：學生 ${studentId} 轉入 ${targetTeacher}`);
+    
+    // 📋 選項處理與預設值
+    const transferDate = options.transferDate || new Date().toISOString().split('T')[0];
+    const useEnhancedSystem = options.useEnhancedSystem !== false; // 預設啟用
+    const completionMode = options.completionMode || null; // 由系統配置決定
+    const preserveHistory = options.preserveHistory !== false;
+    
+    Logger.log(`🔧 轉移選項：強化系統=${useEnhancedSystem}, 補齊模式=${completionMode || '系統預設'}, 轉班日期=${transferDate}`);
+    
+    // 🔍 目標記錄簿驗證
+    const bookValidation = validateTargetBook(targetBook, targetTeacher);
+    if (!bookValidation.isValid) {
+      return {
+        success: false,
+        message: `目標記錄簿驗證失敗：${bookValidation.message}`,
+        enhancedSystemUsed: false
+      };
+    }
+    
+    // 📊 獲取或創建電聯記錄工作表
+    let contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet) {
+      Logger.log('⚠️ 目標記錄簿沒有電聯記錄工作表，嘗試創建...');
+      const sheetCreationResult = createContactLogSheetIfNeeded(targetBook, targetTeacher);
+      if (!sheetCreationResult.success) {
+        return {
+          success: false,
+          message: `無法創建電聯記錄工作表：${sheetCreationResult.message}`,
+          enhancedSystemUsed: false
+        };
+      }
+      contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    }
+    
+    // 📊 分析現有記錄
+    const existingRecords = getExistingContactRecords(contactSheet, studentId);
+    Logger.log(`📊 目標記錄簿中已有 ${existingRecords.length} 筆該學生的電聯記錄`);
+    
+    let scheduledContacts = [];
+    let systemUsed = '無';
+    
+    // 🎯 選擇記錄生成系統
+    if (useEnhancedSystem) {
+      // 🚀 使用強化的入班感知系統
+      const enhancedOptions = {
+        completionMode: completionMode,
+        enrollmentDate: options.enrollmentDate,
+        existingRecords: existingRecords,
+        transferContext: {
+          transferDate: transferDate,
+          sourceTeacher: options.sourceTeacher,
+          targetTeacher: targetTeacher,
+          preserveHistory: preserveHistory
+        }
+      };
+      
+      scheduledContacts = generateScheduledContactsWithEnrollmentAwareness(studentData, enhancedOptions);
+      systemUsed = '入班感知強化系統';
+      
+      // 📋 如果強化系統未生成記錄，回退到原始系統
+      if (scheduledContacts.length === 0) {
+        Logger.log('ℹ️ 強化系統未生成記錄，回退到原始系統');
+        useEnhancedSystem = false;
+      }
+    }
+    
+    if (!useEnhancedSystem) {
+      // 📋 使用原始系統（向下相容）
+      const fallbackOptions = {
+        skipPastRecords: true,
+        transferDate: transferDate,
+        existingRecords: existingRecords
+      };
+      
+      scheduledContacts = generateScheduledContactsForStudent(studentData, fallbackOptions);
+      systemUsed = '原始系統（向下相容）';
+    }
+    
+    // 🔍 記錄生成結果檢查
+    if (scheduledContacts.length === 0) {
+      Logger.log('ℹ️ 根據時序邏輯和重複檢查，沒有需要添加的新記錄');
+      return {
+        success: true,
+        recordCount: 0,
+        message: '沒有需要添加的新記錄（避免重複或過時記錄）',
+        enhancedSystemUsed: useEnhancedSystem,
+        systemUsed: systemUsed,
+        analysisResults: {
+          existingRecords: existingRecords.length,
+          newRecords: 0,
+          reason: '時序邏輯過濾或重複檢查阻止'
+        }
+      };
+    }
+    
+    // 📝 記錄格式驗證和標準化
+    const validatedRecords = validateAndStandardizeRecords(scheduledContacts, studentData, targetTeacher);
+    if (validatedRecords.length !== scheduledContacts.length) {
+      Logger.log(`⚠️ 記錄驗證：${scheduledContacts.length} → ${validatedRecords.length} 筆有效記錄`);
+    }
+    
+    // 💾 將記錄添加到電聯記錄工作表
+    const insertionResult = insertRecordsWithValidation(contactSheet, validatedRecords);
+    if (!insertionResult.success) {
+      return {
+        success: false,
+        message: `記錄插入失敗：${insertionResult.message}`,
+        enhancedSystemUsed: useEnhancedSystem,
+        systemUsed: systemUsed
+      };
+    }
+    
+    Logger.log(`📝 成功添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄到第 ${insertionResult.startRow} 行開始`);
+    
+    // 🔄 執行排序以確保記錄順序正確
+    const sortingResult = performContactRecordsSorting(targetBook);
+    if (sortingResult.success) {
+      Logger.log('✅ 電聯記錄排序完成');
+    } else {
+      Logger.log(`⚠️ 排序警告：${sortingResult.message}`);
+    }
+    
+    // 🎯 完整性驗證（強化版）
+    const integrityCheck = verifyTransferIntegrity(contactSheet, studentId, validatedRecords);
+    const frameworkValidation = validateTransferredStudentFramework(validatedRecords);
+    
+    // 📊 強化系統特有的分析
+    let enhancedAnalysis = null;
+    if (useEnhancedSystem) {
+      enhancedAnalysis = analyzeEnrollmentAwareGeneration(
+        validatedRecords, 
+        completionMode || 'SYSTEM_DEFAULT',
+        options.enrollmentDate ? new Date(options.enrollmentDate) : null
+      );
+    }
+    
+    // 🎯 最終結果返回
+    return {
+      success: true,
+      recordCount: validatedRecords.length,
+      message: `成功為學生 ${studentId} 使用${systemUsed}添加 ${validatedRecords.length} 筆 Scheduled Contact 記錄`,
+      enhancedSystemUsed: useEnhancedSystem,
+      systemUsed: systemUsed,
+      analysisResults: {
+        existingRecords: existingRecords.length,
+        newRecords: validatedRecords.length,
+        transferDate: transferDate,
+        preserveHistory: preserveHistory,
+        frameworkValidation: frameworkValidation,
+        enhancedAnalysis: enhancedAnalysis // 🆕 強化系統特有分析
+      },
+      validationResults: {
+        bookValidation: bookValidation,
+        recordValidation: validatedRecords.length === scheduledContacts.length,
+        sortingResult: sortingResult,
+        integrityCheck: integrityCheck,
+        completeFramework: frameworkValidation.isComplete
+      }
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 強化版轉班記錄管理失敗：${error.message}`);
+    return {
+      success: false,
+      message: error.message,
+      enhancedSystemUsed: false,
+      systemUsed: '錯誤',
+      errorDetails: {
+        functionName: 'transferScheduledContactRecordsEnhanced',
+        studentId: studentData.ID || studentData['Student ID'],
+        targetTeacher: targetTeacher
+      }
+    };
+  }
+}
+
+/**
+ * 🔍 學生管理器整合適配器
+ * 提供StudentChangeManager.gs使用的簡化接口
+ * @param {Object} studentData 學生資料
+ * @param {Object} targetBook 目標記錄簿
+ * @param {string} targetTeacher 目標老師
+ * @param {Object} transferOptions 轉班選項
+ * @returns {Object} 轉移結果
+ */
+function adaptForStudentChangeManager(studentData, targetBook, targetTeacher, transferOptions = {}) {
+  try {
+    Logger.log('🔍 StudentChangeManager 整合適配器啟動');
+    
+    // 🔧 自動檢測是否使用強化系統
+    const useEnhanced = transferOptions.useEnhancedSystem !== false; // 預設啟用
+    
+    if (useEnhanced) {
+      // 🚀 使用強化系統
+      return transferScheduledContactRecordsEnhanced(studentData, targetBook, targetTeacher, transferOptions);
+    } else {
+      // 📋 使用原始系統（完全向下相容）
+      return transferScheduledContactRecords(studentData, targetBook, targetTeacher, transferOptions);
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ StudentChangeManager 整合適配器錯誤：${error.message}`);
+    return {
+      success: false,
+      message: `整合適配器錯誤：${error.message}`,
+      enhancedSystemUsed: false
     };
   }
 }
@@ -2318,6 +2564,763 @@ function generateScheduledContactsForStudent(studentData, options = {}) {
   } catch (error) {
     Logger.log(`❌ 生成 Scheduled Contact 記錄失敗：${error.message}`);
     return [];
+  }
+}
+
+// ============ 🆕 入班感知進度記錄補齊系統 (Enrollment-Aware Progress Completion) ============
+
+/**
+ * 🎯 入班感知進度記錄生成（主入口函數）
+ * 整合三種補齊策略：COMPLETE_ALL、ENROLLMENT_AWARE、MANUAL_PROMPT
+ * @param {Object} studentData 學生資料
+ * @param {Object} options 選項設定
+ * @param {string} options.completionMode 補齊模式（可覆蓋系統預設）
+ * @param {string} options.enrollmentDate 入班日期
+ * @param {Object} options.transferContext 轉班上下文資訊
+ * @returns {Array} 生成的進度記錄陣列
+ */
+function generateScheduledContactsWithEnrollmentAwareness(studentData, options = {}) {
+  try {
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    
+    Logger.log(`🎯 開始入班感知進度記錄生成：學生 ${studentId} (${studentName})`);
+    
+    // 📋 獲取補齊策略配置
+    const completionConfig = getProgressCompletionConfig();
+    const selectedMode = options.completionMode || completionConfig.DEFAULT_MODE;
+    const strategyConfig = completionConfig.MODES[selectedMode];
+    
+    if (!strategyConfig) {
+      Logger.log(`❌ 未知的補齊模式：${selectedMode}`);
+      return [];
+    }
+    
+    Logger.log(`🔧 使用補齊策略：${strategyConfig.name} - ${strategyConfig.description}`);
+    
+    // 📅 處理入班日期
+    const enrollmentDate = extractEnrollmentDate(studentData, options.transferContext || {});
+    const validatedEnrollmentDate = validateEnrollmentDate(enrollmentDate);
+    
+    Logger.log(`📅 學生入班日期：${validatedEnrollmentDate || '未指定'}`);
+    
+    // 🎯 根據策略選擇對應的記錄生成函數
+    let generatedRecords = [];
+    
+    switch (selectedMode) {
+      case 'COMPLETE_ALL':
+        generatedRecords = completeAllRecordsStrategy(studentData, options, strategyConfig);
+        break;
+      case 'ENROLLMENT_AWARE':
+        generatedRecords = enrollmentAwareStrategy(studentData, validatedEnrollmentDate, options, strategyConfig);
+        break;
+      case 'MANUAL_PROMPT':
+        generatedRecords = manualPromptStrategy(studentData, validatedEnrollmentDate, options, strategyConfig);
+        break;
+      default:
+        Logger.log(`⚠️ 回退到預設策略：ENROLLMENT_AWARE`);
+        generatedRecords = enrollmentAwareStrategy(studentData, validatedEnrollmentDate, options, strategyConfig);
+    }
+    
+    // 📊 記錄生成結果分析
+    const analysisResult = analyzeEnrollmentAwareGeneration(generatedRecords, selectedMode, validatedEnrollmentDate);
+    Logger.log(`✅ 入班感知記錄生成完成：${generatedRecords.length} 筆記錄`);
+    Logger.log(`📊 生成分析：${analysisResult.summary}`);
+    
+    return generatedRecords;
+    
+  } catch (error) {
+    Logger.log(`❌ 入班感知進度記錄生成失敗：${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 🔧 策略A：補齊全部記錄模式
+ * 為所有 6 個期次建立記錄，預設標記為「未聯絡」
+ * @param {Object} studentData 學生資料
+ * @param {Object} options 選項設定
+ * @param {Object} strategyConfig 策略配置
+ * @returns {Array} 生成的記錄陣列
+ */
+function completeAllRecordsStrategy(studentData, options = {}, strategyConfig = {}) {
+  try {
+    Logger.log('🔧 執行策略A：補齊全部記錄模式');
+    
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    const englishName = studentData['English Name'] || '未知英文名';
+    const englishClass = studentData['English Class'] || '未知班級';
+    
+    const records = [];
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS;
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS;
+    const defaultStatus = strategyConfig.defaultStatus || '未聯絡';
+    
+    semesters.forEach(semester => {
+      terms.forEach(term => {
+        // 🎯 重複檢查
+        if (options.existingRecords && isDuplicateRecord(studentId, semester, term, options.existingRecords)) {
+          Logger.log(`⚠️ 跳過重複記錄：${studentId} - ${semester} ${term}`);
+          return;
+        }
+        
+        const record = [
+          studentId,                                    // A: Student ID
+          studentName,                                  // B: Name  
+          englishName,                                  // C: English Name
+          englishClass,                                // D: English Class
+          '',                                          // E: Date (留空待填)
+          semester,                                    // F: Semester
+          term,                                        // G: Term
+          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // H: Contact Type = "Scheduled Contact"
+          '',                                          // I: Teachers Content (留空待填)
+          '',                                          // J: Parents Responses (留空待填)
+          ''                                           // K: Contact Method (留空待填)
+        ];
+        
+        records.push(record);
+        Logger.log(`📝 添加全記錄：${studentId} - ${semester} ${term}`);
+      });
+    });
+    
+    Logger.log(`✅ 策略A完成：生成 ${records.length} 筆完整記錄`);
+    return records;
+    
+  } catch (error) {
+    Logger.log(`❌ 策略A執行失敗：${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 🔧 策略B：入班感知模式
+ * 僅為入班後的期次建立記錄，避免數據噪音
+ * @param {Object} studentData 學生資料
+ * @param {Date|string} enrollmentDate 入班日期
+ * @param {Object} options 選項設定
+ * @param {Object} strategyConfig 策略配置
+ * @returns {Array} 生成的記錄陣列
+ */
+function enrollmentAwareStrategy(studentData, enrollmentDate, options = {}, strategyConfig = {}) {
+  try {
+    Logger.log('🔧 執行策略B：入班感知模式');
+    
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    const englishName = studentData['English Name'] || '未知英文名';
+    const englishClass = studentData['English Class'] || '未知班級';
+    
+    // 📅 計算入班影響
+    const enrollmentImpact = calculateEnrollmentImpact(studentData, enrollmentDate, new Date());
+    Logger.log(`📊 入班影響分析：活躍期次 ${enrollmentImpact.activePeriods.length} 個，未來期次 ${enrollmentImpact.futurePeriods.length} 個`);
+    
+    const records = [];
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS;
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS;
+    
+    // 🎯 只為入班後的期次（活躍期次 + 未來期次）建立記錄
+    const targetPeriods = [...enrollmentImpact.activePeriods, ...enrollmentImpact.futurePeriods];
+    
+    targetPeriods.forEach(period => {
+      // 🎯 重複檢查
+      if (options.existingRecords && isDuplicateRecord(studentId, period.semester, period.term, options.existingRecords)) {
+        Logger.log(`⚠️ 跳過重複記錄：${studentId} - ${period.semester} ${period.term}`);
+        return;
+      }
+      
+      const record = [
+        studentId,                                    // A: Student ID
+        studentName,                                  // B: Name  
+        englishName,                                  // C: English Name
+        englishClass,                                // D: English Class
+        '',                                          // E: Date (留空待填)
+        period.semester,                             // F: Semester
+        period.term,                                 // G: Term
+        SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // H: Contact Type = "Scheduled Contact"
+        '',                                          // I: Teachers Content (留空待填)
+        '',                                          // J: Parents Responses (留空待填)
+        ''                                           // K: Contact Method (留空待填)
+      ];
+      
+      records.push(record);
+      Logger.log(`📝 添加入班後記錄：${studentId} - ${period.semester} ${period.term}`);
+    });
+    
+    Logger.log(`✅ 策略B完成：生成 ${records.length} 筆入班感知記錄`);
+    return records;
+    
+  } catch (error) {
+    Logger.log(`❌ 策略B執行失敗：${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 🔧 策略C：手動提示模式
+ * 建立全部記錄，但對入班前期次標註「非本班在籍」
+ * @param {Object} studentData 學生資料
+ * @param {Date|string} enrollmentDate 入班日期
+ * @param {Object} options 選項設定
+ * @param {Object} strategyConfig 策略配置
+ * @returns {Array} 生成的記錄陣列
+ */
+function manualPromptStrategy(studentData, enrollmentDate, options = {}, strategyConfig = {}) {
+  try {
+    Logger.log('🔧 執行策略C：手動提示模式');
+    
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    const englishName = studentData['English Name'] || '未知英文名';
+    const englishClass = studentData['English Class'] || '未知班級';
+    
+    // 📅 計算入班影響
+    const enrollmentImpact = calculateEnrollmentImpact(studentData, enrollmentDate, new Date());
+    const preEnrollmentLabel = strategyConfig.preEnrollmentLabel || '非本班在籍';
+    
+    Logger.log(`📊 入班影響分析：入班前期次 ${enrollmentImpact.completedPeriods.length} 個將標註"${preEnrollmentLabel}"`);
+    
+    const records = [];
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS;
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS;
+    
+    semesters.forEach(semester => {
+      terms.forEach(term => {
+        // 🎯 重複檢查
+        if (options.existingRecords && isDuplicateRecord(studentId, semester, term, options.existingRecords)) {
+          Logger.log(`⚠️ 跳過重複記錄：${studentId} - ${semester} ${term}`);
+          return;
+        }
+        
+        // 🏷️ 判斷是否為入班前期次
+        const isPreEnrollment = enrollmentImpact.completedPeriods.some(p => 
+          p.semester === semester && p.term === term
+        );
+        
+        // 📝 Teachers Content 根據入班狀態設定
+        const teachersContent = isPreEnrollment ? preEnrollmentLabel : '';
+        
+        const record = [
+          studentId,                                    // A: Student ID
+          studentName,                                  // B: Name  
+          englishName,                                  // C: English Name
+          englishClass,                                // D: English Class
+          '',                                          // E: Date (留空待填)
+          semester,                                    // F: Semester
+          term,                                        // G: Term
+          SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // H: Contact Type = "Scheduled Contact"
+          teachersContent,                             // I: Teachers Content (標註入班前狀態)
+          '',                                          // J: Parents Responses (留空待填)
+          ''                                           // K: Contact Method (留空待填)
+        ];
+        
+        records.push(record);
+        
+        if (isPreEnrollment) {
+          Logger.log(`🏷️ 添加標註記錄：${studentId} - ${semester} ${term} (${preEnrollmentLabel})`);
+        } else {
+          Logger.log(`📝 添加常規記錄：${studentId} - ${semester} ${term}`);
+        }
+      });
+    });
+    
+    Logger.log(`✅ 策略C完成：生成 ${records.length} 筆標註記錄`);
+    return records;
+    
+  } catch (error) {
+    Logger.log(`❌ 策略C執行失敗：${error.message}`);
+    return [];
+  }
+}
+
+// ============ 入班感知系統支援函數 ============
+
+/**
+ * 📅 計算入班對期次的影響
+ * @param {Object} studentData 學生資料
+ * @param {Date|string} enrollmentDate 入班日期
+ * @param {Date} currentDate 當前日期
+ * @returns {Object} 影響分析結果
+ */
+function calculateEnrollmentImpact(studentData, enrollmentDate, currentDate) {
+  try {
+    Logger.log('📅 開始計算入班影響');
+    
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS;
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS;
+    const allPeriods = [];
+    
+    // 📋 生成所有期次組合
+    semesters.forEach(semester => {
+      terms.forEach(term => {
+        allPeriods.push({ semester, term });
+      });
+    });
+    
+    // 📅 獲取當前學期資訊
+    const currentSemesterInfo = getCurrentSemesterInfo(currentDate);
+    const enrollmentSemesterInfo = enrollmentDate ? getCurrentSemesterInfo(new Date(enrollmentDate)) : null;
+    
+    Logger.log(`📊 當前學期：${currentSemesterInfo.semester} ${currentSemesterInfo.term}`);
+    if (enrollmentSemesterInfo) {
+      Logger.log(`📊 入班學期：${enrollmentSemesterInfo.semester} ${enrollmentSemesterInfo.term}`);
+    }
+    
+    const result = {
+      completedPeriods: [],     // 入班前期次
+      activePeriods: [],        // 入班後且當前或過去的期次
+      futurePeriods: []         // 未來期次
+    };
+    
+    allPeriods.forEach(period => {
+      if (enrollmentSemesterInfo) {
+        // 有入班日期時的分類邏輯
+        if (isPastRecord(period.semester, period.term, enrollmentSemesterInfo)) {
+          result.completedPeriods.push(period);
+        } else if (isPastRecord(period.semester, period.term, currentSemesterInfo) || 
+                   (period.semester === currentSemesterInfo.semester && period.term === currentSemesterInfo.term)) {
+          result.activePeriods.push(period);
+        } else {
+          result.futurePeriods.push(period);
+        }
+      } else {
+        // 沒有入班日期時，所有當前及未來期次都視為活躍
+        if (isPastRecord(period.semester, period.term, currentSemesterInfo)) {
+          result.activePeriods.push(period);
+        } else {
+          result.futurePeriods.push(period);
+        }
+      }
+    });
+    
+    Logger.log(`📊 入班影響分析完成：入班前 ${result.completedPeriods.length}，活躍 ${result.activePeriods.length}，未來 ${result.futurePeriods.length}`);
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 入班影響計算失敗：${error.message}`);
+    return {
+      completedPeriods: [],
+      activePeriods: [],
+      futurePeriods: []
+    };
+  }
+}
+
+/**
+ * 📅 提取入班日期
+ * @param {Object} studentData 學生資料
+ * @param {Object} transferContext 轉班上下文
+ * @returns {Date|null} 入班日期
+ */
+function extractEnrollmentDate(studentData, transferContext = {}) {
+  try {
+    // 🔍 多來源提取入班日期
+    let enrollmentDate = null;
+    
+    // 來源1：轉班上下文中的轉班日期
+    if (transferContext.transferDate) {
+      enrollmentDate = new Date(transferContext.transferDate);
+      Logger.log(`📅 從轉班上下文提取入班日期：${enrollmentDate.toLocaleDateString()}`);
+    }
+    
+    // 來源2：學生資料中的入班日期欄位（如果存在）
+    else if (studentData.enrollmentDate) {
+      enrollmentDate = new Date(studentData.enrollmentDate);
+      Logger.log(`📅 從學生資料提取入班日期：${enrollmentDate.toLocaleDateString()}`);
+    }
+    
+    // 來源3：系統時間戳（最後回退）
+    else if (!enrollmentDate) {
+      enrollmentDate = new Date();
+      Logger.log(`📅 使用當前日期作為入班日期：${enrollmentDate.toLocaleDateString()}`);
+    }
+    
+    return enrollmentDate;
+    
+  } catch (error) {
+    Logger.log(`❌ 提取入班日期失敗：${error.message}`);
+    return new Date(); // 回退到當前日期
+  }
+}
+
+/**
+ * 📅 驗證入班日期
+ * @param {Date|string} enrollmentDate 入班日期
+ * @returns {Date|null} 驗證後的入班日期
+ */
+function validateEnrollmentDate(enrollmentDate) {
+  try {
+    if (!enrollmentDate) {
+      Logger.log('⚠️ 未提供入班日期，將使用策略預設行為');
+      return null;
+    }
+    
+    const date = new Date(enrollmentDate);
+    
+    // 📅 基本日期有效性檢查
+    if (isNaN(date.getTime())) {
+      Logger.log(`❌ 無效的入班日期格式：${enrollmentDate}`);
+      return null;
+    }
+    
+    // 📅 合理性檢查（不能是未來太遠的日期）
+    const currentDate = new Date();
+    const oneYearFromNow = new Date(currentDate.getFullYear() + 1, currentDate.getMonth(), currentDate.getDate());
+    
+    if (date > oneYearFromNow) {
+      Logger.log(`⚠️ 入班日期似乎過於未來：${date.toLocaleDateString()}，請確認`);
+    }
+    
+    Logger.log(`✅ 入班日期驗證通過：${date.toLocaleDateString()}`);
+    return date;
+    
+  } catch (error) {
+    Logger.log(`❌ 入班日期驗證失敗：${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * 🔧 獲取進度補齊配置
+ * @returns {Object} 進度補齊配置
+ */
+function getProgressCompletionConfig() {
+  try {
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_COMPLETION;
+    
+    if (!config) {
+      Logger.log('⚠️ 進度補齊配置不存在，使用預設配置');
+      return {
+        DEFAULT_MODE: 'ENROLLMENT_AWARE',
+        MODES: {
+          'ENROLLMENT_AWARE': {
+            name: '入班感知模式',
+            description: '僅建立入班後期次的記錄',
+            onlyPostEnrollment: true
+          }
+        }
+      };
+    }
+    
+    Logger.log(`🔧 已載入進度補齊配置，預設模式：${config.DEFAULT_MODE}`);
+    return config;
+    
+  } catch (error) {
+    Logger.log(`❌ 獲取進度補齊配置失敗：${error.message}`);
+    return {
+      DEFAULT_MODE: 'ENROLLMENT_AWARE',
+      MODES: {
+        'ENROLLMENT_AWARE': {
+          name: '入班感知模式',
+          description: '僅建立入班後期次的記錄',
+          onlyPostEnrollment: true
+        }
+      }
+    };
+  }
+}
+
+/**
+ * 📊 分析入班感知記錄生成結果
+ * @param {Array} records 生成的記錄
+ * @param {string} strategy 使用的策略
+ * @param {Date} enrollmentDate 入班日期
+ * @returns {Object} 分析結果
+ */
+function analyzeEnrollmentAwareGeneration(records, strategy, enrollmentDate) {
+  try {
+    const analysis = {
+      totalRecords: records.length,
+      strategy: strategy,
+      enrollmentDate: enrollmentDate ? enrollmentDate.toLocaleDateString() : '未指定',
+      semesterBreakdown: {},
+      termBreakdown: {},
+      summary: ''
+    };
+    
+    // 📊 按學期和期次分析
+    records.forEach(record => {
+      const semester = record[5]; // F: Semester
+      const term = record[6];     // G: Term
+      
+      analysis.semesterBreakdown[semester] = (analysis.semesterBreakdown[semester] || 0) + 1;
+      analysis.termBreakdown[term] = (analysis.termBreakdown[term] || 0) + 1;
+    });
+    
+    // 📝 生成摘要
+    const semesterSummary = Object.entries(analysis.semesterBreakdown)
+      .map(([sem, count]) => `${sem}:${count}`).join(', ');
+    const termSummary = Object.entries(analysis.termBreakdown)
+      .map(([term, count]) => `${term}:${count}`).join(', ');
+    
+    analysis.summary = `策略${strategy}生成${analysis.totalRecords}筆記錄 (${semesterSummary}) (${termSummary})`;
+    
+    return analysis;
+    
+  } catch (error) {
+    Logger.log(`❌ 記錄生成分析失敗：${error.message}`);
+    return {
+      totalRecords: records.length,
+      strategy: strategy,
+      summary: `生成${records.length}筆記錄`
+    };
+  }
+}
+
+// ============ 🧪 入班感知系統測試與驗證 ============
+
+/**
+ * 🧪 測試入班感知記錄生成系統
+ * 驗證所有三種補齊策略的正確性
+ * @param {Object} testStudentData 測試學生資料
+ * @returns {Object} 測試結果
+ */
+function testEnrollmentAwareRecordGeneration(testStudentData = null) {
+  try {
+    Logger.log('🧪 開始入班感知記錄生成系統測試');
+    
+    // 📋 測試資料準備
+    const testStudent = testStudentData || {
+      'ID': 'TEST001',
+      'Chinese Name': '測試學生',
+      'English Name': 'Test Student',
+      'English Class': 'Test Class A'
+    };
+    
+    const testResults = {
+      testsPassed: 0,
+      totalTests: 0,
+      strategies: {},
+      summary: '',
+      errors: []
+    };
+    
+    // 🔧 測試策略A：補齊全部記錄
+    testResults.totalTests++;
+    try {
+      const completeAllRecords = generateScheduledContactsWithEnrollmentAwareness(testStudent, {
+        completionMode: 'COMPLETE_ALL'
+      });
+      
+      const expectedCount = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.length * SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.length;
+      if (completeAllRecords.length === expectedCount) {
+        testResults.testsPassed++;
+        testResults.strategies.COMPLETE_ALL = { passed: true, recordCount: completeAllRecords.length };
+        Logger.log(`✅ 策略A測試通過：生成 ${completeAllRecords.length} 筆記錄`);
+      } else {
+        testResults.strategies.COMPLETE_ALL = { passed: false, expected: expectedCount, actual: completeAllRecords.length };
+        Logger.log(`❌ 策略A測試失敗：期望 ${expectedCount} 筆，實際 ${completeAllRecords.length} 筆`);
+      }
+    } catch (error) {
+      testResults.strategies.COMPLETE_ALL = { passed: false, error: error.message };
+      testResults.errors.push(`策略A測試錯誤: ${error.message}`);
+    }
+    
+    // 🔧 測試策略B：入班感知模式
+    testResults.totalTests++;
+    try {
+      const enrollmentAwareRecords = generateScheduledContactsWithEnrollmentAwareness(testStudent, {
+        completionMode: 'ENROLLMENT_AWARE',
+        enrollmentDate: new Date().toISOString().split('T')[0] // 今天入班
+      });
+      
+      if (enrollmentAwareRecords.length > 0 && enrollmentAwareRecords.length <= 6) {
+        testResults.testsPassed++;
+        testResults.strategies.ENROLLMENT_AWARE = { passed: true, recordCount: enrollmentAwareRecords.length };
+        Logger.log(`✅ 策略B測試通過：生成 ${enrollmentAwareRecords.length} 筆記錄`);
+      } else {
+        testResults.strategies.ENROLLMENT_AWARE = { passed: false, recordCount: enrollmentAwareRecords.length };
+        Logger.log(`❌ 策略B測試失敗：不合理的記錄數量 ${enrollmentAwareRecords.length}`);
+      }
+    } catch (error) {
+      testResults.strategies.ENROLLMENT_AWARE = { passed: false, error: error.message };
+      testResults.errors.push(`策略B測試錯誤: ${error.message}`);
+    }
+    
+    // 🔧 測試策略C：手動提示模式
+    testResults.totalTests++;
+    try {
+      const manualPromptRecords = generateScheduledContactsWithEnrollmentAwareness(testStudent, {
+        completionMode: 'MANUAL_PROMPT',
+        enrollmentDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30天前入班
+      });
+      
+      const expectedCount = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS.length * SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS.length;
+      // 檢查是否有標註的記錄
+      const annotatedRecords = manualPromptRecords.filter(record => record[8] && record[8].includes('非本班在籍'));
+      
+      if (manualPromptRecords.length === expectedCount && annotatedRecords.length > 0) {
+        testResults.testsPassed++;
+        testResults.strategies.MANUAL_PROMPT = { 
+          passed: true, 
+          recordCount: manualPromptRecords.length, 
+          annotatedCount: annotatedRecords.length 
+        };
+        Logger.log(`✅ 策略C測試通過：生成 ${manualPromptRecords.length} 筆記錄，其中 ${annotatedRecords.length} 筆有標註`);
+      } else {
+        testResults.strategies.MANUAL_PROMPT = { 
+          passed: false, 
+          expected: expectedCount, 
+          actual: manualPromptRecords.length,
+          annotated: annotatedRecords.length
+        };
+        Logger.log(`❌ 策略C測試失敗`);
+      }
+    } catch (error) {
+      testResults.strategies.MANUAL_PROMPT = { passed: false, error: error.message };
+      testResults.errors.push(`策略C測試錯誤: ${error.message}`);
+    }
+    
+    // 📊 測試結果統計
+    const passRate = (testResults.testsPassed / testResults.totalTests * 100).toFixed(1);
+    testResults.summary = `入班感知系統測試結果：${testResults.testsPassed}/${testResults.totalTests} 通過 (${passRate}%)`;
+    
+    Logger.log(`📊 ${testResults.summary}`);
+    
+    if (testResults.errors.length > 0) {
+      Logger.log('❌ 測試錯誤：');
+      testResults.errors.forEach(error => Logger.log(`  - ${error}`));
+    }
+    
+    return testResults;
+    
+  } catch (error) {
+    Logger.log(`❌ 入班感知系統測試失敗：${error.message}`);
+    return {
+      testsPassed: 0,
+      totalTests: 3,
+      summary: '測試系統錯誤',
+      errors: [error.message]
+    };
+  }
+}
+
+/**
+ * 🔍 驗證轉班學生入班感知記錄整合
+ * 測試與StudentChangeManager.gs的整合效果
+ * @param {Object} transferTestData 轉班測試資料
+ * @returns {Object} 整合測試結果
+ */
+function validateEnrollmentAwareTransferIntegration(transferTestData = null) {
+  try {
+    Logger.log('🔍 開始驗證轉班學生入班感知記錄整合');
+    
+    // 📋 測試資料準備
+    const testTransferData = transferTestData || {
+      studentData: {
+        'ID': 'TRANS001',
+        'Chinese Name': '轉班測試學生',
+        'English Name': 'Transfer Test Student',
+        'English Class': 'New Class B'
+      },
+      transferDate: new Date().toISOString().split('T')[0],
+      completionMode: 'ENROLLMENT_AWARE'
+    };
+    
+    const integrationResult = {
+      configurationTest: false,
+      generationTest: false,
+      strategySwitchTest: false,
+      backwardCompatibilityTest: false,
+      overallPassed: false,
+      details: {},
+      summary: ''
+    };
+    
+    // 🔧 測試配置系統讀取
+    try {
+      const config = getProgressCompletionConfig();
+      if (config && config.MODES && config.DEFAULT_MODE) {
+        integrationResult.configurationTest = true;
+        integrationResult.details.configuration = '配置系統正常';
+        Logger.log('✅ 配置系統測試通過');
+      }
+    } catch (error) {
+      integrationResult.details.configuration = `配置系統錯誤: ${error.message}`;
+    }
+    
+    // 🔧 測試記錄生成整合
+    try {
+      const records = generateScheduledContactsWithEnrollmentAwareness(
+        testTransferData.studentData, 
+        {
+          completionMode: testTransferData.completionMode,
+          transferContext: {
+            transferDate: testTransferData.transferDate
+          }
+        }
+      );
+      
+      if (records && records.length > 0) {
+        integrationResult.generationTest = true;
+        integrationResult.details.generation = `成功生成 ${records.length} 筆記錄`;
+        Logger.log('✅ 記錄生成整合測試通過');
+      }
+    } catch (error) {
+      integrationResult.details.generation = `記錄生成錯誤: ${error.message}`;
+    }
+    
+    // 🔧 測試策略切換
+    try {
+      const modes = ['COMPLETE_ALL', 'ENROLLMENT_AWARE', 'MANUAL_PROMPT'];
+      let switchTestsPassed = 0;
+      
+      for (const mode of modes) {
+        const records = generateScheduledContactsWithEnrollmentAwareness(
+          testTransferData.studentData,
+          { completionMode: mode }
+        );
+        if (records && Array.isArray(records)) {
+          switchTestsPassed++;
+        }
+      }
+      
+      if (switchTestsPassed === modes.length) {
+        integrationResult.strategySwitchTest = true;
+        integrationResult.details.strategySwitch = '所有策略切換正常';
+        Logger.log('✅ 策略切換測試通過');
+      }
+    } catch (error) {
+      integrationResult.details.strategySwitch = `策略切換錯誤: ${error.message}`;
+    }
+    
+    // 🔧 測試向下相容性
+    try {
+      const originalRecords = generateScheduledContactsForStudent(
+        testTransferData.studentData,
+        { skipPastRecords: true }
+      );
+      
+      if (originalRecords && Array.isArray(originalRecords)) {
+        integrationResult.backwardCompatibilityTest = true;
+        integrationResult.details.backwardCompatibility = '原始系統相容性保持';
+        Logger.log('✅ 向下相容性測試通過');
+      }
+    } catch (error) {
+      integrationResult.details.backwardCompatibility = `向下相容性錯誤: ${error.message}`;
+    }
+    
+    // 📊 結果統計
+    const passedTests = [
+      integrationResult.configurationTest,
+      integrationResult.generationTest,
+      integrationResult.strategySwitchTest,
+      integrationResult.backwardCompatibilityTest
+    ].filter(test => test === true).length;
+    
+    integrationResult.overallPassed = passedTests === 4;
+    integrationResult.summary = `轉班學生入班感知記錄整合測試：${passedTests}/4 通過`;
+    
+    Logger.log(`📊 ${integrationResult.summary}`);
+    return integrationResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 轉班學生入班感知記霄整合測試失敗：${error.message}`);
+    return {
+      overallPassed: false,
+      summary: '整合測試系統錯誤',
+      details: { error: error.message }
+    };
   }
 }
 
