@@ -3309,6 +3309,47 @@ function performPostTransferValidation(params) {
       validation.warnings.push('電聯記錄處理可能不完整');
     }
     
+    // 🎯 5. 新增：檢查轉班學生記錄框架完整性
+    Logger.log(`🎯 檢查轉班學生記錄框架完整性`);
+    const frameworkCheck = validateTransferredStudentRecords(studentId, newTeacher);
+    validation.checks.push({
+      name: 'transferred_student_framework',
+      passed: frameworkCheck.isComplete,
+      details: frameworkCheck
+    });
+    
+    if (!frameworkCheck.isComplete) {
+      validation.errors.push(`轉班學生記錄框架不完整：缺失 ${frameworkCheck.missing.length} 個記錄`);
+      validation.overallSuccess = false;
+      
+      // 🔧 自動修復缺失記錄
+      Logger.log(`🔧 嘗試自動修復缺失記錄...`);
+      const repairResult = attemptFrameworkRepair(studentId, newTeacher, frameworkCheck.missing);
+      
+      validation.checks.push({
+        name: 'framework_repair_attempt',
+        passed: repairResult.success,
+        details: repairResult
+      });
+      
+      if (repairResult.success) {
+        Logger.log(`✅ 成功修復 ${repairResult.repairedCount} 筆缺失記錄`);
+        validation.warnings.push(`已自動修復 ${repairResult.repairedCount} 筆缺失記錄`);
+        
+        // 重新驗證框架完整性
+        const postRepairCheck = validateTransferredStudentRecords(studentId, newTeacher);
+        if (postRepairCheck.isComplete) {
+          validation.overallSuccess = true; // 修復成功，更新狀態
+          Logger.log(`🎯 修復後驗證：轉班學生記錄框架現在完整`);
+        }
+      } else {
+        Logger.log(`❌ 自動修復失敗：${repairResult.error}`);
+        validation.errors.push(`自動修復失敗：${repairResult.error}`);
+      }
+    } else {
+      Logger.log(`✅ 轉班學生記錄框架完整：${frameworkCheck.totalRecords} 筆記錄`);
+    }
+    
   } catch (error) {
     validation.errors.push(`轉班後驗證時發生錯誤：${error.message}`);
     validation.overallSuccess = false;
@@ -3566,4 +3607,133 @@ function executeRollbackOperations(rollbackData) {
   });
   
   Logger.log('✅ 回滾操作完成');
+}
+
+// ============ 轉班學生記錄框架驗證和修復功能 ============
+
+/**
+ * 🔍 驗證轉班學生記錄框架完整性
+ * @param {string} studentId 學生ID
+ * @param {string} newTeacher 新老師名稱
+ * @returns {Object} 驗證結果
+ */
+function validateTransferredStudentRecords(studentId, newTeacher) {
+  try {
+    Logger.log(`🔍 驗證轉班學生 ${studentId} 在 ${newTeacher} 記錄簿中的記錄框架`);
+    
+    // 找到新老師的記錄簿
+    const allBooks = getAllTeacherBooks();
+    const newTeacherBook = allBooks.find(book => 
+      book.getName().includes(newTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === newTeacher
+    );
+    
+    if (!newTeacherBook) {
+      return {
+        isComplete: false,
+        error: `找不到新老師 ${newTeacher} 的記錄簿`,
+        totalRecords: 0,
+        missing: []
+      };
+    }
+    
+    // 獲取電聯記錄工作表
+    const contactSheet = newTeacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet) {
+      return {
+        isComplete: false,
+        error: `新老師 ${newTeacher} 的記錄簿中找不到電聯記錄工作表`,
+        totalRecords: 0,
+        missing: []
+      };
+    }
+    
+    // 獲取該學生的所有記錄
+    const existingRecords = getExistingContactRecords(contactSheet, studentId);
+    Logger.log(`📋 找到 ${existingRecords.length} 筆該學生的電聯記錄`);
+    
+    // 使用 DataSyncManager.gs 中的驗證功能
+    const frameworkValidation = validateTransferredStudentFramework(existingRecords);
+    
+    Logger.log(`📄 轉班學生框架驗證結果：${frameworkValidation.summary}`);
+    
+    return {
+      ...frameworkValidation,
+      studentId: studentId,
+      newTeacher: newTeacher,
+      bookId: newTeacherBook.getId()
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 驗證轉班學生記錄框架失敗：${error.message}`);
+    return {
+      isComplete: false,
+      error: error.message,
+      studentId: studentId,
+      newTeacher: newTeacher,
+      totalRecords: 0,
+      missing: []
+    };
+  }
+}
+
+/**
+ * 🔧 嘗試修復轉班學生缺失的記錄框架
+ * @param {string} studentId 學生ID
+ * @param {string} newTeacher 新老師名稱
+ * @param {Array} missingCombinations 缺失的組合清單
+ * @returns {Object} 修復結果
+ */
+function attemptFrameworkRepair(studentId, newTeacher, missingCombinations) {
+  try {
+    Logger.log(`🔧 嘗試為轉班學生 ${studentId} 修復 ${missingCombinations.length} 個缺失記錄`);
+    
+    // 找到新老師的記錄簿
+    const allBooks = getAllTeacherBooks();
+    const newTeacherBook = allBooks.find(book => 
+      book.getName().includes(newTeacher) || 
+      extractTeacherNameFromFileName(book.getName()) === newTeacher
+    );
+    
+    if (!newTeacherBook) {
+      throw new Error(`找不到新老師 ${newTeacher} 的記錄簿`);
+    }
+    
+    // 獲取學生基本資料
+    const studentData = getStudentBasicData(studentId);
+    if (!studentData) {
+      throw new Error(`無法獲取學生 ${studentId} 的基本資料`);
+    }
+    
+    // 更新學生資料中的班級資訊為新老師
+    studentData['English Class'] = newTeacher; // 確保記錄中的班級資訊正確
+    
+    // 獲取現有記錄作為參考
+    const contactSheet = newTeacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    const existingRecords = getExistingContactRecords(contactSheet, studentId);
+    
+    // 使用 DataSyncManager.gs 中的修復功能
+    const repairResult = repairMissingRecordsForTransferredStudent(
+      studentData, 
+      newTeacherBook, 
+      existingRecords, 
+      missingCombinations
+    );
+    
+    if (repairResult.success) {
+      Logger.log(`✅ 成功修復 ${repairResult.repairedCount} 筆缺失記錄`);
+    } else {
+      Logger.log(`❌ 修復失敗：${repairResult.error}`);
+    }
+    
+    return repairResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 修復轉班學生記錄框架失敗：${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      repairedCount: 0
+    };
+  }
 }

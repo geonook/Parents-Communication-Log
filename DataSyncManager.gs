@@ -2015,6 +2015,14 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
     // 🎯 完整性驗證
     const integrityCheck = verifyTransferIntegrity(contactSheet, studentId, validatedRecords);
     
+    // 🔍 驗證轉班學生記錄完整性
+    const frameworkValidation = validateTransferredStudentFramework(validatedRecords);
+    if (!frameworkValidation.isComplete) {
+      Logger.log(`⚠️ 警告：轉班學生記錄框架不完整：${frameworkValidation.missing.join(', ')}`);
+    } else {
+      Logger.log(`🎯 轉班學生完整框架確保：${validatedRecords.length} 筆記錄（帶有完整的6種組合）`);
+    }
+    
     return {
       success: true,
       recordCount: validatedRecords.length,
@@ -2023,13 +2031,15 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
         existingRecords: existingRecords.length,
         newRecords: validatedRecords.length,
         transferDate: transferDate,
-        preserveHistory: preserveHistory
+        preserveHistory: preserveHistory,
+        frameworkValidation: frameworkValidation // 🎯 添加框架驗證結果
       },
       validationResults: {
         bookValidation: bookValidation,
         recordValidation: validatedRecords.length === scheduledContacts.length,
         sortingResult: sortingResult,
-        integrityCheck: integrityCheck
+        integrityCheck: integrityCheck,
+        completeFramework: frameworkValidation.isComplete // 🎯 框架完整性檢查
       }
     };
     
@@ -2047,6 +2057,168 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
   }
 }
 
+// ============ 轉班學生記錄框架驗證功能 ============
+
+/**
+ * 🔍 驗證轉班學生記錄框架完整性
+ * @param {Array} records 記錄陣列
+ * @returns {Object} 驗證結果
+ */
+function validateTransferredStudentFramework(records) {
+  try {
+    Logger.log(`🔍 開始驗證轉班學生記錄框架：${records.length} 筆記錄`);
+    
+    // 定義完整的6種組合
+    const expectedCombinations = [];
+    const semesters = SYSTEM_CONFIG.ACADEMIC_YEAR.SEMESTERS; // ['Fall', 'Spring']
+    const terms = SYSTEM_CONFIG.ACADEMIC_YEAR.TERMS; // ['Beginning', 'Midterm', 'Final']
+    
+    semesters.forEach(semester => {
+      terms.forEach(term => {
+        expectedCombinations.push(`${semester}-${term}`);
+      });
+    });
+    
+    Logger.log(`🎯 期望的完整框架：${expectedCombinations.join(', ')}`);
+    
+    // 分析現有記錄
+    const existingCombinations = [];
+    const duplicates = [];
+    const seenCombinations = new Set();
+    
+    records.forEach((record, index) => {
+      const semester = record[5]; // F: Semester
+      const term = record[6]; // G: Term
+      const combination = `${semester}-${term}`;
+      
+      if (seenCombinations.has(combination)) {
+        duplicates.push(combination);
+      } else {
+        seenCombinations.add(combination);
+        existingCombinations.push(combination);
+      }
+    });
+    
+    Logger.log(`📋 現有組合：${existingCombinations.join(', ')}`);
+    
+    // 找出缺失的組合
+    const missing = expectedCombinations.filter(combo => !existingCombinations.includes(combo));
+    const extra = existingCombinations.filter(combo => !expectedCombinations.includes(combo));
+    
+    const isComplete = missing.length === 0 && existingCombinations.length === 6;
+    const hasDuplicates = duplicates.length > 0;
+    const hasExtra = extra.length > 0;
+    
+    const validationResult = {
+      isComplete: isComplete,
+      totalRecords: records.length,
+      expectedCount: 6,
+      existingCombinations: existingCombinations,
+      missing: missing,
+      extra: extra,
+      duplicates: duplicates,
+      hasDuplicates: hasDuplicates,
+      hasExtra: hasExtra,
+      summary: `${existingCombinations.length}/6 組合存在${missing.length > 0 ? `, 缺失: ${missing.join(', ')}` : ''}${duplicates.length > 0 ? `, 重複: ${duplicates.join(', ')}` : ''}${extra.length > 0 ? `, 多餘: ${extra.join(', ')}` : ''}`
+    };
+    
+    Logger.log(`📄 框架驗證結果：${validationResult.summary}`);
+    
+    if (isComplete) {
+      Logger.log('✅ 轉班學生記錄框架完整');
+    } else {
+      Logger.log(`⚠️ 轉班學生記錄框架不完整：缺失 ${missing.length} 個組合`);
+    }
+    
+    return validationResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 驗證記錄框架失敗：${error.message}`);
+    return {
+      isComplete: false,
+      error: error.message,
+      totalRecords: records ? records.length : 0,
+      summary: '驗證失敗'
+    };
+  }
+}
+
+/**
+ * 🔧 為轉班學生自動修復缺失的記錄
+ * @param {Object} studentData 學生資料
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} targetBook 目標記錄簿
+ * @param {Array} existingRecords 現有記錄
+ * @param {Array} missingCombinations 缺失組合清單
+ * @returns {Object} 修復結果
+ */
+function repairMissingRecordsForTransferredStudent(studentData, targetBook, existingRecords, missingCombinations) {
+  try {
+    Logger.log(`🔧 開始為轉班學生修復缺失記錄：${missingCombinations.length} 個遺失組合`);
+    
+    const studentId = studentData.ID || studentData['Student ID'];
+    const studentName = studentData['Chinese Name'] || studentData.Name || '未知姓名';
+    const englishName = studentData['English Name'] || '未知英文名';
+    const englishClass = studentData['English Class'] || '未知班級';
+    
+    const repairedRecords = [];
+    
+    // 為每個缺失組合創建記錄
+    missingCombinations.forEach(combination => {
+      const [semester, term] = combination.split('-');
+      
+      const contactRecord = [
+        studentId,                                    // A: Student ID
+        studentName,                                  // B: Name  
+        englishName,                                  // C: English Name
+        englishClass,                                // D: English Class
+        '',                                          // E: Date (留空待填)
+        semester,                                    // F: Semester
+        term,                                        // G: Term
+        SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,       // H: Contact Type = "Scheduled Contact"
+        '',                                          // I: Teachers Content (留空待填)
+        '',                                          // J: Parents Responses (留空待填)
+        ''                                           // K: Contact Method (留空待填)
+      ];
+      
+      repairedRecords.push(contactRecord);
+      Logger.log(`🔨 已修復記錄：${semester} ${term}`);
+    });
+    
+    // 將修復記錄添加到電聯記錄工作表
+    const contactSheet = targetBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    if (!contactSheet) {
+      throw new Error('找不到電聯記錄工作表');
+    }
+    
+    const insertionResult = insertRecordsWithValidation(contactSheet, repairedRecords);
+    
+    if (insertionResult.success) {
+      Logger.log(`✅ 成功修復 ${repairedRecords.length} 筆缺失記錄`);
+      
+      // 重新排序以確保記錄順序正確
+      const sortingResult = performContactRecordsSorting(targetBook);
+      
+      return {
+        success: true,
+        repairedCount: repairedRecords.length,
+        repairedCombinations: missingCombinations,
+        insertionResult: insertionResult,
+        sortingResult: sortingResult
+      };
+    } else {
+      throw new Error(`記錄插入失敗：${insertionResult.message}`);
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 修復缺失記錄失敗：${error.message}`);
+    return {
+      success: false,
+      error: error.message,
+      repairedCount: 0
+    };
+  }
+}
+
 /**
  * 階段3：為單一學生生成完整的 Scheduled Contact 記錄
  * @param {Object} studentData 學生資料（包含更新後的班級資訊）
@@ -2057,6 +2229,7 @@ function transferScheduledContactRecords(studentData, targetBook, newTeacher, op
  * @param {Object} studentData 學生資料對象
  * @param {Object} options 選項設定
  * @param {boolean} options.skipPastRecords 是否跳過過去的記錄（轉班使用）
+ * @param {boolean} options.ensureCompleteFramework 是否確保完整6記錄框架（轉班學生使用）
  * @param {string} options.transferDate 轉班日期（用於判斷時序）
  * @param {Array} options.existingRecords 現有記錄（避免重複）
  * @returns {Array} 生成的 Scheduled Contact 記錄陣列
@@ -2070,11 +2243,12 @@ function generateScheduledContactsForStudent(studentData, options = {}) {
     
     // 📋 選項處理
     const skipPastRecords = options.skipPastRecords || false;
+    const ensureCompleteFramework = options.ensureCompleteFramework || false;
     const transferDate = options.transferDate || null;
     const existingRecords = options.existingRecords || [];
     
     Logger.log(`📝 為學生 ${studentId} (${studentName}) 生成 Scheduled Contact 記錄，班級：${englishClass}`);
-    Logger.log(`🔧 選項設定：跳過過去記錄=${skipPastRecords}, 轉班日期=${transferDate}, 現有記錄=${existingRecords.length}筆`);
+    Logger.log(`🔧 選項設定：跳過過去記錄=${skipPastRecords}, 完整框架=${ensureCompleteFramework}, 轉班日期=${transferDate}, 現有記錄=${existingRecords.length}筆`);
     
     // 🔍 資料完整性檢查
     const validationResult = validateStudentDataCompleteness(studentData);
@@ -2097,10 +2271,15 @@ function generateScheduledContactsForStudent(studentData, options = {}) {
     
     semesters.forEach(semester => {
       terms.forEach(term => {
-        // 🕒 時序檢查：是否跳過過去的記錄
-        if (skipPastRecords && isPastRecord(semester, term, currentSemesterInfo)) {
+        // 🕒 時序檢查：是否跳過過去的記錄（除非需要確保完整框架）
+        if (skipPastRecords && !ensureCompleteFramework && isPastRecord(semester, term, currentSemesterInfo)) {
           Logger.log(`⏭️ 跳過過去記錄：${semester} ${term}`);
           return;
+        }
+        
+        // 🎯 完整框架模式：為轉班學生確保所有6個記錄都被創建
+        if (ensureCompleteFramework) {
+          Logger.log(`🔄 完整框架模式：確保創建 ${semester} ${term} 記錄`);
         }
         
         // 🔄 重複檢查：避免創建已存在的記錄
