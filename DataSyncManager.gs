@@ -3324,6 +3324,235 @@ function validateEnrollmentAwareTransferIntegration(transferTestData = null) {
   }
 }
 
+// ============ 📝 快速驗證入口 - 管理員使用 ============
+
+/**
+ * 📝 快速驗證入班感知系統 - 管理員入口
+ * 可從 Google Apps Script 直接執行的快速測試函數
+ * @returns {Object} 綜合測試結果
+ */
+function quickValidateEnrollmentAwareSystem() {
+  try {
+    Logger.log('📝 ==========================================================');
+    Logger.log('📝 快速驗證入班感知進度記錄補齊系統');
+    Logger.log('📝 ==========================================================');
+    
+    const overallResult = {
+      timestamp: new Date().toLocaleString(),
+      systemTests: null,
+      integrationTests: null,
+      configurationCheck: null,
+      overallHealth: 'UNKNOWN',
+      recommendations: [],
+      summary: ''
+    };
+    
+    // 🔧 1. 系統功能測試
+    Logger.log('🔧 步驟 1/3: 執行系統功能測試...');
+    overallResult.systemTests = testEnrollmentAwareRecordGeneration();
+    
+    // 🔍 2. 整合測試
+    Logger.log('🔍 步驟 2/3: 執行整合測試...');
+    overallResult.integrationTests = validateEnrollmentAwareTransferIntegration();
+    
+    // 🔧 3. 配置系統檢查
+    Logger.log('🔧 步驟 3/3: 檢查配置系統...');
+    overallResult.configurationCheck = validateProgressCompletionConfiguration();
+    
+    // 📊 綜合健康評估
+    const systemHealth = overallResult.systemTests.testsPassed === overallResult.systemTests.totalTests;
+    const integrationHealth = overallResult.integrationTests.overallPassed;
+    const configHealth = overallResult.configurationCheck.isValid;
+    
+    if (systemHealth && integrationHealth && configHealth) {
+      overallResult.overallHealth = 'EXCELLENT';
+      overallResult.recommendations.push('✅ 系統健康狀態優良，可安全使用');
+    } else if (systemHealth && integrationHealth) {
+      overallResult.overallHealth = 'GOOD';
+      overallResult.recommendations.push('⚠️ 系統功能正常，但配置需要檢查');
+    } else if (systemHealth) {
+      overallResult.overallHealth = 'WARNING';
+      overallResult.recommendations.push('⚠️ 基本功能正常，但整合有問題');
+    } else {
+      overallResult.overallHealth = 'CRITICAL';
+      overallResult.recommendations.push('❌ 系統核心功能有問題，需要立即修復');
+    }
+    
+    // 📝 生成綜合摘要
+    overallResult.summary = `入班感知系統健康評估: ${overallResult.overallHealth} | ` +
+                           `功能測試: ${overallResult.systemTests.testsPassed}/${overallResult.systemTests.totalTests} | ` +
+                           `整合測試: ${overallResult.integrationTests.overallPassed ? '通過' : '失敗'} | ` +
+                           `配置檢查: ${configHealth ? '正常' : '異常'}`;
+    
+    // 📊 輸出結果
+    Logger.log('📝 ==========================================================');
+    Logger.log('📊 快速驗證結果:');
+    Logger.log(`📊 ${overallResult.summary}`);
+    Logger.log('📊 建議:');
+    overallResult.recommendations.forEach(rec => Logger.log(`   ${rec}`));
+    Logger.log('📝 ==========================================================');
+    
+    return overallResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 快速驗證系統錯誤: ${error.message}`);
+    return {
+      timestamp: new Date().toLocaleString(),
+      overallHealth: 'ERROR',
+      summary: '驗證系統本身出現錯誤',
+      error: error.message
+    };
+  }
+}
+
+/**
+ * 🔧 驗證進度補齊配置系統
+ * @returns {Object} 配置驗證結果
+ */
+function validateProgressCompletionConfiguration() {
+  try {
+    Logger.log('🔧 驗證進度補齊配置系統');
+    
+    const validationResult = {
+      isValid: false,
+      configExists: false,
+      defaultModeValid: false,
+      allModesValid: false,
+      details: {},
+      issues: []
+    };
+    
+    // 🔍 檢查配置是否存在
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_COMPLETION;
+    if (!config) {
+      validationResult.issues.push('配置不存在: SYSTEM_CONFIG.TRANSFER_MANAGEMENT.PROGRESS_COMPLETION');
+      return validationResult;
+    }
+    
+    validationResult.configExists = true;
+    validationResult.details.configFound = '✅ 配置存在';
+    
+    // 🔍 檢查預設模式
+    if (config.DEFAULT_MODE && config.MODES && config.MODES[config.DEFAULT_MODE]) {
+      validationResult.defaultModeValid = true;
+      validationResult.details.defaultMode = `✅ 預設模式: ${config.DEFAULT_MODE}`;
+    } else {
+      validationResult.issues.push(`預設模式無效: ${config.DEFAULT_MODE}`);
+    }
+    
+    // 🔍 檢查所有模式
+    const expectedModes = ['COMPLETE_ALL', 'ENROLLMENT_AWARE', 'MANUAL_PROMPT'];
+    const availableModes = Object.keys(config.MODES || {});
+    const missingModes = expectedModes.filter(mode => !availableModes.includes(mode));
+    
+    if (missingModes.length === 0) {
+      validationResult.allModesValid = true;
+      validationResult.details.modes = `✅ 所有預期模式存在: ${expectedModes.join(', ')}`;
+    } else {
+      validationResult.issues.push(`缺少模式: ${missingModes.join(', ')}`);
+    }
+    
+    // 📊 綜合評估
+    validationResult.isValid = validationResult.configExists && 
+                               validationResult.defaultModeValid && 
+                               validationResult.allModesValid;
+    
+    if (validationResult.isValid) {
+      Logger.log('✅ 進度補齊配置系統驗證通過');
+    } else {
+      Logger.log('❌ 進度補齊配置系統驗證失敗');
+      validationResult.issues.forEach(issue => Logger.log(`  - ${issue}`));
+    }
+    
+    return validationResult;
+    
+  } catch (error) {
+    Logger.log(`❌ 配置系統驗證錯誤: ${error.message}`);
+    return {
+      isValid: false,
+      error: error.message,
+      issues: ['配置系統驗證出現錯誤']
+    };
+  }
+}
+
+/**
+ * 🎯 簡單示範：入班感知系統使用
+ * 示範如何在不同情境下使用三種補齊策略
+ */
+function demonstrateEnrollmentAwareUsage() {
+  try {
+    Logger.log('🎯 ==========================================================');
+    Logger.log('🎯 入班感知系統使用示範');
+    Logger.log('🎯 ==========================================================');
+    
+    // 📋 模擬學生資料
+    const demoStudent = {
+      'ID': 'DEMO2024001',
+      'Chinese Name': '示範學生',
+      'English Name': 'Demo Student',
+      'English Class': 'Demo Class A'
+    };
+    
+    Logger.log(`👥 模擬學生: ${demoStudent['Chinese Name']} (${demoStudent.ID})`);
+    Logger.log('');
+    
+    // 📊 情境 1：新學期開始，需要完整記錄
+    Logger.log('📊 情境 1: 新學期開始 - 使用 COMPLETE_ALL 策略');
+    const completeAllDemo = generateScheduledContactsWithEnrollmentAwareness(demoStudent, {
+      completionMode: 'COMPLETE_ALL'
+    });
+    Logger.log(`   結果: 生成 ${completeAllDemo.length} 筆完整記錄 (預設未聯絡)`);
+    Logger.log('');
+    
+    // 📊 情境 2：學期中轉入，只要未來期次
+    Logger.log('📊 情境 2: 學期中轉入 - 使用 ENROLLMENT_AWARE 策略');
+    const enrollmentAwareDemo = generateScheduledContactsWithEnrollmentAwareness(demoStudent, {
+      completionMode: 'ENROLLMENT_AWARE',
+      enrollmentDate: new Date().toISOString().split('T')[0] // 今天入班
+    });
+    Logger.log(`   結果: 生成 ${enrollmentAwareDemo.length} 筆入班後記錄 (僅未來期次)`);
+    Logger.log('');
+    
+    // 📊 情境 3：需要完整追蹤但明確區分
+    Logger.log('📊 情境 3: 完整追蹤需求 - 使用 MANUAL_PROMPT 策略');
+    const manualPromptDemo = generateScheduledContactsWithEnrollmentAwareness(demoStudent, {
+      completionMode: 'MANUAL_PROMPT',
+      enrollmentDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30天前入班
+    });
+    const annotatedCount = manualPromptDemo.filter(record => record[8] && record[8].includes('非本班在籍')).length;
+    Logger.log(`   結果: 生成 ${manualPromptDemo.length} 筆完整記錄，其中 ${annotatedCount} 筆標註"非本班在籍"`);
+    Logger.log('');
+    
+    // 📊 比較結果
+    Logger.log('📊 策略比較結果:');
+    Logger.log(`   COMPLETE_ALL:     ${completeAllDemo.length} 筆記錄 (適合新學期開始)`);
+    Logger.log(`   ENROLLMENT_AWARE: ${enrollmentAwareDemo.length} 筆記錄 (適合中途轉入)`);
+    Logger.log(`   MANUAL_PROMPT:    ${manualPromptDemo.length} 筆記錄 (適合完整追蹤)`);
+    
+    Logger.log('🎯 ==========================================================');
+    Logger.log('✅ 示範完成！三種策略均可正常運作');
+    Logger.log('🎯 ==========================================================');
+    
+    return {
+      success: true,
+      strategies: {
+        COMPLETE_ALL: completeAllDemo.length,
+        ENROLLMENT_AWARE: enrollmentAwareDemo.length,
+        MANUAL_PROMPT: manualPromptDemo.length
+      },
+      summary: '所有策略皆可正常運作'
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 示範過程出現錯誤: ${error.message}`);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 // ============ 支援函數：Scheduled Contact 記錄生成增強功能 ============
 
 /**
