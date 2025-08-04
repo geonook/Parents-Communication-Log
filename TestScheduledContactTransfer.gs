@@ -228,8 +228,7 @@ function testTransferredStudentCompleteFramework() {
     };
     
     // 測試 1：測試 ensureCompleteFramework 選項
-    Logger.log('
-🗺️ 測試 1: ensureCompleteFramework 選項功能');
+    Logger.log('\n🗺️ 測試 1: ensureCompleteFramework 選項功能');
     testResults.totalTests++;
     
     try {
@@ -405,8 +404,7 @@ function runAllTransferTests() {
   
   try {
     // 執行基本轉班測試
-    Logger.log('
-1️⃣ 執行基本轉班測試...');
+    Logger.log('\n1️⃣ 執行基本轉班測試...');
     results.basicTransfer = testScheduledContactTransfer();
     
     // 執行完整框架測試
