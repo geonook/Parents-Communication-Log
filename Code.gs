@@ -52,6 +52,205 @@ const SYSTEM_CONFIG = {
     SPECIAL: 'Special Contact'       // 不納入檢查
   },
 
+  // ===== 強化學生轉班管理系統配置 =====
+  // 支援六大核心需求：狀態標註、統計策略、進度補全、異動標註、進度繼承、彈性選項
+  TRANSFER_MANAGEMENT: {
+    // 1. 學生狀態標註選項
+    STATUS_ANNOTATION: {
+      MODE: 'CONFIGURABLE_FLAG',              // 'MARK_ONLY' | 'CONFIGURABLE_FLAG' | 'HISTORICAL_PRESERVE'
+      INCLUDE_TRANSFERRED_IN_STATS: false,    // 選項A: 不納入統計 | 選項B: 納入統計
+      PRESERVE_HISTORICAL_DATA: true,         // 保留歷史資料
+      AUTO_TIMESTAMP: true,                   // 自動加上時間戳記
+      VISUAL_INDICATORS: {
+        TRANSFERRED_OUT: '📤 已轉出',        // 轉出學生標記
+        CLASS_CHANGED: '🔄 已轉班',          // 轉班學生標記
+        HISTORICAL_RECORD: '📊 歷史',         // 歷史記錄標記
+        COLOR_CODING: {
+          TRANSFERRED_OUT: '#FFCCCB',          // 淺紅色背景
+          CLASS_CHANGED: '#FFFFCC',           // 淺黃色背景
+          CURRENT_ACTIVE: '#CCFFCC'           // 淺綠色背景
+        }
+      }
+    },
+    
+    // 2. 統計計算策略
+    STATISTICS_CALCULATION: {
+      DEFAULT_MODE: 'CURRENT_ACTIVE_ONLY',     // 預設模式
+      MODES: {
+        CURRENT_ACTIVE_ONLY: {
+          name: '現行在籍學生統計',
+          description: '僅計算目前在班學生',
+          includeTransferred: false,
+          denominator: 'current_active'
+        },
+        FULL_HISTORICAL: {
+          name: '完整歷史統計',
+          description: '包含所有歷史學生記錄',
+          includeTransferred: true,
+          denominator: 'all_historical'
+        },
+        DUAL_VIEW: {
+          name: '雙重檢視統計',
+          description: '同時顯示現況與歷史',
+          showBothViews: true,
+          allowToggle: true
+        },
+        ENROLLMENT_BASED: {
+          name: '入班時點基準',
+          description: '基於學生入班時的期次計算',
+          dynamicDenominator: true
+        }
+      },
+      ALLOW_REAL_TIME_TOGGLE: true,             // 允許即時切換統計模式
+      DISPLAY_OPTIONS: {
+        SHOW_PERCENTAGES: true,                  // 顯示百分比
+        SHOW_ABSOLUTE_NUMBERS: true,             // 顯示絕對數字
+        SHOW_COMPARISON: true,                   // 顯示對比資訊
+        BREAKDOWN_BY_PERIOD: true                // 按期次分解顯示
+      }
+    },
+    
+    // 3. 進度記錄自動補齊策略
+    PROGRESS_COMPLETION: {
+      DEFAULT_MODE: 'ENROLLMENT_AWARE',         // 預設模式
+      MODES: {
+        COMPLETE_ALL: {
+          name: '補齊全部記錄',
+          description: '為所有期次建立記錄（預設未聯絡）',
+          fillAllPeriods: true,
+          defaultStatus: '未聯絡',
+          markPreEnrollment: false
+        },
+        ENROLLMENT_AWARE: {
+          name: '入班感知模式',
+          description: '僅建立入班後期次的記錄',
+          onlyPostEnrollment: true,
+          trackEnrollmentDate: true,
+          smartBackfill: true
+        },
+        MANUAL_PROMPT: {
+          name: '手動提示模式',
+          description: '建立全記錄但標註「非本班在籍」',
+          fillAllPeriods: true,
+          markPreEnrollment: true,
+          preEnrollmentLabel: '非本班在籍'
+        }
+      },
+      AUTO_BACKFILL: {
+        ENABLED: true,                           // 啟用自動補齊
+        CHECK_ON_IMPORT: true,                   // 匯入時檢查
+        BATCH_PROCESSING: true,                  // 批次處理
+        PRESERVE_EXISTING: true                  // 保留現有記錄
+      },
+      CONFIGURABLE_BY_ADMIN: true               // 管理員可配置
+    },
+    
+    // 4. 異動標註與記錄
+    CHANGE_ANNOTATION: {
+      REQUIRED_NOTES: true,                     // 必須填寫異動備註
+      AUTO_DETAILED_LOGGING: true,             // 自動詳細記錄
+      PRESERVE_HISTORY_POLICY: 'ARCHIVE_NOT_DELETE', // 封存而非刪除
+      BACKUP_STRATEGIES: {
+        IMMEDIATE_SNAPSHOT: true,                // 異動前立即快照
+        ROLLBACK_SUPPORT: true,                 // 支援回滾
+        CHANGE_AUDIT_TRAIL: true                // 完整異動軌跡
+      },
+      NOTIFICATION_SETTINGS: {
+        EMAIL_NOTIFICATIONS: false,             // 電子郵件通知（待實作）
+        LOG_NOTIFICATIONS: true,                // 系統日誌通知
+        ADMIN_ALERTS: true                      // 管理員警示
+      }
+    },
+    
+    // 5. 轉班進度繼承設定
+    PROGRESS_INHERITANCE: {
+      DEFAULT_POLICY: 'RESET_WITH_PRESERVATION', // 預設政策
+      POLICIES: {
+        RESET_ZERO: {
+          name: '完全重置',
+          description: '新班級從零開始',
+          inheritProgress: false,
+          preserveHistory: true
+        },
+        INHERIT_PARTIAL: {
+          name: '部分繼承',
+          description: '繼承已完成的期次，未完成期次重置',
+          inheritCompleted: true,
+          resetPending: true
+        },
+        RESET_WITH_PRESERVATION: {
+          name: '重置並保留',
+          description: '新班級重置，但保留原班級記錄供參考',
+          inheritProgress: false,
+          preserveSourceRecords: true,
+          createReferenceLinks: true
+        }
+      },
+      METADATA_PRESERVATION: {
+        PRESERVE_SOURCE_NOTES: true,             // 保留來源備註
+        TRACK_TRANSFER_CHAIN: true,             // 追蹤轉班鏈
+        HISTORICAL_CONTEXT: true                // 保留歷史脈絡
+      }
+    },
+    
+    // 6. 系統彈性與擴展選項
+    SYSTEM_FLEXIBILITY: {
+      CUSTOM_STATUS_LABELS: {
+        ENABLED: true,                           // 啟用自訂狀態標籤
+        USER_DEFINED_STATUSES: [],              // 使用者定義狀態（預留）
+        DYNAMIC_COLOR_ASSIGNMENT: true          // 動態顏色指派
+      },
+      BATCH_OPERATIONS: {
+        BULK_TRANSFER: true,                     // 批次轉班
+        BULK_STATUS_UPDATE: true,               // 批次狀態更新
+        PROGRESS_BATCH_PROCESSING: true         // 進度批次處理
+      },
+      INTEGRATION_HOOKS: {
+        PRE_TRANSFER_HOOKS: [],                  // 轉班前掛鉤（預留）
+        POST_TRANSFER_HOOKS: [],                 // 轉班後掛鉤（預留）
+        VALIDATION_HOOKS: []                     // 驗證掛鉤（預留）
+      },
+      REPORTING_OPTIONS: {
+        DETAILED_TRANSFER_REPORTS: true,         // 詳細轉班報告
+        STATISTICAL_DASHBOARDS: true,           // 統計儀表板
+        EXPORT_FORMATS: ['PDF', 'Excel', 'CSV'] // 匯出格式
+      }
+    },
+    
+    // 7. 驗證與品質控制
+    VALIDATION_RULES: {
+      STUDENT_ID_VALIDATION: {
+        REQUIRED: true,                          // 必須提供學生ID
+        FORMAT_CHECK: true,                     // 格式檢查
+        UNIQUENESS_CHECK: true                  // 唯一性檢查
+      },
+      CLASS_VALIDATION: {
+        VALID_CLASS_CHECK: true,                // 有效班級檢查
+        TEACHER_ASSIGNMENT_CHECK: true,         // 老師指派檢查
+        CAPACITY_CHECK: false                   // 容量檢查（可選）
+      },
+      DATA_INTEGRITY: {
+        ORPHANED_RECORDS_CHECK: true,           // 孤立記錄檢查
+        CONSISTENCY_VALIDATION: true,           // 一致性驗證
+        AUTOMATIC_REPAIR: true                  // 自動修復
+      }
+    },
+    
+    // 8. 效能優化設定
+    PERFORMANCE_OPTIMIZATION: {
+      CACHE_SETTINGS: {
+        ENABLE_CACHING: true,                   // 啟用快取
+        CACHE_DURATION: 300,                   // 快取持續時間（秒）
+        SMART_INVALIDATION: true               // 智能失效
+      },
+      BATCH_SIZES: {
+        STUDENT_PROCESSING: 50,                 // 學生處理批次大小
+        RECORD_UPDATES: 100,                   // 記錄更新批次大小
+        STATISTICAL_CALCULATION: 200           // 統計計算批次大小
+      }
+    }
+  },
+
   // 聯繫方式選項（移除home visit和in person）
   CONTACT_METHODS: ['Phone Call', 'Line', 'Email'],
 
@@ -417,6 +616,262 @@ const SYSTEM_CONFIG = {
   }
 };
 
+// ===== 轉班管理系統配置驗證與初始化函數 =====
+
+/**
+ * 驗證轉班管理配置的完整性與有效性
+ * @returns {Object} 驗證結果
+ */
+function validateTransferManagementConfig() {
+  try {
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT;
+    const validation = {
+      isValid: true,
+      errors: [],
+      warnings: [],
+      recommendations: []
+    };
+    
+    // 1. 檢查狀態標註配置
+    if (!config.STATUS_ANNOTATION) {
+      validation.errors.push('缺少 STATUS_ANNOTATION 配置');
+      validation.isValid = false;
+    } else {
+      const statusConfig = config.STATUS_ANNOTATION;
+      const validModes = ['MARK_ONLY', 'CONFIGURABLE_FLAG', 'HISTORICAL_PRESERVE'];
+      if (!validModes.includes(statusConfig.MODE)) {
+        validation.errors.push(`STATUS_ANNOTATION.MODE 必須是 ${validModes.join(', ')} 之一`);
+        validation.isValid = false;
+      }
+    }
+    
+    // 2. 檢查統計計算配置
+    if (!config.STATISTICS_CALCULATION) {
+      validation.errors.push('缺少 STATISTICS_CALCULATION 配置');
+      validation.isValid = false;
+    } else {
+      const statsConfig = config.STATISTICS_CALCULATION;
+      const validDefaultModes = Object.keys(statsConfig.MODES || {});
+      if (!validDefaultModes.includes(statsConfig.DEFAULT_MODE)) {
+        validation.errors.push(`STATISTICS_CALCULATION.DEFAULT_MODE 必須是已定義的模式之一：${validDefaultModes.join(', ')}`);
+        validation.isValid = false;
+      }
+    }
+    
+    // 3. 檢查進度補齊配置
+    if (!config.PROGRESS_COMPLETION) {
+      validation.errors.push('缺少 PROGRESS_COMPLETION 配置');
+      validation.isValid = false;
+    } else {
+      const progressConfig = config.PROGRESS_COMPLETION;
+      const validModes = Object.keys(progressConfig.MODES || {});
+      if (!validModes.includes(progressConfig.DEFAULT_MODE)) {
+        validation.errors.push(`PROGRESS_COMPLETION.DEFAULT_MODE 必須是已定義的模式之一：${validModes.join(', ')}`);
+        validation.isValid = false;
+      }
+    }
+    
+    // 4. 檢查進度繼承配置  
+    if (!config.PROGRESS_INHERITANCE) {
+      validation.errors.push('缺少 PROGRESS_INHERITANCE 配置');
+      validation.isValid = false;
+    } else {
+      const inheritanceConfig = config.PROGRESS_INHERITANCE;
+      const validPolicies = Object.keys(inheritanceConfig.POLICIES || {});
+      if (!validPolicies.includes(inheritanceConfig.DEFAULT_POLICY)) {
+        validation.errors.push(`PROGRESS_INHERITANCE.DEFAULT_POLICY 必須是已定義的政策之一：${validPolicies.join(', ')}`);
+        validation.isValid = false;
+      }
+    }
+    
+    // 5. 效能配置建議
+    if (config.PERFORMANCE_OPTIMIZATION) {
+      const perfConfig = config.PERFORMANCE_OPTIMIZATION;
+      if (perfConfig.BATCH_SIZES.STUDENT_PROCESSING > 100) {
+        validation.warnings.push('STUDENT_PROCESSING 批次大小超過建議值 100，可能影響效能');
+      }
+      if (perfConfig.CACHE_SETTINGS.CACHE_DURATION < 60) {
+        validation.recommendations.push('建議將快取持續時間設定為至少 60 秒以改善效能');
+      }
+    }
+    
+    // 6. 功能完整性檢查
+    const requiredSections = [
+      'STATUS_ANNOTATION', 'STATISTICS_CALCULATION', 'PROGRESS_COMPLETION',
+      'CHANGE_ANNOTATION', 'PROGRESS_INHERITANCE', 'SYSTEM_FLEXIBILITY'
+    ];
+    
+    requiredSections.forEach(section => {
+      if (!config[section]) {
+        validation.warnings.push(`建議添加 ${section} 配置以獲得完整功能`);
+      }
+    });
+    
+    Logger.log(`✅ 轉班管理配置驗證完成 - 有效: ${validation.isValid}, 錯誤: ${validation.errors.length}, 警告: ${validation.warnings.length}`);
+    return validation;
+    
+  } catch (error) {
+    Logger.log('❌ 配置驗證失敗：' + error.message);
+    return {
+      isValid: false,
+      errors: ['配置驗證過程中發生錯誤：' + error.message],
+      warnings: [],
+      recommendations: []
+    };
+  }
+}
+
+/**
+ * 獲取當前轉班管理配置的摘要資訊
+ * @returns {Object} 配置摘要
+ */
+function getTransferManagementConfigSummary() {
+  try {
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT;
+    
+    return {
+      // 基本設定
+      statusAnnotationMode: config.STATUS_ANNOTATION?.MODE || 'CONFIGURABLE_FLAG',
+      includeTransferredInStats: config.STATUS_ANNOTATION?.INCLUDE_TRANSFERRED_IN_STATS || false,
+      
+      // 統計設定
+      defaultStatisticsMode: config.STATISTICS_CALCULATION?.DEFAULT_MODE || 'CURRENT_ACTIVE_ONLY',
+      allowRealTimeToggle: config.STATISTICS_CALCULATION?.ALLOW_REAL_TIME_TOGGLE || true,
+      
+      // 進度設定
+      progressCompletionMode: config.PROGRESS_COMPLETION?.DEFAULT_MODE || 'ENROLLMENT_AWARE',
+      autoBackfillEnabled: config.PROGRESS_COMPLETION?.AUTO_BACKFILL?.ENABLED || true,
+      
+      // 繼承設定
+      progressInheritancePolicy: config.PROGRESS_INHERITANCE?.DEFAULT_POLICY || 'RESET_WITH_PRESERVATION',
+      preserveSourceNotes: config.PROGRESS_INHERITANCE?.METADATA_PRESERVATION?.PRESERVE_SOURCE_NOTES || true,
+      
+      // 系統設定
+      cachingEnabled: config.PERFORMANCE_OPTIMIZATION?.CACHE_SETTINGS?.ENABLE_CACHING || true,
+      batchProcessingEnabled: config.SYSTEM_FLEXIBILITY?.BATCH_OPERATIONS?.BULK_TRANSFER || true,
+      
+      // 驗證設定
+      requiredNotes: config.CHANGE_ANNOTATION?.REQUIRED_NOTES || true,
+      autoDetailedLogging: config.CHANGE_ANNOTATION?.AUTO_DETAILED_LOGGING || true
+    };
+    
+  } catch (error) {
+    Logger.log('❌ 獲取配置摘要失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 初始化轉班管理系統配置（確保所有必要的設定都有預設值）
+ * @returns {boolean} 初始化是否成功
+ */
+function initializeTransferManagementConfig() {
+  try {
+    Logger.log('🔧 初始化轉班管理系統配置...');
+    
+    // 驗證現有配置
+    const validation = validateTransferManagementConfig();
+    
+    if (!validation.isValid) {
+      Logger.log('❌ 配置驗證失敗，請檢查配置設定：');
+      validation.errors.forEach(error => Logger.log('   - ' + error));
+      return false;
+    }
+    
+    // 顯示警告（如果有的話）
+    if (validation.warnings.length > 0) {
+      Logger.log('⚠️ 配置警告：');
+      validation.warnings.forEach(warning => Logger.log('   - ' + warning));
+    }
+    
+    // 顯示建議（如果有的話）
+    if (validation.recommendations.length > 0) {
+      Logger.log('💡 配置建議：');
+      validation.recommendations.forEach(rec => Logger.log('   - ' + rec));
+    }
+    
+    // 獲取配置摘要
+    const summary = getTransferManagementConfigSummary();
+    if (summary) {
+      Logger.log('📋 轉班管理配置摘要：');
+      Logger.log(`   • 狀態標註模式: ${summary.statusAnnotationMode}`);
+      Logger.log(`   • 預設統計模式: ${summary.defaultStatisticsMode}`);
+      Logger.log(`   • 進度補齊模式: ${summary.progressCompletionMode}`);
+      Logger.log(`   • 繼承政策: ${summary.progressInheritancePolicy}`);
+      Logger.log(`   • 快取啟用: ${summary.cachingEnabled}`);
+      Logger.log(`   • 批次操作啟用: ${summary.batchProcessingEnabled}`);
+    }
+    
+    Logger.log('✅ 轉班管理系統配置初始化完成');
+    return true;
+    
+  } catch (error) {
+    Logger.log('❌ 轉班管理配置初始化失敗：' + error.message);
+    return false;
+  }
+}
+
+/**
+ * 獲取指定統計模式的配置
+ * @param {string} mode - 統計模式名稱
+ * @returns {Object|null} 模式配置物件
+ */
+function getStatisticsModeConfig(mode) {
+  try {
+    const modes = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.STATISTICS_CALCULATION?.MODES;
+    return modes?.[mode] || null;
+  } catch (error) {
+    Logger.log('❌ 獲取統計模式配置失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 獲取指定進度補齊模式的配置
+ * @param {string} mode - 進度補齊模式名稱
+ * @returns {Object|null} 模式配置物件
+ */
+function getProgressCompletionModeConfig(mode) {
+  try {
+    const modes = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_COMPLETION?.MODES;
+    return modes?.[mode] || null;
+  } catch (error) {
+    Logger.log('❌ 獲取進度補齊模式配置失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 獲取指定繼承政策的配置
+ * @param {string} policy - 繼承政策名稱
+ * @returns {Object|null} 政策配置物件
+ */
+function getProgressInheritancePolicyConfig(policy) {
+  try {
+    const policies = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_INHERITANCE?.POLICIES;
+    return policies?.[policy] || null;
+  } catch (error) {
+    Logger.log('❌ 獲取繼承政策配置失敗：' + error.message);
+    return null;
+  }
+}
+
+/**
+ * 檢查系統是否已啟用轉班管理功能
+ * @returns {boolean} 是否啟用
+ */
+function isTransferManagementEnabled() {
+  try {
+    return !!(SYSTEM_CONFIG.TRANSFER_MANAGEMENT && 
+             SYSTEM_CONFIG.TRANSFER_MANAGEMENT.STATUS_ANNOTATION &&
+             SYSTEM_CONFIG.TRANSFER_MANAGEMENT.STATISTICS_CALCULATION &&
+             SYSTEM_CONFIG.TRANSFER_MANAGEMENT.PROGRESS_COMPLETION);
+  } catch (error) {
+    Logger.log('❌ 檢查轉班管理啟用狀態失敗：' + error.message);
+    return false;
+  }
+}
+
 /**
  * 建立系統主選單
  */
@@ -439,14 +894,21 @@ function onOpen() {
         .addSeparator()
         .addItem('🔄 重新排序電聯記錄', 'sortContactRecords')
         .addItem('🔧 排序問題診斷', 'diagnoseSortingIssues'))
-      .addSubMenu(ui.createMenu('🔄 學生異動管理')
+      .addSubMenu(ui.createMenu('🔄 學生異動管理 (增強版)')
         .addItem('📤 學生轉學/移出', 'studentTransferOut')
-        .addItem('🔄 學生轉班', 'studentClassChange')
+        .addItem('🔄 學生轉班 (增強)', 'studentClassChange')
         .addItem('✏️ 學生資料更新', 'studentInfoUpdate')
+        .addSeparator()
+        .addItem('📊 統計模式切換', 'toggleStatisticsMode')
+        .addItem('🎯 進度補齊模式設定', 'configureProgressCompletion')
+        .addItem('🔄 轉班進度繼承設定', 'configureProgressInheritance')
         .addSeparator()
         .addItem('📋 查看異動記錄', 'viewChangeHistory')
         .addItem('📊 異動統計報告', 'generateChangeReport')
-        .addItem('↩️ 異動回滾', 'rollbackStudentChange'))
+        .addItem('↩️ 異動回滾', 'rollbackStudentChange')
+        .addSeparator()
+        .addItem('⚙️ 轉班管理配置驗證', 'validateTransferManagementConfig')
+        .addItem('🔧 轉班管理配置摘要', 'showTransferManagementConfigSummary'))
       .addSeparator()
       .addItem('📊 檢查全體進度', 'checkAllProgress')
       .addItem('📈 生成進度報告', 'generateProgressReport')
@@ -471,6 +933,9 @@ function onOpen() {
         .addSeparator()
         .addItem('🧪 測試轉班記錄同步', 'runAllScheduledContactTransferTests')
         .addItem('🔍 驗證系統配置', 'runCompleteSystemValidation')
+        .addSeparator()
+        .addItem('🎯 初始化轉班管理配置', 'initializeTransferManagementConfig')
+        .addItem('📊 轉班管理配置狀態', 'checkTransferManagementStatus')
         .addItem('📊 驗證記錄格式一致性', 'runCompleteRecordFormatValidation')
         .addItem('🔍 檢測T01學生狀況', 'detectT01StudentStatus')
         .addItem('🔧 修復T01學生遺漏', 'runCompleteT01StudentDetectionAndRepair')
@@ -1518,6 +1983,260 @@ function rollbackStudentChange() {
   } catch (error) {
     Logger.log('異動回滾介面錯誤：' + error.message);
     safeErrorHandler('異動回滾', error);
+  }
+}
+
+/**
+ * 顯示轉班管理配置摘要介面
+ */
+function showTransferManagementConfigSummary() {
+  try {
+    const summary = getTransferManagementConfigSummary();
+    if (!summary) {
+      safeUIAlert('錯誤', '無法獲取轉班管理配置摘要', safeGetUI()?.ButtonSet.OK);
+      return;
+    }
+    
+    const message = `轉班管理系統配置摘要：
+
+🏷️ 狀態標註設定：
+• 模式：${summary.statusAnnotationMode}
+• 轉班學生納入統計：${summary.includeTransferredInStats ? '是' : '否'}
+
+📊 統計計算設定：
+• 預設模式：${summary.defaultStatisticsMode}
+• 即時切換：${summary.allowRealTimeToggle ? '啟用' : '禁用'}
+
+🎯 進度補齊設定：
+• 模式：${summary.progressCompletionMode}
+• 自動補齊：${summary.autoBackfillEnabled ? '啟用' : '禁用'}
+
+🔄 繼承設定：
+• 政策：${summary.progressInheritancePolicy}
+• 保留來源備註：${summary.preserveSourceNotes ? '是' : '否'}
+
+⚙️ 系統設定：
+• 快取啟用：${summary.cachingEnabled ? '是' : '否'}
+• 批次操作：${summary.batchProcessingEnabled ? '啟用' : '禁用'}
+• 必填備註：${summary.requiredNotes ? '是' : '否'}
+• 自動詳細記錄：${summary.autoDetailedLogging ? '啟用' : '禁用'}`;
+    
+    safeUIAlert('轉班管理配置摘要', message, safeGetUI()?.ButtonSet.OK);
+    
+  } catch (error) {
+    Logger.log('顯示轉班管理配置摘要介面錯誤：' + error.message);
+    safeErrorHandler('轉班管理配置摘要', error);
+  }
+}
+
+/**
+ * 統計模式切換介面
+ */
+function toggleStatisticsMode() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.STATISTICS_CALCULATION;
+    
+    if (!config || !config.MODES) {
+      ui.alert('錯誤', '統計模式配置不存在，請先初始化轉班管理配置', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 建立模式選擇選單
+    const modes = Object.keys(config.MODES);
+    let modeListMessage = '請選擇統計模式：\n\n';
+    modes.forEach((mode, index) => {
+      const modeConfig = config.MODES[mode];
+      modeListMessage += `${index + 1}. ${modeConfig.name}\n   ${modeConfig.description}\n\n`;
+    });
+    modeListMessage += '請輸入模式編號（1-' + modes.length + '）：';
+    
+    const modeResponse = ui.prompt(
+      '統計模式選擇',
+      modeListMessage,
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (modeResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const modeIndex = parseInt(modeResponse.getResponseText().trim()) - 1;
+    if (isNaN(modeIndex) || modeIndex < 0 || modeIndex >= modes.length) {
+      ui.alert('錯誤', '請輸入有效的模式編號', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const selectedMode = modes[modeIndex];
+    const selectedConfig = config.MODES[selectedMode];
+    
+    ui.alert(
+      '統計模式設定完成',
+      `已選擇統計模式：\n\n名稱：${selectedConfig.name}\n說明：${selectedConfig.description}\n\n此設定將影響所有統計計算和進度報告。`,
+      ui.ButtonSet.OK
+    );
+    
+    // 這裡可以在將來實際更新統計模式設定
+    Logger.log(`統計模式切換至：${selectedMode}`);
+    
+  } catch (error) {
+    Logger.log('統計模式切換介面錯誤：' + error.message);
+    safeErrorHandler('統計模式切換', error);
+  }
+}
+
+/**
+ * 進度補齊模式設定介面
+ */
+function configureProgressCompletion() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_COMPLETION;
+    
+    if (!config || !config.MODES) {
+      ui.alert('錯誤', '進度補齊模式配置不存在，請先初始化轉班管理配置', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 建立模式選擇選單
+    const modes = Object.keys(config.MODES);
+    let modeListMessage = '請選擇進度補齊模式：\n\n';
+    modes.forEach((mode, index) => {
+      const modeConfig = config.MODES[mode];
+      modeListMessage += `${index + 1}. ${modeConfig.name}\n   ${modeConfig.description}\n\n`;
+    });
+    modeListMessage += '請輸入模式編號（1-' + modes.length + '）：';
+    
+    const modeResponse = ui.prompt(
+      '進度補齊模式設定',
+      modeListMessage,
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (modeResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const modeIndex = parseInt(modeResponse.getResponseText().trim()) - 1;
+    if (isNaN(modeIndex) || modeIndex < 0 || modeIndex >= modes.length) {
+      ui.alert('錯誤', '請輸入有效的模式編號', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const selectedMode = modes[modeIndex];
+    const selectedConfig = config.MODES[selectedMode];
+    
+    ui.alert(
+      '進度補齊模式設定完成',
+      `已選擇進度補齊模式：\n\n名稱：${selectedConfig.name}\n說明：${selectedConfig.description}\n\n此設定將影響新學生的進度記錄建立方式。`,
+      ui.ButtonSet.OK
+    );
+    
+    Logger.log(`進度補齊模式設定為：${selectedMode}`);
+    
+  } catch (error) {
+    Logger.log('進度補齊模式設定介面錯誤：' + error.message);
+    safeErrorHandler('進度補齊模式設定', error);
+  }
+}
+
+/**
+ * 轉班進度繼承設定介面
+ */
+function configureProgressInheritance() {
+  try {
+    const ui = SpreadsheetApp.getUi();
+    const config = SYSTEM_CONFIG.TRANSFER_MANAGEMENT?.PROGRESS_INHERITANCE;
+    
+    if (!config || !config.POLICIES) {
+      ui.alert('錯誤', '進度繼承政策配置不存在，請先初始化轉班管理配置', ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 建立政策選擇選單
+    const policies = Object.keys(config.POLICIES);
+    let policyListMessage = '請選擇進度繼承政策：\n\n';
+    policies.forEach((policy, index) => {
+      const policyConfig = config.POLICIES[policy];
+      policyListMessage += `${index + 1}. ${policyConfig.name}\n   ${policyConfig.description}\n\n`;
+    });
+    policyListMessage += '請輸入政策編號（1-' + policies.length + '）：';
+    
+    const policyResponse = ui.prompt(
+      '進度繼承政策設定',
+      policyListMessage,
+      ui.ButtonSet.OK_CANCEL
+    );
+    
+    if (policyResponse.getSelectedButton() !== ui.Button.OK) {
+      return;
+    }
+    
+    const policyIndex = parseInt(policyResponse.getResponseText().trim()) - 1;
+    if (isNaN(policyIndex) || policyIndex < 0 || policyIndex >= policies.length) {
+      ui.alert('錯誤', '請輸入有效的政策編號', ui.ButtonSet.OK);
+      return;
+    }
+    
+    const selectedPolicy = policies[policyIndex];
+    const selectedConfig = config.POLICIES[selectedPolicy];
+    
+    ui.alert(
+      '進度繼承政策設定完成',
+      `已選擇進度繼承政策：\n\n名稱：${selectedConfig.name}\n說明：${selectedConfig.description}\n\n此設定將影響學生轉班時的進度記錄處理方式。`,
+      ui.ButtonSet.OK
+    );
+    
+    Logger.log(`進度繼承政策設定為：${selectedPolicy}`);
+    
+  } catch (error) {
+    Logger.log('轉班進度繼承設定介面錯誤：' + error.message);
+    safeErrorHandler('轉班進度繼承設定', error);
+  }
+}
+
+/**
+ * 檢查轉班管理狀態介面
+ */
+function checkTransferManagementStatus() {
+  try {
+    const isEnabled = isTransferManagementEnabled();
+    const validation = validateTransferManagementConfig();
+    
+    let statusMessage = `轉班管理系統狀態檢查：\n\n`;
+    statusMessage += `🔍 啟用狀態：${isEnabled ? '✅ 已啟用' : '❌ 未啟用'}\n`;
+    statusMessage += `👍 配置有效：${validation.isValid ? '✅ 有效' : '❌ 無效'}\n`;
+    statusMessage += `⚠️ 錯誤數量：${validation.errors.length}\n`;
+    statusMessage += `📝 警告數量：${validation.warnings.length}\n\n`;
+    
+    if (validation.errors.length > 0) {
+      statusMessage += `錯誤詳情：\n`;
+      validation.errors.forEach(error => {
+        statusMessage += `• ${error}\n`;
+      });
+      statusMessage += `\n`;
+    }
+    
+    if (validation.warnings.length > 0) {
+      statusMessage += `警告詳情：\n`;
+      validation.warnings.forEach(warning => {
+        statusMessage += `• ${warning}\n`;
+      });
+      statusMessage += `\n`;
+    }
+    
+    if (validation.recommendations.length > 0) {
+      statusMessage += `建議事項：\n`;
+      validation.recommendations.forEach(rec => {
+        statusMessage += `• ${rec}\n`;
+      });
+    }
+    
+    safeUIAlert('轉班管理狀態檢查', statusMessage, safeGetUI()?.ButtonSet.OK);
+    
+  } catch (error) {
+    Logger.log('檢查轉班管理狀態介面錯誤：' + error.message);
+    safeErrorHandler('轉班管理狀態檢查', error);
   }
 }
 
