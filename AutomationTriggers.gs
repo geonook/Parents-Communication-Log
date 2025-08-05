@@ -512,8 +512,23 @@ function checkFileIntegrity() {
     
     Logger.log(`檔案完整性檢查完成，發現 ${integrityIssues} 個問題`);
     
+    // 返回檢查結果
+    return {
+      success: integrityIssues === 0,
+      message: integrityIssues === 0 ? '檔案完整性檢查通過' : `發現 ${integrityIssues} 個完整性問題`,
+      integrityIssues: integrityIssues,
+      checkedBooks: teacherBooks.length
+    };
+    
   } catch (error) {
     Logger.log('檔案完整性檢查失敗：' + error.toString());
+    
+    // 錯誤情況返回值
+    return {
+      success: false,
+      message: `檔案完整性檢查失敗：${error.message}`,
+      error: error.toString()
+    };
   }
 }
 

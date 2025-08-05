@@ -255,12 +255,64 @@ function getAllTeacherBooks() {
 }
 
 /**
- * 🔄 Clear Teacher Books Cache (for manual refresh)  
+ * 📦 從 PropertiesService 獲取快取的老師記錄簿數據
+ */
+function getTeacherBooksCacheFromProperties() {
+  try {
+    const cachedDataString = PropertiesService.getScriptProperties().getProperty(TEACHER_BOOKS_CACHE_CONFIG.key);
+    return cachedDataString ? JSON.parse(cachedDataString) : null;
+  } catch (error) {
+    Logger.log('獲取快取數據失敗：' + error.toString());
+    return null;
+  }
+}
+
+/**
+ * 🕐 獲取快取時間戳
+ */
+function getTeacherBooksCacheTimestamp() {
+  try {
+    const timestampString = PropertiesService.getScriptProperties().getProperty(TEACHER_BOOKS_CACHE_CONFIG.timestampKey);
+    return timestampString ? parseInt(timestampString) : null;
+  } catch (error) {
+    Logger.log('獲取快取時間戳失敗：' + error.toString());
+    return null;
+  }
+}
+
+/**
+ * 💾 儲存老師記錄簿數據到 PropertiesService
+ */
+function saveTeacherBooksCacheToProperties(teacherBooks, timestamp) {
+  try {
+    // 僅儲存必要的識別資訊（ID和名稱）以節省空間
+    const bookData = teacherBooks.map(book => ({
+      id: book.getId(),
+      name: book.getName()
+    }));
+    
+    PropertiesService.getScriptProperties().setProperties({
+      [TEACHER_BOOKS_CACHE_CONFIG.key]: JSON.stringify(bookData),
+      [TEACHER_BOOKS_CACHE_CONFIG.timestampKey]: timestamp.toString()
+    });
+    
+    Logger.log(`💾 已儲存 ${bookData.length} 本記錄簿到快取`);
+  } catch (error) {
+    Logger.log('儲存快取數據失敗：' + error.toString());
+  }
+}
+
+/**
+ * 🔄 Clear Teacher Books Cache (for manual refresh) - PropertiesService 版本
  */
 function clearTeacherBooksCache() {
-  TEACHER_BOOKS_CACHE.data = null;
-  TEACHER_BOOKS_CACHE.lastUpdate = null;
-  Logger.log('🗑️ 已清除老師記錄簿快取');
+  try {
+    PropertiesService.getScriptProperties().deleteProperty(TEACHER_BOOKS_CACHE_CONFIG.key);
+    PropertiesService.getScriptProperties().deleteProperty(TEACHER_BOOKS_CACHE_CONFIG.timestampKey);
+    Logger.log('🗑️ 已清除老師記錄簿快取');
+  } catch (error) {
+    Logger.log('清除快取失敗：' + error.toString());
+  }
 }
 
 /**
@@ -317,7 +369,7 @@ function quickProgressDiagnostic() {
       estimatedTotalTime: estimatedTotalTime,
       diagnosticTime: totalDiagnosticTime,
       performanceLevel: performanceLevel,
-      cacheStatus: TEACHER_BOOKS_CACHE.data ? '已快取' : '未快取'
+      cacheStatus: getTeacherBooksCacheFromProperties() ? '已快取' : '未快取'
     };
     
     // Generate report
