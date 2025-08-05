@@ -4,34 +4,64 @@
  */
 
 /**
- * 檢查全體老師的電聯進度
+ * 🚀 Optimized 檢查全體老師的電聯進度 with Performance Monitoring
  */
 function checkAllProgress() {
   try {
+    const overallStartTime = new Date().getTime();
+    Logger.log('🔍 開始檢查所有老師進度');
+    
     // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
-    // 獲取所有老師的記錄簿
+    // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooks();
     if (teacherBooks.length === 0) {
       ui.alert('提醒', '系統中沒有找到任何老師記錄簿', ui.ButtonSet.OK);
       return;
     }
     
+    Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始處理...`);
+    
     // 檢查每個老師的進度
     const progressResults = [];
+    const errors = [];
+    let processedCount = 0;
     
-    teacherBooks.forEach(book => {
+    teacherBooks.forEach((book, index) => {
       try {
+        const startTime = new Date().getTime();
         const progress = checkTeacherProgress(book);
+        const endTime = new Date().getTime();
+        
         progressResults.push(progress);
+        processedCount++;
+        
+        Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完成 (${endTime - startTime}ms)`);
+        
       } catch (error) {
-        Logger.log(`檢查 ${book.getName()} 進度失敗：` + error.toString());
+        const errorMsg = `檢查 ${book.getName()} 進度失敗：${error.message}`;
+        Logger.log(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
       }
     });
     
+    const overallEndTime = new Date().getTime();
+    const totalTime = overallEndTime - overallStartTime;
+    
+    Logger.log(`🎉 進度檢查完成！處理 ${processedCount}/${teacherBooks.length} 本記錄簿，總耗時 ${totalTime}ms`);
+    if (errors.length > 0) {
+      Logger.log(`⚠️ 發現 ${errors.length} 個錯誤`);
+    }
+    
     // 顯示進度報告
     displayProgressSummary(progressResults);
+    
+    // 顯示性能摘要給用戶
+    if (ui) {
+      const performanceMsg = `進度檢查完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n平均處理時間：${Math.round(totalTime/processedCount)}ms/本`;
+      ui.alert('檢查完成', performanceMsg, ui.ButtonSet.OK);
+    }
     
   } catch (error) {
     Logger.log('檢查全體進度失敗：' + error.toString());
@@ -40,31 +70,44 @@ function checkAllProgress() {
 }
 
 /**
- * 生成詳細的進度報告
+ * 🚀 Optimized 生成詳細的進度報告 with Performance Monitoring
  */
 function generateProgressReport() {
   try {
+    const startTime = new Date().getTime();
+    Logger.log('📊 開始生成進度報告');
+    
     // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
-    // 獲取所有老師的記錄簿
+    // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooks();
     if (teacherBooks.length === 0) {
       ui.alert('提醒', '系統中沒有找到任何老師記錄簿', ui.ButtonSet.OK);
       return;
     }
     
-    // 建立進度報告檔案
-    const reportSheet = createProgressReportSheet();
+    Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始收集數據...`);
     
-    // 收集所有進度資料
+    // 🎯 Step 1: Create report sheet
+    const sheetStartTime = new Date().getTime();
+    const reportSheet = createProgressReportSheet();
+    const sheetEndTime = new Date().getTime();
+    Logger.log(`✅ 報告工作表建立完成，耗時 ${sheetEndTime - sheetStartTime}ms`);
+    
+    // 🎯 Step 2: Collect data with progress tracking
+    const dataStartTime = new Date().getTime();
     const allProgressData = [];
     const summaryData = [];
+    const errors = [];
+    let processedCount = 0;
     
-    teacherBooks.forEach(book => {
+    teacherBooks.forEach((book, index) => {
       try {
+        const itemStartTime = new Date().getTime();
         const progress = checkTeacherProgress(book);
         const detailData = getTeacherDetailProgress(book);
+        const itemEndTime = new Date().getTime();
         
         allProgressData.push(...detailData);
         summaryData.push([
@@ -77,17 +120,34 @@ function generateProgressReport() {
           progress.alertMessage || ''
         ]);
         
+        processedCount++;
+        Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 數據收集完成 (${itemEndTime - itemStartTime}ms)`);
+        
       } catch (error) {
-        Logger.log(`獲取 ${book.getName()} 詳細進度失敗：` + error.toString());
+        const errorMsg = `獲取 ${book.getName()} 詳細進度失敗：${error.message}`;
+        Logger.log(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
       }
     });
     
-    // 寫入報告資料
+    const dataEndTime = new Date().getTime();
+    Logger.log(`✅ 數據收集完成，耗時 ${dataEndTime - dataStartTime}ms`);
+    
+    // 🎯 Step 3: Write data
+    const writeStartTime = new Date().getTime();
     writeProgressReportData(reportSheet, summaryData, allProgressData);
+    const writeEndTime = new Date().getTime();
+    Logger.log(`✅ 數據寫入完成，耗時 ${writeEndTime - writeStartTime}ms`);
+    
+    const totalTime = new Date().getTime() - startTime;
+    Logger.log(`🎉 進度報告生成完成！總耗時 ${totalTime}ms`);
+    
+    // Show performance summary to user
+    const performanceMsg = `進度報告生成完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n平均處理時間：${Math.round(totalTime/processedCount)}ms/本\n\n報告位置：${reportSheet.getUrl()}`;
     
     ui.alert(
       '報告生成完成！',
-      `進度報告已生成：\n${reportSheet.getUrl()}`,
+      performanceMsg,
       ui.ButtonSet.OK
     );
     
@@ -97,11 +157,30 @@ function generateProgressReport() {
   }
 }
 
+// 🚀 Performance Cache for Teacher Books
+const TEACHER_BOOKS_CACHE = {
+  data: null,
+  lastUpdate: null,
+  ttl: 5 * 60 * 1000 // 5 minutes cache
+};
+
 /**
- * 獲取所有老師的記錄簿
+ * 🚀 Optimized 獲取所有老師的記錄簿 with Caching & Performance Monitoring
  */
 function getAllTeacherBooks() {
   try {
+    // 🎯 Check cache first
+    const now = new Date().getTime();
+    if (TEACHER_BOOKS_CACHE.data && 
+        TEACHER_BOOKS_CACHE.lastUpdate && 
+        (now - TEACHER_BOOKS_CACHE.lastUpdate) < TEACHER_BOOKS_CACHE.ttl) {
+      Logger.log(`📦 使用快取的老師記錄簿列表 (${TEACHER_BOOKS_CACHE.data.length} 本)`);
+      return TEACHER_BOOKS_CACHE.data;
+    }
+    
+    Logger.log('🔍 重新掃描老師記錄簿列表...');
+    const startTime = new Date().getTime();
+    
     const mainFolder = getSystemMainFolder();
     const teachersFolder = mainFolder.getFoldersByName(SYSTEM_CONFIG.TEACHERS_FOLDER_NAME).next();
     
@@ -120,11 +199,129 @@ function getAllTeacherBooks() {
       }
     }
     
+    // 🎯 Update cache
+    TEACHER_BOOKS_CACHE.data = teacherBooks;
+    TEACHER_BOOKS_CACHE.lastUpdate = now;
+    
+    const endTime = new Date().getTime();
+    Logger.log(`✅ 掃描完成：找到 ${teacherBooks.length} 本記錄簿，耗時 ${endTime - startTime}ms`);
+    
     return teacherBooks;
     
   } catch (error) {
     Logger.log('獲取老師記錄簿列表失敗：' + error.toString());
     return [];
+  }
+}
+
+/**
+ * 🔄 Clear Teacher Books Cache (for manual refresh)  
+ */
+function clearTeacherBooksCache() {
+  TEACHER_BOOKS_CACHE.data = null;
+  TEACHER_BOOKS_CACHE.lastUpdate = null;
+  Logger.log('🗑️ 已清除老師記錄簿快取');
+}
+
+/**
+ * 🩺 Quick Performance Diagnostic for Progress Checking
+ * 快速診斷進度檢查性能問題
+ */
+function quickProgressDiagnostic() {
+  try {
+    Logger.log('🩺 开始快速性能診斷...');
+    const startTime = new Date().getTime();
+    
+    // Step 1: Test file system access
+    const fileAccessStart = new Date().getTime();
+    const teacherBooks = getAllTeacherBooks();
+    const fileAccessEnd = new Date().getTime();
+    const fileAccessTime = fileAccessEnd - fileAccessStart;
+    
+    Logger.log(`📁 檔案系統存取: 找到 ${teacherBooks.length} 本記錄簿，耗時 ${fileAccessTime}ms`);
+    
+    // Step 2: Test sample progress calculation
+    let sampleProgressTime = 0;
+    let sampleTeacherName = 'N/A';
+    
+    if (teacherBooks.length > 0) {
+      const sampleBook = teacherBooks[0];
+      const progressStart = new Date().getTime();
+      try {
+        const progress = checkTeacherProgress(sampleBook);
+        const progressEnd = new Date().getTime();
+        sampleProgressTime = progressEnd - progressStart;
+        sampleTeacherName = progress.teacherName;
+        Logger.log(`📊 樣本進度計算: ${sampleTeacherName}，耗時 ${sampleProgressTime}ms`);
+      } catch (error) {
+        Logger.log(`❌ 樣本進度計算失敗: ${error.message}`);
+      }
+    }
+    
+    // Step 3: Estimate total time
+    const estimatedTotalTime = teacherBooks.length * sampleProgressTime;
+    const totalDiagnosticTime = new Date().getTime() - startTime;
+    
+    // Performance assessment
+    const performanceLevel = 
+      fileAccessTime < 5000 && sampleProgressTime < 2000 && estimatedTotalTime < 120000 ? '優秀' :
+      fileAccessTime < 10000 && sampleProgressTime < 5000 && estimatedTotalTime < 300000 ? '良好' :
+      '需要優化';
+    
+    const diagnostic = {
+      timestamp: new Date(),
+      teacherBooksCount: teacherBooks.length,
+      fileAccessTime: fileAccessTime,
+      sampleProgressTime: sampleProgressTime,
+      sampleTeacherName: sampleTeacherName,
+      estimatedTotalTime: estimatedTotalTime,
+      diagnosticTime: totalDiagnosticTime,
+      performanceLevel: performanceLevel,
+      cacheStatus: TEACHER_BOOKS_CACHE.data ? '已快取' : '未快取'
+    };
+    
+    // Generate report
+    const report = `
+🩺 進度檢查性能診斷報告
+========================================
+📅 診斷時間: ${diagnostic.timestamp.toLocaleString()}
+📚 老師記錄簿數量: ${diagnostic.teacherBooksCount}
+📁 檔案存取時間: ${diagnostic.fileAccessTime}ms
+📊 樣本計算時間: ${diagnostic.sampleProgressTime}ms (${diagnostic.sampleTeacherName})
+⏱️ 預估總執行時間: ${Math.round(diagnostic.estimatedTotalTime/1000)}秒
+🏆 性能評級: ${diagnostic.performanceLevel}
+💾 快取狀態: ${diagnostic.cacheStatus}
+
+🔧 建議:
+${diagnostic.performanceLevel === '需要優化' ? 
+  '- 系統性能較慢，建議聯繫技術支援\n- 檢查網路連線狀況\n- 確認記錄簿檔案完整性' :
+  diagnostic.performanceLevel === '良好' ?
+  '- 系統性能正常，執行時間在合理範圍內\n- 建議在系統負載較低時執行大批量操作' :
+  '- 系統性能優秀！\n- 可以正常使用所有功能'
+}
+
+⚡ 快取機制: ${diagnostic.cacheStatus === '已快取' ? '啟用中，後續操作會更快' : '建議執行一次操作後快取會自動啟用'}
+========================================
+    `;
+    
+    Logger.log(report);
+    
+    // Show to user if UI available
+    try {
+      const ui = SpreadsheetApp.getUi();
+      ui.alert('性能診斷完成', report, ui.ButtonSet.OK);
+    } catch (uiError) {
+      Logger.log('UI不可用，診斷結果已記錄在Logger中');
+    }
+    
+    return diagnostic;
+    
+  } catch (error) {
+    Logger.log('❌ 快速診斷失敗: ' + error.toString());
+    return {
+      error: true,
+      message: error.message
+    };
   }
 }
 

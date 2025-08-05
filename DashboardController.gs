@@ -814,13 +814,14 @@ function getAllTeacherBooksForDashboard() {
 
 
 /**
- * Web 版本的檢查全體進度
+ * 🚀 Optimized Web 版本的檢查全體進度 with Performance Monitoring
  */
 function checkAllProgressWeb() {
   try {
-    Logger.log('Dashboard: 開始檢查全體進度');
+    const overallStartTime = new Date().getTime();
+    Logger.log('🔍 Dashboard: 開始檢查全體進度');
     
-    // 獲取所有老師的記錄簿
+    // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooksForDashboard();
     if (teacherBooks.length === 0) {
       return {
@@ -829,35 +830,59 @@ function checkAllProgressWeb() {
       };
     }
     
-    // 檢查每個老師的進度
+    Logger.log(`📚 Dashboard: 找到 ${teacherBooks.length} 本記錄簿，開始處理...`);
+    
+    // 檢查每個老師的進度 (追蹤效能)
     const progressResults = [];
     const errors = [];
+    let processedCount = 0;
     
-    teacherBooks.forEach(book => {
+    teacherBooks.forEach((book, index) => {
       try {
+        const startTime = new Date().getTime();
         const progress = checkTeacherProgress(book);
+        const endTime = new Date().getTime();
+        
         progressResults.push(progress);
+        processedCount++;
+        
+        Logger.log(`✅ Dashboard: [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完成 (${endTime - startTime}ms)`);
+        
       } catch (error) {
-        errors.push(`檢查 ${book.getName()} 進度失敗：${error.message}`);
-        Logger.log(`檢查 ${book.getName()} 進度失敗：` + error.toString());
+        const errorMsg = `檢查 ${book.getName()} 進度失敗：${error.message}`;
+        errors.push(errorMsg);
+        Logger.log(`❌ Dashboard: ${errorMsg}`);
       }
     });
     
     // 計算摘要統計
+    const summaryStartTime = new Date().getTime();
     const summary = calculateSemesterProgressSummary(progressResults);
+    const summaryEndTime = new Date().getTime();
     
-    Logger.log(`Dashboard: 進度檢查完成，檢查了 ${progressResults.length} 位老師`);
+    const overallEndTime = new Date().getTime();
+    const totalTime = overallEndTime - overallStartTime;
+    
+    Logger.log(`🎉 Dashboard: 進度檢查完成！處理 ${processedCount}/${teacherBooks.length} 位老師，總耗時 ${totalTime}ms`);
+    Logger.log(`📊 Dashboard: 統計計算耗時 ${summaryEndTime - summaryStartTime}ms`);
     
     return {
       success: true,
-      message: `進度檢查完成！檢查了 ${progressResults.length} 位老師的記錄。`,
+      message: `進度檢查完成！檢查了 ${processedCount} 位老師的記錄，總耗時 ${Math.round(totalTime/1000)} 秒。`,
       progressResults: progressResults,
       summary: summary,
-      errors: errors
+      errors: errors,
+      performance: {
+        totalTime: totalTime,
+        processedCount: processedCount,
+        totalBooks: teacherBooks.length,
+        averageTime: Math.round(totalTime / processedCount),
+        errorCount: errors.length
+      }
     };
     
   } catch (error) {
-    Logger.log('Dashboard: 檢查全體進度失敗 - ' + error.toString());
+    Logger.log('❌ Dashboard: 檢查全體進度失敗 - ' + error.toString());
     return {
       success: false,
       message: '檢查進度失敗：' + error.message
@@ -1551,13 +1576,14 @@ function getSystemMasterList() {
 }
 
 /**
- * Web 版本的生成進度報告
+ * 🚀 Optimized Web 版本的生成進度報告 with Performance Monitoring
  */
 function generateProgressReportWeb() {
   try {
-    Logger.log('Dashboard: 開始生成進度報告');
+    const startTime = new Date().getTime();
+    Logger.log('📊 Dashboard: 開始生成進度報告');
     
-    // 獲取所有老師的記錄簿
+    // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooksForDashboard();
     if (teacherBooks.length === 0) {
       return {
@@ -1566,17 +1592,27 @@ function generateProgressReportWeb() {
       };
     }
     
-    // 建立進度報告檔案
-    const reportSheet = createProgressReportSheet();
+    Logger.log(`📚 Dashboard: 找到 ${teacherBooks.length} 本記錄簿，開始生成報告...`);
     
-    // 收集所有進度資料
+    // 🎯 Step 1: Create report sheet
+    const sheetStartTime = new Date().getTime();
+    const reportSheet = createProgressReportSheet();
+    const sheetEndTime = new Date().getTime();
+    Logger.log(`✅ Dashboard: 報告工作表建立完成，耗時 ${sheetEndTime - sheetStartTime}ms`);
+    
+    // 🎯 Step 2: Collect data with progress tracking
+    const dataStartTime = new Date().getTime();
     const allProgressData = [];
     const summaryData = [];
+    const errors = [];
+    let processedCount = 0;
     
-    teacherBooks.forEach(book => {
+    teacherBooks.forEach((book, index) => {
       try {
+        const itemStartTime = new Date().getTime();
         const progress = checkTeacherProgress(book);
         const detailData = getTeacherDetailProgress(book);
+        const itemEndTime = new Date().getTime();
         
         allProgressData.push(...detailData);
         summaryData.push([
@@ -1589,26 +1625,46 @@ function generateProgressReportWeb() {
           progress.alertMessage || ''
         ]);
         
+        processedCount++;
+        Logger.log(`✅ Dashboard: [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 數據收集完成 (${itemEndTime - itemStartTime}ms)`);
+        
       } catch (error) {
-        Logger.log(`獲取 ${book.getName()} 詳細進度失敗：` + error.toString());
+        const errorMsg = `獲取 ${book.getName()} 詳細進度失敗：${error.message}`;
+        Logger.log(`❌ Dashboard: ${errorMsg}`);
+        errors.push(errorMsg);
       }
     });
     
-    // 寫入報告資料
-    writeProgressReportData(reportSheet, summaryData, allProgressData);
+    const dataEndTime = new Date().getTime();
+    Logger.log(`✅ Dashboard: 數據收集完成，耗時 ${dataEndTime - dataStartTime}ms`);
     
-    Logger.log('Dashboard: 進度報告生成完成');
+    // 🎯 Step 3: Write data
+    const writeStartTime = new Date().getTime();
+    writeProgressReportData(reportSheet, summaryData, allProgressData);
+    const writeEndTime = new Date().getTime();
+    Logger.log(`✅ Dashboard: 數據寫入完成，耗時 ${writeEndTime - writeStartTime}ms`);
+    
+    const totalTime = new Date().getTime() - startTime;
+    Logger.log(`🎉 Dashboard: 進度報告生成完成！總耗時 ${totalTime}ms`);
     
     return {
       success: true,
-      message: '進度報告已生成完成！',
+      message: `進度報告已生成完成！處理了 ${processedCount} 位老師的記錄，總耗時 ${Math.round(totalTime/1000)} 秒。`,
       reportUrl: reportSheet.getUrl(),
       teacherCount: teacherBooks.length,
-      dataCount: allProgressData.length
+      dataCount: allProgressData.length,
+      errors: errors,
+      performance: {
+        totalTime: totalTime,
+        processedCount: processedCount,
+        totalBooks: teacherBooks.length,
+        averageTime: Math.round(totalTime / processedCount),
+        errorCount: errors.length
+      }
     };
     
   } catch (error) {
-    Logger.log('Dashboard: 生成進度報告失敗 - ' + error.toString());
+    Logger.log('❌ Dashboard: 生成進度報告失敗 - ' + error.toString());
     return {
       success: false,
       message: '生成進度報告失敗：' + error.message
