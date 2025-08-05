@@ -63,9 +63,27 @@ function checkAllProgress() {
       ui.alert('檢查完成', performanceMsg, ui.ButtonSet.OK);
     }
     
+    // 返回檢查結果
+    return {
+      success: true,
+      message: '進度檢查完成',
+      processedCount: processedCount,
+      totalBooks: teacherBooks.length,
+      totalTime: totalTime,
+      results: progressResults,
+      errors: errors
+    };
+    
   } catch (error) {
     Logger.log('檢查全體進度失敗：' + error.toString());
     safeErrorHandler('檢查全體進度', error);
+    
+    // 錯誤情況返回值
+    return {
+      success: false,
+      message: `檢查進度失敗：${error.message}`,
+      error: error.toString()
+    };
   }
 }
 
@@ -151,16 +169,37 @@ function generateProgressReport() {
       ui.ButtonSet.OK
     );
     
+    // 返回報告生成結果
+    return {
+      success: true,
+      message: '進度報告生成完成',
+      processedCount: processedCount,
+      totalBooks: teacherBooks.length,
+      totalTime: totalTime,
+      reportSheet: reportSheet,
+      reportUrl: reportSheet.getUrl(),
+      errors: errors
+    };
+    
   } catch (error) {
     Logger.log('生成進度報告失敗：' + error.toString());
     SpreadsheetApp.getUi().alert('錯誤', '生成報告失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    
+    // 錯誤情況返回值
+    return {
+      success: false,
+      message: `生成報告失敗：${error.message}`,
+      error: error.toString()
+    };
   }
 }
 
-// 🚀 Performance Cache for Teacher Books
-const TEACHER_BOOKS_CACHE = {
-  data: null,
-  lastUpdate: null,
+/**
+ * 🚀 PropertiesService 快取設定 - 替代全域變數以避免測試衝突
+ */
+const TEACHER_BOOKS_CACHE_CONFIG = {
+  key: 'TEACHER_BOOKS_CACHE_DATA',
+  timestampKey: 'TEACHER_BOOKS_CACHE_TIMESTAMP',
   ttl: 5 * 60 * 1000 // 5 minutes cache
 };
 
@@ -169,13 +208,15 @@ const TEACHER_BOOKS_CACHE = {
  */
 function getAllTeacherBooks() {
   try {
-    // 🎯 Check cache first
+    // 🎯 Check PropertiesService cache first
     const now = new Date().getTime();
-    if (TEACHER_BOOKS_CACHE.data && 
-        TEACHER_BOOKS_CACHE.lastUpdate && 
-        (now - TEACHER_BOOKS_CACHE.lastUpdate) < TEACHER_BOOKS_CACHE.ttl) {
-      Logger.log(`📦 使用快取的老師記錄簿列表 (${TEACHER_BOOKS_CACHE.data.length} 本)`);
-      return TEACHER_BOOKS_CACHE.data;
+    const cachedData = getTeacherBooksCacheFromProperties();
+    const cachedTimestamp = getTeacherBooksCacheTimestamp();
+    
+    if (cachedData && cachedTimestamp && 
+        (now - cachedTimestamp) < TEACHER_BOOKS_CACHE_CONFIG.ttl) {
+      Logger.log(`📦 使用快取的老師記錄簿列表 (${cachedData.length} 本)`);
+      return cachedData.map(bookData => SpreadsheetApp.openById(bookData.id));
     }
     
     Logger.log('🔍 重新掃描老師記錄簿列表...');
@@ -199,9 +240,8 @@ function getAllTeacherBooks() {
       }
     }
     
-    // 🎯 Update cache
-    TEACHER_BOOKS_CACHE.data = teacherBooks;
-    TEACHER_BOOKS_CACHE.lastUpdate = now;
+    // 🎯 Update PropertiesService cache
+    saveTeacherBooksCacheToProperties(teacherBooks, now);
     
     const endTime = new Date().getTime();
     Logger.log(`✅ 掃描完成：找到 ${teacherBooks.length} 本記錄簿，耗時 ${endTime - startTime}ms`);

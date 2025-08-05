@@ -124,8 +124,23 @@ function autoBackup() {
     
     Logger.log('系統備份完成');
     
+    // 返回備份結果
+    return {
+      success: true,
+      message: '系統備份完成',
+      backupFolder: backupFolder.getName(),
+      backupTime: new Date().toISOString()
+    };
+    
   } catch (error) {
     Logger.log('自動備份失敗：' + error.toString());
+    
+    // 錯誤情況返回值
+    return {
+      success: false,
+      message: `系統備份失敗：${error.message}`,
+      error: error.toString()
+    };
   }
 }
 

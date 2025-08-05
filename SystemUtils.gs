@@ -572,9 +572,24 @@ function checkFileIntegrity() {
     
     displayHealthCheckResults(healthReport);
     
+    // 返回健康檢查結果
+    return {
+      success: true,
+      message: '系統健康檢查完成',
+      healthReport: healthReport,
+      overallHealth: healthReport.overallHealth
+    };
+    
   } catch (error) {
     Logger.log('系統健康檢查失敗：' + error.toString());
     safeErrorHandler('系統健康檢查', error);
+    
+    // 錯誤情況返回值
+    return {
+      success: false,
+      message: `系統健康檢查失敗：${error.message}`,
+      error: error.toString()
+    };
   }
 }
 
