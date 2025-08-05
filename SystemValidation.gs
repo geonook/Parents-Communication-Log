@@ -220,7 +220,7 @@ function validateCoreFunctionality() {
   
   // 測試3: 聯絡方式設定
   try {
-    const expectedMethods = ['Phone Call', 'Line', 'Email'];
+    const expectedMethods = ['Phone Call', 'Email'];
     const currentMethods = SYSTEM_CONFIG.CONTACT_METHODS;
     const methodsMatch = expectedMethods.every(method => currentMethods.includes(method)) && 
                         currentMethods.length === expectedMethods.length;

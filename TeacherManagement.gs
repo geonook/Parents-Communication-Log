@@ -355,6 +355,23 @@ function createSummarySheet(recordBook, teacherInfo) {
   // 調整欄寬
   sheet.autoResizeColumns(1, 5);
   
+  // 新增叮嚀內容區域
+  const noticeStartRow = 15 + teacherInfo.classes.length;
+  sheet.getRange(`A${noticeStartRow}`).setValue('📋 使用說明與注意事項');
+  sheet.getRange(`A${noticeStartRow}`).setFontSize(14).setFontWeight('bold').setBackground('#FFF2CC');
+  
+  const noticeContent = [
+    [''],
+    ['本學年的所有 Scheduled Contact 都已事先設定完畢，這部分為必要的定期電訪紀錄，'],
+    ['請不要調整「Contact Type」選項，以免影響後續統計計算的公式。'],
+    [''],
+    ['若有額外的聯絡需求，請直接在下方新增（或插入）一筆紀錄，'],
+    ['並將「Contact Type」選擇為 Special Contact，用以記錄特殊事件。']
+  ];
+  
+  sheet.getRange(noticeStartRow + 1, 1, noticeContent.length, 1).setValues(noticeContent);
+  sheet.getRange(noticeStartRow + 1, 1, noticeContent.length, 1).setBackground('#FFFBF0');
+  
   // 暫時不設定公式，稍後由setupSummaryFormulas函數統一設定
   Logger.log('✅ 總覽工作表基本結構建立完成，公式將在所有工作表建立完成後設定');
   
@@ -878,13 +895,12 @@ function setupContactLogValidations(sheet, teacherInfo) {
   const contactTypeRange = sheet.getRange('H2:H1000');
   const contactTypeOptions = [
     SYSTEM_CONFIG.CONTACT_TYPES.SEMESTER,    // Scheduled Contact
-    SYSTEM_CONFIG.CONTACT_TYPES.REGULAR,     // Regular Contact  
     SYSTEM_CONFIG.CONTACT_TYPES.SPECIAL      // Special Contact
   ];
   const contactTypeValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(contactTypeOptions)
     .setAllowInvalid(false)
-    .setHelpText('📞 電聯類型：Scheduled(定期電聯) / Regular(平時電聯) / Special(特殊電聯)')
+    .setHelpText('📞 電聯類型：Scheduled(定期電聯) / Special(特殊電聯)')
     .build();
   contactTypeRange.setDataValidation(contactTypeValidation);
   contactTypeRange.setBackground('#E3F2FD'); // 淺藍背景標示重要欄位
@@ -906,7 +922,7 @@ function setupContactLogValidations(sheet, teacherInfo) {
   const contactMethodValidation = SpreadsheetApp.newDataValidation()
     .requireValueInList(SYSTEM_CONFIG.CONTACT_METHODS)
     .setAllowInvalid(false)
-    .setHelpText('📱 聯絡方式：Phone Call (電話) / Line (Line通訊) / Email (電子郵件)')
+    .setHelpText('📱 聯絡方式：Phone Call (電話) / Email (電子郵件)')
     .build();
   contactMethodRange.setDataValidation(contactMethodValidation);
   contactMethodRange.setBackground('#F3E5F5'); // 淺紫背景標示重要欄位
@@ -944,12 +960,6 @@ function setupContactLogConditionalFormatting(sheet) {
     .setRanges([contactTypeRange])
     .build();
   
-  // 平時電聯 - 藍色
-  const regularContactRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo(SYSTEM_CONFIG.CONTACT_TYPES.REGULAR)
-    .setBackground('#D1ECF1')
-    .setRanges([contactTypeRange])
-    .build();
   
   // 特殊狀況電聯 - 黃色
   const specialContactRule = SpreadsheetApp.newConditionalFormatRule()
@@ -968,12 +978,6 @@ function setupContactLogConditionalFormatting(sheet) {
     .setRanges([contactMethodRange])
     .build();
   
-  // Line - 淺綠色
-  const lineRule = SpreadsheetApp.newConditionalFormatRule()
-    .whenTextEqualTo('Line')
-    .setBackground('#E8F5E8')
-    .setRanges([contactMethodRange])
-    .build();
   
   // Email - 淺橙色
   const emailRule = SpreadsheetApp.newConditionalFormatRule()
@@ -990,8 +994,8 @@ function setupContactLogConditionalFormatting(sheet) {
   parentsResponseRange.setWrap(true);
   
   sheet.setConditionalFormatRules([
-    semesterContactRule, regularContactRule, specialContactRule,
-    phoneRule, lineRule, emailRule
+    semesterContactRule, specialContactRule,
+    phoneRule, emailRule
   ]);
 }
 

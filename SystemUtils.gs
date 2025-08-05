@@ -263,7 +263,7 @@ function setupTemplateContactSheet(sheet) {
       'Scheduled Contact',                            // Contact Type
       'Midterm assessment shows student needs extra support with vocabulary building.',  // Teachers Content
       'Parents will arrange additional reading time and practice sessions.', // Parents Responses
-      'Line'                                         // Contact Method
+      'Phone Call'                                   // Contact Method
     ],
     [
       'S12347',                                        // Student ID
@@ -273,7 +273,7 @@ function setupTemplateContactSheet(sheet) {
       new Date(Date.now() - 172800000).toLocaleDateString(), // Date (2 days ago)
       'Fall',                                        // Semester
       'Beginning',                                   // Term
-      'Regular Contact',                              // Contact Type
+      'Special Contact',                              // Contact Type
       'Student was absent for several days. Checking on health status and catching up on missed work.',  // Teachers Content
       'Student had flu but is recovering well. Will make up missed assignments this week.', // Parents Responses
       'Email'                                        // Contact Method

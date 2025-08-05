@@ -33,7 +33,7 @@ const SYSTEM_CONFIG = {
   // 學生總表欄位
   STUDENT_FIELDS: [
     'ID', 'Grade', 'HR', 'Seat #', 'Chinese Name', 'English Name',
-    '112 Level', '113 Level', 'Previous Teacher', 'English Class', 
+    'Previous Level', 'Level', 'Previous Teacher', 'English Class', 
     'LT', 'Mother\'s Phone', 'Father\'s Phone'
   ],
   
@@ -48,7 +48,6 @@ const SYSTEM_CONFIG = {
   // 電聯類型設定
   CONTACT_TYPES: {
     SEMESTER: 'Scheduled Contact',   // 納入進度檢查
-    REGULAR: 'Regular Contact',      // 不納入檢查  
     SPECIAL: 'Special Contact'       // 不納入檢查
   },
 
@@ -251,8 +250,8 @@ const SYSTEM_CONFIG = {
     }
   },
 
-  // 聯繫方式選項（移除home visit和in person）
-  CONTACT_METHODS: ['Phone Call', 'Line', 'Email'],
+  // 聯繫方式選項
+  CONTACT_METHODS: ['Phone Call', 'Email'],
 
   // 進度檢查設定 - 改為學期制
   PROGRESS_CHECK: {
@@ -427,7 +426,7 @@ const SYSTEM_CONFIG = {
       contactMethod: { 
         field: 'Contact Method', 
         type: 'enum', 
-        values: ['Phone Call', 'Line', 'Email'],
+        values: ['Phone Call', 'Email'],
         description: '聯絡方式'
       }
     },
