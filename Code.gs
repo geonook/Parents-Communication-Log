@@ -410,7 +410,7 @@ const SYSTEM_CONFIG = {
       contactType: { 
         field: 'Contact Type', 
         type: 'enum', 
-        values: ['Scheduled Contact', 'Regular Contact', 'Special Contact'],
+        values: ['Scheduled Contact', 'Special Contact'],
         description: '聯絡類型'
       },
       teacherContent: { 
