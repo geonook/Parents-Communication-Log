@@ -519,9 +519,9 @@ function generateProgressReportBatch() {
             progress.totalClasses,
             progress.totalContacts,
             progress.completionRate,
-            progress.status,
             progress.lastContactDate,
-            progress.alertMessage || ''
+            progress.status,
+            progress.alertMessage || progress.error || ''
           ]);
           
           // 收集詳細數據（簡化版本）
@@ -619,17 +619,24 @@ function checkTeacherProgressOptimized(recordBook) {
           lastContactDate = new Date(lastRow[4]).toLocaleDateString();
         }
         
-        // 生成詳細數據（簡化版本，只取前10筆）
+        // 生成詳細數據（完整版本，匹配12列格式）
         const maxDetails = Math.min(10, contactData.length - 1);
         for (let i = 1; i <= maxDetails; i++) {
           const row = contactData[i];
           if (row && row.length > 0) {
             detailData.push([
-              teacherName,
-              row[1] || '', // Student Name
-              row[4] || '', // Date
-              row[7] || '', // Contact Type
-              row[9] || ''  // Parent Response
+              teacherName,        // Teacher Name
+              row[0] || '',       // Student ID  
+              row[1] || '',       // Name
+              row[2] || '',       // English Name
+              row[3] || '',       // English Class
+              row[4] || '',       // Date
+              row[5] || '',       // Semester
+              row[6] || '',       // Term
+              row[7] || '',       // Contact Type
+              row[8] || '',       // Teachers Content
+              row[9] || '',       // Parents Responses
+              row[10] || ''       // Contact Method
             ]);
           }
         }
@@ -661,6 +668,21 @@ function checkTeacherProgressOptimized(recordBook) {
     
     const processingTime = new Date().getTime() - itemStartTime;
     
+    // 生成提醒訊息
+    let alertMessage = '';
+    if (totalClasses > 0) {
+      const rate = parseInt(completionRate);
+      if (rate < 40) {
+        alertMessage = '電聯進度嚴重落後，請加強聯繫';
+      } else if (rate < 60) {
+        alertMessage = '電聯進度偏低，建議增加聯繫';
+      } else if (rate >= 80) {
+        alertMessage = '電聯進度優良，保持下去';
+      }
+    } else {
+      alertMessage = '無學生資料';
+    }
+
     return {
       teacherName: teacherName,
       totalClasses: totalClasses,
@@ -669,6 +691,7 @@ function checkTeacherProgressOptimized(recordBook) {
       status: status,
       lastContactDate: lastContactDate,
       detailData: detailData,
+      alertMessage: alertMessage,
       processingTime: processingTime
     };
     
@@ -2281,7 +2304,70 @@ function createProgressReportSheet() {
 /**
  * 寫入進度報告資料
  */
+/**
+ * 驗證報告數據格式
+ */
+function validateReportDataFormat(summaryData, detailData) {
+  const validationResults = {
+    isValid: true,
+    errors: [],
+    warnings: []
+  };
+  
+  // 預期的列數
+  const EXPECTED_SUMMARY_COLUMNS = 7;
+  const EXPECTED_DETAIL_COLUMNS = 12;
+  
+  // 驗證摘要數據
+  if (summaryData && summaryData.length > 0) {
+    summaryData.forEach((row, index) => {
+      if (!Array.isArray(row)) {
+        validationResults.errors.push(`摘要數據第 ${index + 1} 行不是陣列格式`);
+        validationResults.isValid = false;
+      } else if (row.length !== EXPECTED_SUMMARY_COLUMNS) {
+        validationResults.errors.push(`摘要數據第 ${index + 1} 行有 ${row.length} 列，期望 ${EXPECTED_SUMMARY_COLUMNS} 列`);
+        validationResults.isValid = false;
+      }
+    });
+  } else {
+    validationResults.warnings.push('摘要數據為空');
+  }
+  
+  // 驗證詳細數據
+  if (detailData && detailData.length > 0) {
+    detailData.forEach((row, index) => {
+      if (!Array.isArray(row)) {
+        validationResults.errors.push(`詳細數據第 ${index + 1} 行不是陣列格式`);
+        validationResults.isValid = false;
+      } else if (row.length !== EXPECTED_DETAIL_COLUMNS) {
+        validationResults.errors.push(`詳細數據第 ${index + 1} 行有 ${row.length} 列，期望 ${EXPECTED_DETAIL_COLUMNS} 列`);
+        validationResults.isValid = false;
+      }
+    });
+  } else {
+    validationResults.warnings.push('詳細數據為空');
+  }
+  
+  return validationResults;
+}
+
 function writeProgressReportData(reportSheet, summaryData, detailData) {
+  // 驗證數據格式
+  Logger.log('🔍 開始驗證報告數據格式...');
+  const validation = validateReportDataFormat(summaryData, detailData);
+  
+  if (!validation.isValid) {
+    const errorMsg = `數據格式驗證失敗：\n${validation.errors.join('\n')}`;
+    Logger.log(`❌ ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+  
+  if (validation.warnings.length > 0) {
+    Logger.log(`⚠️ 數據驗證警告：${validation.warnings.join(', ')}`);
+  }
+  
+  Logger.log(`✅ 數據格式驗證通過 - 摘要數據：${summaryData.length} 行，詳細數據：${detailData.length} 行`);
+  
   // 建立摘要工作表
   const summarySheet = reportSheet.getActiveSheet();
   summarySheet.setName('進度摘要');
