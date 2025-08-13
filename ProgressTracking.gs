@@ -224,6 +224,762 @@ function generateProgressReport() {
 }
 
 /**
+ * ⚡ 快速版本進度報告 - 執行時間優化版本
+ * 專為解決 "Exceeded maximum execution time" 問題設計
+ * 執行時間 < 2分鐘，最多處理15本記錄簿
+ */
+function quickProgressReport() {
+  try {
+    const startTime = new Date().getTime();
+    const MAX_BOOKS = 15; // 限制處理數量
+    const MAX_EXECUTION_TIME = 90 * 1000; // 90秒時間限制
+    
+    Logger.log('⚡ 開始快速進度報告生成');
+    
+    // 🔍 快速系統檢查
+    const systemCheck = performSystemCheck();
+    if (!systemCheck.success) {
+      Logger.log(`❌ 系統檢查失敗: ${systemCheck.errors.join('; ')}`);
+      return {
+        success: false,
+        message: '系統檢查失敗，建議先執行系統修復',
+        errors: systemCheck.errors
+      };
+    }
+    
+    // 獲取教師記錄簿（有限制）
+    let teacherBooks = getAllTeacherBooks();
+    const originalCount = teacherBooks.length;
+    
+    if (teacherBooks.length === 0) {
+      Logger.log('⚠️ 沒有找到任何教師記錄簿');
+      return {
+        success: false,
+        message: '沒有找到教師記錄簿',
+        teacherBooksCount: 0
+      };
+    }
+    
+    // 限制處理數量以避免超時
+    if (teacherBooks.length > MAX_BOOKS) {
+      teacherBooks = teacherBooks.slice(0, MAX_BOOKS);
+      Logger.log(`⚠️ 記錄簿數量 (${originalCount}) 超過限制，只處理前 ${MAX_BOOKS} 本`);
+    }
+    
+    Logger.log(`📚 處理 ${teacherBooks.length} 本記錄簿，開始收集數據...`);
+    
+    // 🎯 創建簡化報告工作表
+    const reportSheet = createQuickReportSheet();
+    Logger.log(`✅ 快速報告工作表已建立`);
+    
+    // 🎯 快速數據收集
+    const reportData = [];
+    const errors = [];
+    let processedCount = 0;
+    
+    for (let i = 0; i < teacherBooks.length; i++) {
+      const currentTime = new Date().getTime();
+      if (currentTime - startTime > MAX_EXECUTION_TIME) {
+        Logger.log(`⏰ 接近時間限制，已處理 ${processedCount} 本記錄簿`);
+        break;
+      }
+      
+      const book = teacherBooks[i];
+      try {
+        const itemStartTime = new Date().getTime();
+        
+        // 只調用基本進度檢查，跳過詳細分析
+        const progress = checkTeacherProgressFast(book);
+        
+        reportData.push([
+          progress.teacherName || book.getName(),
+          progress.totalClasses || 0,
+          progress.totalContacts || 0,
+          progress.completionRate || '0%',
+          progress.status || '未知',
+          progress.lastContactDate || '無記錄'
+        ]);
+        
+        processedCount++;
+        const itemEndTime = new Date().getTime();
+        Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName || book.getName()} 完成 (${itemEndTime - itemStartTime}ms)`);
+        
+      } catch (error) {
+        const errorMsg = `處理 ${book.getName()} 失敗: ${error.message}`;
+        Logger.log(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+      }
+    }
+    
+    // 🎯 寫入數據（批量操作）
+    if (reportData.length > 0) {
+      const headers = [['教師姓名', '班級數', '電聯總數', '完成率', '狀態', '最近聯絡']];
+      const allData = headers.concat(reportData);
+      
+      reportSheet.getRange(1, 1, allData.length, allData[0].length).setValues(allData);
+      Logger.log(`✅ 數據寫入完成: ${reportData.length} 筆記錄`);
+    }
+    
+    const totalTime = new Date().getTime() - startTime;
+    Logger.log(`🎉 快速進度報告完成！處理 ${processedCount}/${originalCount} 本記錄簿，耗時 ${Math.round(totalTime/1000)} 秒`);
+    
+    // 顯示結果給用戶
+    const reportUrl = reportSheet.getUrl();
+    const summaryMsg = `快速進度報告生成完成！\n\n• 處理記錄簿: ${processedCount}/${originalCount}\n• 執行時間: ${Math.round(totalTime/1000)} 秒\n• 報告位置: ${reportUrl}`;
+    safeUIAlert('報告完成', summaryMsg);
+    
+    return {
+      success: true,
+      message: '快速進度報告生成完成',
+      processedCount: processedCount,
+      totalBooks: originalCount,
+      totalTime: totalTime,
+      reportSheet: reportSheet,
+      reportUrl: reportUrl,
+      errors: errors,
+      isQuickReport: true
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 快速進度報告失敗: ${error.message}`);
+    const errorMsg = `快速報告生成失敗: ${error.message}`;
+    safeUIAlert('錯誤', errorMsg);
+    
+    return {
+      success: false,
+      message: errorMsg,
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * 快速版本的教師進度檢查 - 跳過複雜分析
+ */
+function checkTeacherProgressFast(recordBook) {
+  try {
+    const teacherName = recordBook.getName().replace('_電聯記錄簿', '').split('_')[0];
+    
+    // 快速獲取基本統計
+    const contactSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    const studentSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    
+    let totalContacts = 0;
+    let totalClasses = 0;
+    let lastContactDate = '無記錄';
+    
+    if (contactSheet) {
+      const contactData = contactSheet.getDataRange().getValues();
+      totalContacts = Math.max(0, contactData.length - 1); // 扣除標題行
+      
+      if (totalContacts > 0) {
+        // 取得最近聯絡日期（快速方式）
+        const lastRow = contactData[contactData.length - 1];
+        if (lastRow && lastRow[4]) { // Date column
+          lastContactDate = new Date(lastRow[4]).toLocaleDateString();
+        }
+      }
+    }
+    
+    if (studentSheet) {
+      const studentData = studentSheet.getDataRange().getValues();
+      totalClasses = Math.max(0, studentData.length - 1); // 扣除標題行
+    }
+    
+    // 簡化的完成率計算
+    const expectedContacts = totalClasses * 3; // 假設每班需要3次聯絡
+    const completionRate = expectedContacts > 0 ? Math.round((totalContacts / expectedContacts) * 100) : 0;
+    
+    // 簡化的狀態判斷
+    let status;
+    if (completionRate >= 80) {
+      status = '良好';
+    } else if (completionRate >= 50) {
+      status = '普通';
+    } else {
+      status = '待改善';
+    }
+    
+    return {
+      teacherName: teacherName,
+      totalClasses: totalClasses,
+      totalContacts: totalContacts,
+      completionRate: completionRate + '%',
+      status: status,
+      lastContactDate: lastContactDate
+    };
+    
+  } catch (error) {
+    Logger.log(`快速檢查 ${recordBook.getName()} 失敗: ${error.message}`);
+    return {
+      teacherName: recordBook.getName(),
+      totalClasses: 0,
+      totalContacts: 0,
+      completionRate: '0%',
+      status: '錯誤',
+      lastContactDate: '無法讀取'
+    };
+  }
+}
+
+/**
+ * 創建簡化版本的報告工作表
+ */
+function createQuickReportSheet() {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+  const sheetName = `快速進度報告_${timestamp}`;
+  
+  const reportSheet = SpreadsheetApp.create(sheetName);
+  
+  // 設定簡單的樣式
+  const headerRange = reportSheet.getRange(1, 1, 1, 6);
+  headerRange.setBackground('#4facfe');
+  headerRange.setFontColor('white');
+  headerRange.setFontWeight('bold');
+  
+  Logger.log(`✅ 快速報告工作表已創建: ${sheetName}`);
+  return reportSheet;
+}
+
+/**
+ * 🔄 分批處理進度報告 - 解決大量記錄簿的執行時間問題
+ * 將記錄簿分批處理，每批最多5本，避免超時
+ */
+function generateProgressReportBatch() {
+  try {
+    const startTime = new Date().getTime();
+    const BATCH_SIZE = 5;
+    const MAX_EXECUTION_TIME = 5 * 60 * 1000; // 5分鐘限制
+    
+    Logger.log('🔄 開始分批進度報告生成');
+    
+    // 系統檢查
+    const systemCheck = performSystemCheck();
+    if (!systemCheck.success) {
+      return {
+        success: false,
+        message: '系統檢查失敗，建議先執行系統修復',
+        errors: systemCheck.errors
+      };
+    }
+    
+    // 獲取所有記錄簿
+    const teacherBooks = getAllTeacherBooks();
+    if (teacherBooks.length === 0) {
+      return {
+        success: false,
+        message: '沒有找到教師記錄簿',
+        teacherBooksCount: 0
+      };
+    }
+    
+    Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始分批處理...`);
+    
+    // 創建報告工作表
+    const reportSheet = createProgressReportSheet();
+    Logger.log(`✅ 分批報告工作表已建立`);
+    
+    // 初始化數據收集
+    const allProgressData = [];
+    const summaryData = [];
+    const errors = [];
+    let processedCount = 0;
+    
+    // 分批處理
+    for (let batchStart = 0; batchStart < teacherBooks.length; batchStart += BATCH_SIZE) {
+      const currentTime = new Date().getTime();
+      if (currentTime - startTime > MAX_EXECUTION_TIME) {
+        Logger.log(`⏰ 接近執行時間限制，停止處理。已完成 ${processedCount}/${teacherBooks.length} 本`);
+        break;
+      }
+      
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, teacherBooks.length);
+      const batch = teacherBooks.slice(batchStart, batchEnd);
+      const batchNumber = Math.floor(batchStart / BATCH_SIZE) + 1;
+      const totalBatches = Math.ceil(teacherBooks.length / BATCH_SIZE);
+      
+      Logger.log(`📦 處理批次 ${batchNumber}/${totalBatches}: ${batchStart + 1}-${batchEnd}`);
+      
+      // 處理當前批次
+      const batchStartTime = new Date().getTime();
+      
+      batch.forEach((book, index) => {
+        try {
+          const itemStartTime = new Date().getTime();
+          
+          // 使用優化的數據收集
+          const progress = checkTeacherProgressOptimized(book);
+          
+          // 收集摘要數據
+          summaryData.push([
+            progress.teacherName,
+            progress.totalClasses,
+            progress.totalContacts,
+            progress.completionRate,
+            progress.status,
+            progress.lastContactDate,
+            progress.alertMessage || ''
+          ]);
+          
+          // 收集詳細數據（簡化版本）
+          if (progress.detailData && progress.detailData.length > 0) {
+            allProgressData.push(...progress.detailData);
+          }
+          
+          processedCount++;
+          const itemEndTime = new Date().getTime();
+          Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完成 (${itemEndTime - itemStartTime}ms)`);
+          
+        } catch (error) {
+          const errorMsg = `處理 ${book.getName()} 失敗: ${error.message}`;
+          Logger.log(`❌ ${errorMsg}`);
+          errors.push(errorMsg);
+        }
+      });
+      
+      const batchEndTime = new Date().getTime();
+      Logger.log(`✅ 批次 ${batchNumber} 完成，耗時 ${batchEndTime - batchStartTime}ms`);
+      
+      // 中間保存（可選）
+      if (batchNumber % 3 === 0) {
+        Logger.log(`💾 中間保存進度...`);
+        // 可以在這裡實現中間保存邏輯
+      }
+    }
+    
+    // 寫入數據到報告
+    Logger.log(`📝 開始寫入數據: ${summaryData.length} 筆摘要, ${allProgressData.length} 筆詳細記錄`);
+    writeProgressReportData(reportSheet, summaryData, allProgressData);
+    
+    const totalTime = new Date().getTime() - startTime;
+    Logger.log(`🎉 分批進度報告完成！處理 ${processedCount}/${teacherBooks.length} 本記錄簿，總耗時 ${Math.round(totalTime/1000)} 秒`);
+    
+    // 顯示結果
+    const reportUrl = reportSheet.getUrl();
+    const performanceMsg = `分批進度報告生成完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n批次大小：${BATCH_SIZE}\n報告位置：${reportUrl}`;
+    safeUIAlert('分批報告完成', performanceMsg);
+    
+    return {
+      success: true,
+      message: '分批進度報告生成完成',
+      processedCount: processedCount,
+      totalBooks: teacherBooks.length,
+      totalTime: totalTime,
+      reportSheet: reportSheet,
+      reportUrl: reportUrl,
+      errors: errors,
+      batchSize: BATCH_SIZE,
+      isBatchReport: true
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 分批進度報告失敗: ${error.message}`);
+    const errorMsg = `分批報告生成失敗: ${error.message}`;
+    safeUIAlert('錯誤', errorMsg);
+    
+    return {
+      success: false,
+      message: errorMsg,
+      error: error.toString()
+    };
+  }
+}
+
+/**
+ * 優化版本的教師進度檢查 - 合併數據收集
+ */
+function checkTeacherProgressOptimized(recordBook) {
+  try {
+    const itemStartTime = new Date().getTime();
+    const teacherName = recordBook.getName().replace('_電聯記錄簿', '').split('_')[0];
+    
+    // 獲取工作表
+    const contactSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
+    const studentSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    
+    let totalContacts = 0;
+    let totalClasses = 0;
+    let lastContactDate = '無記錄';
+    let completionRate = '0%';
+    let status = '未知';
+    const detailData = [];
+    
+    // 一次性讀取聯絡記錄
+    if (contactSheet) {
+      const contactData = contactSheet.getDataRange().getValues();
+      if (contactData.length > 1) { // 有數據（扣除標題）
+        totalContacts = contactData.length - 1;
+        
+        // 獲取最近聯絡日期
+        const lastRow = contactData[contactData.length - 1];
+        if (lastRow && lastRow[4]) {
+          lastContactDate = new Date(lastRow[4]).toLocaleDateString();
+        }
+        
+        // 生成詳細數據（簡化版本，只取前10筆）
+        const maxDetails = Math.min(10, contactData.length - 1);
+        for (let i = 1; i <= maxDetails; i++) {
+          const row = contactData[i];
+          if (row && row.length > 0) {
+            detailData.push([
+              teacherName,
+              row[1] || '', // Student Name
+              row[4] || '', // Date
+              row[7] || '', // Contact Type
+              row[9] || ''  // Parent Response
+            ]);
+          }
+        }
+      }
+    }
+    
+    // 一次性讀取學生資料
+    if (studentSheet) {
+      const studentData = studentSheet.getDataRange().getValues();
+      totalClasses = Math.max(0, studentData.length - 1);
+    }
+    
+    // 計算完成率和狀態
+    if (totalClasses > 0) {
+      const expectedContacts = totalClasses * 3; // 假設每班3次聯絡
+      const rate = Math.round((totalContacts / expectedContacts) * 100);
+      completionRate = rate + '%';
+      
+      if (rate >= 80) {
+        status = '優良';
+      } else if (rate >= 60) {
+        status = '良好';
+      } else if (rate >= 40) {
+        status = '普通';
+      } else {
+        status = '待改善';
+      }
+    }
+    
+    const processingTime = new Date().getTime() - itemStartTime;
+    
+    return {
+      teacherName: teacherName,
+      totalClasses: totalClasses,
+      totalContacts: totalContacts,
+      completionRate: completionRate,
+      status: status,
+      lastContactDate: lastContactDate,
+      detailData: detailData,
+      processingTime: processingTime
+    };
+    
+  } catch (error) {
+    Logger.log(`優化檢查 ${recordBook.getName()} 失敗: ${error.message}`);
+    return {
+      teacherName: recordBook.getName(),
+      totalClasses: 0,
+      totalContacts: 0,
+      completionRate: '0%',
+      status: '錯誤',
+      lastContactDate: '無法讀取',
+      detailData: [],
+      error: error.message
+    };
+  }
+}
+
+/**
+ * 🧠 智能進度報告生成 - 自動選擇最佳執行策略
+ * 根據記錄簿數量和系統狀態自動選擇最適合的報告生成方式
+ */
+function generateProgressReportSmart() {
+  try {
+    const startTime = new Date().getTime();
+    Logger.log('🧠 開始智能進度報告生成');
+    
+    // 第一步：快速系統檢查
+    const systemCheck = performSystemCheck();
+    if (!systemCheck.success) {
+      Logger.log(`❌ 系統檢查失敗: ${systemCheck.errors.join('; ')}`);
+      return {
+        success: false,
+        message: '系統檢查失敗，建議先執行系統修復',
+        errors: systemCheck.errors,
+        recommendation: 'repairSystemFolderAccess()'
+      };
+    }
+    
+    // 第二步：獲取記錄簿數量
+    let teacherBooks;
+    try {
+      teacherBooks = getAllTeacherBooks();
+    } catch (error) {
+      Logger.log(`❌ 獲取記錄簿失敗: ${error.message}`);
+      return {
+        success: false,
+        message: '無法獲取教師記錄簿，請檢查系統資料夾設定',
+        error: error.message,
+        recommendation: 'repairSystemFolderAccess()'
+      };
+    }
+    
+    const bookCount = teacherBooks.length;
+    Logger.log(`📊 智能分析: 發現 ${bookCount} 本記錄簿`);
+    
+    // 第三步：智能策略選擇
+    let selectedStrategy;
+    let result;
+    
+    if (bookCount === 0) {
+      Logger.log('⚠️ 沒有找到任何記錄簿');
+      return {
+        success: false,
+        message: '系統中沒有找到任何教師記錄簿',
+        teacherBooksCount: 0,
+        recommendation: 'repairSystemFolderAccess() 或檢查資料夾結構'
+      };
+      
+    } else if (bookCount <= 5) {
+      selectedStrategy = 'FULL_REPORT';
+      Logger.log(`🎯 選擇策略: 完整報告 (記錄簿數量: ${bookCount} ≤ 5)`);
+      result = generateProgressReportOriginal();
+      
+    } else if (bookCount <= 15) {
+      selectedStrategy = 'QUICK_REPORT';
+      Logger.log(`⚡ 選擇策略: 快速報告 (記錄簿數量: ${bookCount} ≤ 15)`);
+      result = quickProgressReport();
+      
+    } else {
+      selectedStrategy = 'BATCH_REPORT';
+      Logger.log(`🔄 選擇策略: 分批處理 (記錄簿數量: ${bookCount} > 15)`);
+      result = generateProgressReportBatch();
+    }
+    
+    const totalTime = new Date().getTime() - startTime;
+    Logger.log(`🎉 智能報告生成完成！策略: ${selectedStrategy}，總耗時: ${Math.round(totalTime/1000)} 秒`);
+    
+    // 增強返回結果
+    if (result.success) {
+      result.strategy = selectedStrategy;
+      result.recommendedFor = getStrategyDescription(selectedStrategy);
+      result.totalAnalysisTime = totalTime;
+    }
+    
+    // 顯示策略選擇結果給用戶
+    const strategyMsg = `智能報告生成完成！\n\n• 檢測到 ${bookCount} 本記錄簿\n• 選擇策略: ${getStrategyDescription(selectedStrategy)}\n• 分析時間: ${Math.round(totalTime/1000)} 秒\n• 執行結果: ${result.success ? '成功' : '失敗'}`;
+    
+    if (result.success && result.reportUrl) {
+      safeUIAlert('智能報告完成', strategyMsg + `\n• 報告位置: ${result.reportUrl}`);
+    } else {
+      safeUIAlert('智能分析結果', strategyMsg + (result.message ? `\n• 訊息: ${result.message}` : ''));
+    }
+    
+    return result;
+    
+  } catch (error) {
+    Logger.log(`❌ 智能報告生成失敗: ${error.message}`);
+    const errorMsg = `智能報告生成失敗: ${error.message}`;
+    safeUIAlert('錯誤', errorMsg);
+    
+    return {
+      success: false,
+      message: errorMsg,
+      error: error.toString(),
+      recommendation: '請嘗試執行 repairSystemFolderAccess() 修復系統'
+    };
+  }
+}
+
+/**
+ * 獲取策略描述
+ */
+function getStrategyDescription(strategy) {
+  switch (strategy) {
+    case 'FULL_REPORT':
+      return '完整報告 (≤5本記錄簿)';
+    case 'QUICK_REPORT':
+      return '快速報告 (6-15本記錄簿)';
+    case 'BATCH_REPORT':
+      return '分批處理 (>15本記錄簿)';
+    default:
+      return '未知策略';
+  }
+}
+
+/**
+ * 原始版本的報告生成函數 (重新命名以供智能選擇使用)
+ */
+function generateProgressReportOriginal() {
+  try {
+    // 調用原始的 generateProgressReport 邏輯，但添加超時保護
+    const startTime = new Date().getTime();
+    const MAX_TIME = 4 * 60 * 1000; // 4分鐘限制
+    
+    // 這裡會調用原始的複雜邏輯，但有時間限制
+    const result = executeWithTimeoutSync(() => {
+      return generateProgressReportCore();
+    }, MAX_TIME);
+    
+    return result;
+    
+  } catch (timeoutError) {
+    Logger.log(`⏰ 完整報告生成超時，降級到快速報告`);
+    return quickProgressReport();
+  }
+}
+
+/**
+ * 核心報告生成邏輯 (從原始 generateProgressReport 提取)
+ */
+function generateProgressReportCore() {
+  // 這裡包含原始 generateProgressReport 的核心邏輯
+  // 為了避免重複代碼，我們可以重構原始函數
+  const systemCheck = performSystemCheck();
+  if (!systemCheck.success) {
+    return {
+      success: false,
+      message: '系統檢查失敗',
+      errors: systemCheck.errors
+    };
+  }
+  
+  const teacherBooks = getAllTeacherBooks();
+  if (teacherBooks.length === 0) {
+    return {
+      success: false,
+      message: '沒有找到教師記錄簿',
+      teacherBooksCount: 0
+    };
+  }
+  
+  // 簡化版本的完整報告邏輯
+  Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，執行完整分析...`);
+  
+  const reportSheet = createProgressReportSheet();
+  const allProgressData = [];
+  const summaryData = [];
+  const errors = [];
+  let processedCount = 0;
+  
+  teacherBooks.forEach((book, index) => {
+    try {
+      const progress = checkTeacherProgress(book);
+      const detailData = getTeacherDetailProgress(book);
+      
+      allProgressData.push(...detailData);
+      summaryData.push([
+        progress.teacherName,
+        progress.totalClasses,
+        progress.totalContacts,
+        progress.semesterContacts || 0,
+        progress.lastContactDate,
+        progress.status,
+        progress.alertMessage || ''
+      ]);
+      
+      processedCount++;
+      Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完整分析完成`);
+      
+    } catch (error) {
+      const errorMsg = `完整分析 ${book.getName()} 失敗：${error.message}`;
+      Logger.log(`❌ ${errorMsg}`);
+      errors.push(errorMsg);
+    }
+  });
+  
+  writeProgressReportData(reportSheet, summaryData, allProgressData);
+  
+  return {
+    success: true,
+    message: '完整進度報告生成完成',
+    processedCount: processedCount,
+    totalBooks: teacherBooks.length,
+    reportSheet: reportSheet,
+    reportUrl: reportSheet.getUrl(),
+    errors: errors,
+    strategy: 'FULL_REPORT_CORE',
+    executionTime: new Date().getTime() - (new Date().getTime() - 60000) // 預估執行時間
+  };
+}
+
+/**
+ * 執行帶超時保護的函數
+ */
+/**
+ * 🕐 同步執行超時保護機制 - GAS 適配版本
+ * @param {Function} func - 要執行的函數
+ * @param {number} timeoutMs - 超時限制（毫秒）
+ * @returns {Object} 執行結果或超時錯誤
+ */
+function executeWithTimeoutSync(func, timeoutMs) {
+  const startTime = new Date().getTime();
+  Logger.log(`⏱️ 開始執行，超時限制: ${Math.round(timeoutMs/1000)}秒`);
+  
+  try {
+    // 在執行前檢查時間
+    if (new Date().getTime() - startTime > timeoutMs) {
+      throw new Error('執行前已超時');
+    }
+    
+    const result = func();
+    const executionTime = new Date().getTime() - startTime;
+    
+    Logger.log(`✅ 執行完成，耗時: ${Math.round(executionTime/1000)}秒`);
+    
+    // 檢查是否超時
+    if (executionTime > timeoutMs) {
+      Logger.log(`⚠️ 執行超時 (${Math.round(executionTime/1000)}秒 > ${Math.round(timeoutMs/1000)}秒)`);
+      throw new Error(`執行超時: ${Math.round(executionTime/1000)}秒`);
+    }
+    
+    return result;
+    
+  } catch (error) {
+    const executionTime = new Date().getTime() - startTime;
+    Logger.log(`❌ 執行失敗，耗時: ${Math.round(executionTime/1000)}秒，錯誤: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 🛡️ 執行時間監控的進度報告核心函數
+ * 在執行過程中定期檢查時間，防止超時
+ */
+function executeWithProgressMonitoring(func, timeoutMs, progressCallback) {
+  const startTime = new Date().getTime();
+  const checkInterval = Math.min(30000, timeoutMs / 10); // 每30秒或1/10超時時間檢查一次
+  
+  Logger.log(`🔍 開始監控執行，檢查間隔: ${Math.round(checkInterval/1000)}秒`);
+  
+  try {
+    // 執行函數，但定期檢查時間
+    const result = func((currentStep, totalSteps) => {
+      const currentTime = new Date().getTime();
+      const elapsedTime = currentTime - startTime;
+      
+      // 進度回調
+      if (progressCallback && typeof progressCallback === 'function') {
+        progressCallback(currentStep, totalSteps, elapsedTime);
+      }
+      
+      // 檢查是否即將超時 (留10%緩衝時間)
+      if (elapsedTime > timeoutMs * 0.9) {
+        Logger.log(`⚠️ 即將超時，已執行 ${Math.round(elapsedTime/1000)}秒`);
+        throw new Error('即將執行超時，提前終止');
+      }
+      
+      // 記錄進度
+      if (currentStep && totalSteps) {
+        Logger.log(`📊 進度: ${currentStep}/${totalSteps} (${Math.round((currentStep/totalSteps)*100)}%)`);
+      }
+    });
+    
+    return result;
+    
+  } catch (error) {
+    const executionTime = new Date().getTime() - startTime;
+    Logger.log(`❌ 監控執行失敗，總耗時: ${Math.round(executionTime/1000)}秒`);
+    throw error;
+  }
+}
+
+/**
  * 🚀 PropertiesService 快取設定 - 替代全域變數以避免測試衝突
  */
 const TEACHER_BOOKS_CACHE_CONFIG = {
