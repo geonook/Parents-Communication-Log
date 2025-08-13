@@ -11,14 +11,23 @@ function checkAllProgress() {
     const overallStartTime = new Date().getTime();
     Logger.log('🔍 開始檢查所有老師進度');
     
-    // 統一 Web 環境架構 - 移除環境檢查
-    const ui = SpreadsheetApp.getUi();
+    // 使用安全的 UI 包裝函數
+    const ui = safeGetUI();
     
     // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooks();
     if (teacherBooks.length === 0) {
-      ui.alert('提醒', '系統中沒有找到任何老師記錄簿', ui.ButtonSet.OK);
-      return;
+      const message = '系統中沒有找到任何老師記錄簿';
+      Logger.log(`⚠️ ${message}`);
+      safeUIAlert('提醒', message);
+      
+      return {
+        success: false,
+        message: message,
+        teacherBooksCount: 0,
+        processedCount: 0,
+        totalTime: new Date().getTime() - overallStartTime
+      };
     }
     
     Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始處理...`);
@@ -57,11 +66,9 @@ function checkAllProgress() {
     // 顯示進度報告
     displayProgressSummary(progressResults);
     
-    // 顯示性能摘要給用戶
-    if (ui) {
-      const performanceMsg = `進度檢查完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n平均處理時間：${Math.round(totalTime/processedCount)}ms/本`;
-      ui.alert('檢查完成', performanceMsg, ui.ButtonSet.OK);
-    }
+    // 顯示性能摘要給用戶 (使用安全的 UI 調用)
+    const performanceMsg = `進度檢查完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n平均處理時間：${Math.round(totalTime/processedCount)}ms/本`;
+    safeUIAlert('檢查完成', performanceMsg);
     
     // 返回檢查結果
     return {
@@ -95,8 +102,8 @@ function generateProgressReport() {
     const startTime = new Date().getTime();
     Logger.log('📊 開始生成進度報告');
     
-    // 統一 Web 環境架構 - 移除環境檢查
-    const ui = SpreadsheetApp.getUi();
+    // 使用安全的 UI 包裝函數
+    const ui = safeGetUI();
     
     // 🔍 增強型診斷：檢查系統狀態
     Logger.log('🔍 執行系統狀態檢查...');
@@ -104,7 +111,8 @@ function generateProgressReport() {
     
     if (!systemCheck.success) {
       const errorMsg = `系統檢查失敗：\n\n${systemCheck.errors.join('\n')}\n\n建議執行系統修復功能。`;
-      ui.alert('系統錯誤', errorMsg, ui.ButtonSet.OK);
+      Logger.log(`❌ ${errorMsg}`);
+      safeUIAlert('系統錯誤', errorMsg);
       
       return {
         success: false,
@@ -118,7 +126,8 @@ function generateProgressReport() {
     const teacherBooks = getAllTeacherBooks();
     if (teacherBooks.length === 0) {
       const detailedMsg = `系統中沒有找到任何老師記錄簿。\n\n可能原因：\n• 資料夾結構不正確\n• 檔案命名不符合規範\n• 權限設定問題\n\n建議使用「系統修復」功能解決此問題。`;
-      ui.alert('沒有找到記錄簿', detailedMsg, ui.ButtonSet.OK);
+      Logger.log(`⚠️ ${detailedMsg}`);
+      safeUIAlert('沒有找到記錄簿', detailedMsg);
       
       return {
         success: false,
@@ -183,14 +192,10 @@ function generateProgressReport() {
     const totalTime = new Date().getTime() - startTime;
     Logger.log(`🎉 進度報告生成完成！總耗時 ${totalTime}ms`);
     
-    // Show performance summary to user
+    // Show performance summary to user (使用安全的 UI 調用)
     const performanceMsg = `進度報告生成完成！\n\n處理記錄簿：${processedCount}/${teacherBooks.length}\n總耗時：${Math.round(totalTime/1000)}秒\n平均處理時間：${Math.round(totalTime/processedCount)}ms/本\n\n報告位置：${reportSheet.getUrl()}`;
     
-    ui.alert(
-      '報告生成完成！',
-      performanceMsg,
-      ui.ButtonSet.OK
-    );
+    safeUIAlert('報告生成完成！', performanceMsg);
     
     // 返回報告生成結果
     return {
@@ -206,7 +211,8 @@ function generateProgressReport() {
     
   } catch (error) {
     Logger.log('生成進度報告失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '生成報告失敗：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    const errorMsg = '生成報告失敗：' + error.message;
+    safeUIAlert('錯誤', errorMsg);
     
     // 錯誤情況返回值
     return {
@@ -421,13 +427,8 @@ ${diagnostic.performanceLevel === '需要優化' ?
     
     Logger.log(report);
     
-    // Show to user if UI available
-    try {
-      const ui = SpreadsheetApp.getUi();
-      ui.alert('性能診斷完成', report, ui.ButtonSet.OK);
-    } catch (uiError) {
-      Logger.log('UI不可用，診斷結果已記錄在Logger中');
-    }
+    // Show to user if UI available (使用安全的 UI 調用)
+    safeUIAlert('性能診斷完成', report);
     
     return diagnostic;
     
@@ -971,7 +972,7 @@ function autoProgressCheck() {
  */
 function displayProgressSummary(progressResults) {
   if (!progressResults || progressResults.length === 0) {
-    SpreadsheetApp.getUi().alert('進度檢查結果', '沒有找到任何老師記錄簿', SpreadsheetApp.getUi().ButtonSet.OK);
+    safeUIAlert('進度檢查結果', '沒有找到任何老師記錄簿');
     return;
   }
   
@@ -1037,15 +1038,27 @@ function displayProgressSummary(progressResults) {
     });
   }
   
-  // 顯示結果
-  const ui = SpreadsheetApp.getUi();
-  const response = ui.alert(
-    '進度檢查結果',
-    summaryMessage + '\n是否要生成詳細報告？',
-    ui.ButtonSet.YES_NO
-  );
+  // 顯示結果 (使用安全的 UI 調用)
+  const ui = safeGetUI();
+  let response;
   
-  if (response === ui.Button.YES) {
+  if (ui) {
+    response = safeUIAlert(
+      '進度檢查結果',
+      summaryMessage + '\n是否要生成詳細報告？',
+      ui.ButtonSet.YES_NO
+    );
+  } else {
+    // 非UI環境：記錄信息並默認生成報告
+    Logger.log('🎯 進度檢查結果 (非UI環境)：');
+    Logger.log(summaryMessage);
+    Logger.log('🔄 自動生成詳細報告...');
+    response = { selectedButton: 'YES' }; // 模擬YES回應
+  }
+  
+  const shouldGenerateReport = ui ? (response === ui.Button.YES) : (response.selectedButton === 'YES');
+  
+  if (shouldGenerateReport) {
     generateDetailedProgressReport(progressResults);
   }
 }
@@ -1172,15 +1185,13 @@ function generateDetailedProgressReport(progressResults) {
     reportFolder.addFile(reportFile);
     DriveApp.getRootFolder().removeFile(reportFile);
     
-    SpreadsheetApp.getUi().alert(
-      '報告生成完成 🎆',
-      `詳細進度報告已生成：\n${reportSheet.getUrl()}\n\n🔄 支援轉班學生完整6記錄框架\n📊 系統整體完成率: ${progressResults.reduce((sum, p) => sum + (p.totalScheduledRecords || 0), 0) > 0 ? Math.round(progressResults.reduce((sum, p) => sum + (p.totalCompletedRecords || 0), 0) / progressResults.reduce((sum, p) => sum + (p.totalScheduledRecords || 0), 0) * 100) : 0}%`,
-      SpreadsheetApp.getUi().ButtonSet.OK
-    );
+    const reportMsg = `詳細進度報告已生成：\n${reportSheet.getUrl()}\n\n🔄 支援轉班學生完整6記錄框架\n📊 系統整體完成率: ${progressResults.reduce((sum, p) => sum + (p.totalScheduledRecords || 0), 0) > 0 ? Math.round(progressResults.reduce((sum, p) => sum + (p.totalCompletedRecords || 0), 0) / progressResults.reduce((sum, p) => sum + (p.totalScheduledRecords || 0), 0) * 100) : 0}%`;
+    safeUIAlert('報告生成完成 🎆', reportMsg);
     
   } catch (error) {
     Logger.log('生成詳細報告失敗：' + error.toString());
-    SpreadsheetApp.getUi().alert('錯誤', '生成詳細報告失敗（含轉班學生支援）：' + error.message, SpreadsheetApp.getUi().ButtonSet.OK);
+    const errorMsg = '生成詳細報告失敗（含轉班學生支援）：' + error.message;
+    safeUIAlert('錯誤', errorMsg);
   }
 }
 
