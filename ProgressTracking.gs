@@ -512,15 +512,15 @@ function generateProgressReportBatch() {
           // 使用優化的數據收集
           const progress = checkTeacherProgressOptimized(book);
           
-          // 收集摘要數據
+          // 收集摘要數據 (學期制格式)
           summaryData.push([
             progress.teacherName,
-            progress.totalClasses,
-            progress.totalContacts,
+            progress.semester,
+            progress.term,
+            progress.totalStudents,
+            progress.completedContacts,
             progress.completionRate,
-            progress.lastContactDate,
-            progress.status,
-            progress.alertMessage || progress.error || ''
+            progress.status
           ]);
           
           processedCount++;
@@ -583,84 +583,105 @@ function generateProgressReportBatch() {
 }
 
 /**
- * 優化版本的教師進度檢查 - 合併數據收集
+ * 優化版本的教師進度檢查 - 從學期制進度追蹤工作表讀取數據
  */
 function checkTeacherProgressOptimized(recordBook) {
   try {
     const itemStartTime = new Date().getTime();
     const teacherName = recordBook.getName().replace('_電聯記錄簿', '').split('_')[0];
     
-    // 獲取工作表
-    const contactSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.CONTACT_LOG);
-    const studentSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.STUDENT_LIST);
+    // 獲取進度追蹤工作表
+    const progressSheet = recordBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
     
-    let totalContacts = 0;
-    let totalClasses = 0;
-    let lastContactDate = '無記錄';
-    let completionRate = '0%';
-    let status = '未知';
-    
-    // 一次性讀取聯絡記錄
-    if (contactSheet) {
-      const contactData = contactSheet.getDataRange().getValues();
-      if (contactData.length > 1) { // 有數據（扣除標題）
-        totalContacts = contactData.length - 1;
-        
-        // 獲取最近聯絡日期
-        const lastRow = contactData[contactData.length - 1];
-        if (lastRow && lastRow[4]) {
-          lastContactDate = new Date(lastRow[4]).toLocaleDateString();
-        }
-      }
+    if (!progressSheet) {
+      Logger.log(`⚠️ ${teacherName} 缺少進度追蹤工作表`);
+      return {
+        teacherName: teacherName,
+        semester: '無資料',
+        term: '無資料',
+        totalStudents: 0,
+        completedContacts: 0,
+        completionRate: '0%',
+        status: '缺少進度表',
+        alertMessage: '無進度追蹤工作表',
+        processingTime: new Date().getTime() - itemStartTime
+      };
     }
     
-    // 一次性讀取學生資料
-    if (studentSheet) {
-      const studentData = studentSheet.getDataRange().getValues();
-      totalClasses = Math.max(0, studentData.length - 1);
-    }
+    // 讀取進度追蹤數據 (第5-10行：Fall Beginning/Midterm/Final + Spring Beginning/Midterm/Final)
+    const progressData = progressSheet.getRange(5, 1, 6, 6).getValues(); // 6行6列
     
-    // 計算完成率和狀態
-    if (totalClasses > 0) {
-      const expectedContacts = totalClasses * 3; // 假設每班3次聯絡
-      const rate = Math.round((totalContacts / expectedContacts) * 100);
-      completionRate = rate + '%';
+    // 尋找當前活躍的學期進度 (有完成電聯的第一個)
+    let currentProgress = null;
+    for (let i = 0; i < progressData.length; i++) {
+      const row = progressData[i];
+      const semester = row[0] || '';
+      const term = row[1] || '';
+      const totalStudents = row[2] || 0;
+      const completedContacts = row[3] || 0;
+      const completionRateText = row[4] || '0%';
+      const status = row[5] || '待開始';
       
-      if (rate >= 80) {
-        status = '優良';
-      } else if (rate >= 60) {
-        status = '良好';
-      } else if (rate >= 40) {
-        status = '普通';
-      } else {
-        status = '待改善';
+      // 如果找到有進度的學期-Term，使用它
+      if (semester && term && (completedContacts > 0 || status === '進行中')) {
+        currentProgress = {
+          semester: semester,
+          term: term,
+          totalStudents: totalStudents,
+          completedContacts: completedContacts,
+          completionRate: completionRateText,
+          status: status
+        };
+        break;
       }
+    }
+    
+    // 如果沒有找到活躍進度，使用第一行數據
+    if (!currentProgress && progressData.length > 0) {
+      const firstRow = progressData[0];
+      currentProgress = {
+        semester: firstRow[0] || '無資料',
+        term: firstRow[1] || '無資料',
+        totalStudents: firstRow[2] || 0,
+        completedContacts: firstRow[3] || 0,
+        completionRate: firstRow[4] || '0%',
+        status: firstRow[5] || '待開始'
+      };
+    }
+    
+    // 生成提醒訊息
+    let alertMessage = '';
+    if (currentProgress) {
+      const rate = parseFloat(currentProgress.completionRate);
+      if (currentProgress.status === '進行中') {
+        if (rate >= 90) {
+          alertMessage = '進度優秀，即將完成';
+        } else if (rate >= 70) {
+          alertMessage = '進度良好，繼續保持';
+        } else if (rate >= 50) {
+          alertMessage = '進度正常';
+        } else {
+          alertMessage = '進度偏慢，建議加強';
+        }
+      } else if (currentProgress.status === '已完成') {
+        alertMessage = '已完成本期電聯';
+      } else {
+        alertMessage = '待開始電聯';
+      }
+    } else {
+      alertMessage = '無進度資料';
     }
     
     const processingTime = new Date().getTime() - itemStartTime;
     
-    // 生成提醒訊息
-    let alertMessage = '';
-    if (totalClasses > 0) {
-      const rate = parseInt(completionRate);
-      if (rate < 40) {
-        alertMessage = '電聯進度嚴重落後，請加強聯繫';
-      } else if (rate < 60) {
-        alertMessage = '電聯進度偏低，建議增加聯繫';
-      } else if (rate >= 80) {
-        alertMessage = '電聯進度優良，保持下去';
-      }
-    } else {
-      alertMessage = '無學生資料';
-    }
-
     return {
       teacherName: teacherName,
-      totalClasses: totalClasses,
-      totalContacts: totalContacts,
-      completionRate: completionRate,
-      status: status,
-      lastContactDate: lastContactDate,
+      semester: currentProgress?.semester || '無資料',
+      term: currentProgress?.term || '無資料', 
+      totalStudents: currentProgress?.totalStudents || 0,
+      completedContacts: currentProgress?.completedContacts || 0,
+      completionRate: currentProgress?.completionRate || '0%',
+      status: currentProgress?.status || '無資料',
       alertMessage: alertMessage,
       processingTime: processingTime
     };
@@ -669,12 +690,13 @@ function checkTeacherProgressOptimized(recordBook) {
     Logger.log(`優化檢查 ${recordBook.getName()} 失敗: ${error.message}`);
     return {
       teacherName: recordBook.getName(),
-      totalClasses: 0,
-      totalContacts: 0,
+      semester: '錯誤',
+      term: '錯誤',
+      totalStudents: 0,
+      completedContacts: 0,
       completionRate: '0%',
-      status: '錯誤',
-      lastContactDate: '無法讀取',
-      alertMessage: '處理失敗',
+      status: '處理失敗',
+      alertMessage: '資料讀取失敗',
       error: error.message
     };
   }
@@ -2325,14 +2347,14 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
     Logger.log(`⚠️ 數據驗證警告：${validation.warnings.join(', ')}`);
   }
   
-  Logger.log(`✅ 數據格式驗證通過 - 摘要數據：${summaryData.length} 行，詳細數據：${detailData.length} 行`);
+  Logger.log(`✅ 數據格式驗證通過 - 摘要數據：${summaryData.length} 行 (學期制格式)`);
   
   // 建立摘要工作表
   const summarySheet = reportSheet.getActiveSheet();
   summarySheet.setName('進度摘要');
   
-  // 寫入摘要資料
-  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '完成率', '最後聯繫日期', '狀態', '提醒訊息']];
+  // 寫入摘要資料 (學期制格式)
+  const summaryHeaders = [['老師姓名', '學期', 'Term', '學生總數', '已完成電聯', '完成率', '狀態']];
   summarySheet.getRange(1, 1, 1, summaryHeaders[0].length).setValues(summaryHeaders);
   
   if (summaryData.length > 0) {
