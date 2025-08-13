@@ -316,7 +316,9 @@ function quickProgressReport() {
       const headers = [['教師姓名', '班級數', '電聯總數', '完成率', '狀態', '最近聯絡']];
       const allData = headers.concat(reportData);
       
-      reportSheet.getRange(1, 1, allData.length, allData[0].length).setValues(allData);
+      // ✅ 修復：使用活動工作表進行數據寫入
+      const sheet = reportSheet.getActiveSheet();
+      sheet.getRange(1, 1, allData.length, allData[0].length).setValues(allData);
       Logger.log(`✅ 數據寫入完成: ${reportData.length} 筆記錄`);
     }
     
@@ -431,8 +433,9 @@ function createQuickReportSheet() {
   
   const reportSheet = SpreadsheetApp.create(sheetName);
   
-  // 設定簡單的樣式
-  const headerRange = reportSheet.getRange(1, 1, 1, 6);
+  // ✅ 修復：先獲取活動工作表，再設定樣式
+  const sheet = reportSheet.getActiveSheet();
+  const headerRange = sheet.getRange(1, 1, 1, 6);
   headerRange.setBackground('#4facfe');
   headerRange.setFontColor('white');
   headerRange.setFontWeight('bold');
