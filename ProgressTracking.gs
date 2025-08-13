@@ -688,13 +688,36 @@ function checkTeacherProgressOptimized(recordBook) {
 }
 
 /**
- * 🧠 智能進度報告生成 - 自動選擇最佳執行策略
+ * 🧠 智能進度報告生成 - 自動選擇最佳執行策略和報告類型
  * 根據記錄簿數量和系統狀態自動選擇最適合的報告生成方式
+ * @param {string} reportType - 報告類型: 'CONTACT_LOG'(電聯記錄) 或 'PROGRESS_TRACKING'(進度追蹤)
+ * @returns {Object} 報告生成結果
  */
-function generateProgressReportSmart() {
+function generateProgressReportSmart(reportType = null) {
   try {
     const startTime = new Date().getTime();
     Logger.log('🧠 開始智能進度報告生成');
+    
+    // 🎯 步驟0：報告類型選擇
+    if (!reportType) {
+      const selectedType = promptForReportType();
+      if (!selectedType) {
+        return {
+          success: false,
+          message: '用戶取消了報告生成',
+          cancelled: true
+        };
+      }
+      reportType = selectedType;
+    }
+    
+    Logger.log(`📊 選擇報告類型: ${reportType}`);
+    
+    // 如果選擇進度追蹤報告，直接調用專用函數
+    if (reportType === 'PROGRESS_TRACKING') {
+      Logger.log('🎯 調用進度追蹤工作表專用報告');
+      return generateProgressTrackingSheetReport(true);
+    }
     
     // 第一步：快速系統檢查
     const systemCheck = performSystemCheck();
@@ -786,6 +809,45 @@ function generateProgressReportSmart() {
       error: error.toString(),
       recommendation: '請嘗試執行 repairSystemFolderAccess() 修復系統'
     };
+  }
+}
+
+/**
+ * 🎯 提示用戶選擇報告類型
+ * @returns {string|null} 選擇的報告類型或 null (如果取消)
+ */
+function promptForReportType() {
+  try {
+    const ui = safeGetUI();
+    if (!ui) {
+      // 在沒有UI的環境中，默認使用電聯記錄報告
+      Logger.log('⚠️ 無UI環境，默認使用電聯記錄報告');
+      return 'CONTACT_LOG';
+    }
+    
+    const response = ui.alert(
+      '📊 選擇報告類型',
+      '請選擇您要生成的報告類型：\n\n' +
+      '• 電聯記錄報告：分析老師記錄簿中的電聯記錄工作表\n' +
+      '• 進度追蹤報告：分析老師記錄簿中的進度追蹤工作表\n\n' +
+      '點擊「是」選擇電聯記錄報告\n' +
+      '點擊「否」選擇進度追蹤報告\n' +
+      '點擊「取消」退出',
+      ui.ButtonSet.YES_NO_CANCEL
+    );
+    
+    if (response === ui.Button.YES) {
+      return 'CONTACT_LOG';
+    } else if (response === ui.Button.NO) {
+      return 'PROGRESS_TRACKING';
+    } else {
+      return null; // 用戶取消
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ 報告類型選擇提示失敗: ${error.message}`);
+    // 發生錯誤時默認使用電聯記錄報告
+    return 'CONTACT_LOG';
   }
 }
 
@@ -979,6 +1041,549 @@ function executeWithProgressMonitoring(func, timeoutMs, progressCallback) {
     const executionTime = new Date().getTime() - startTime;
     Logger.log(`❌ 監控執行失敗，總耗時: ${Math.round(executionTime/1000)}秒`);
     throw error;
+  }
+}
+
+// ============================================================
+// 📊 進度追蹤工作表專用報告功能
+// ============================================================
+
+/**
+ * 📊 提取進度追蹤工作表數據
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} teacherBook - 老師記錄簿
+ * @returns {Object} 進度追蹤數據
+ */
+function extractProgressTrackingData(teacherBook) {
+  try {
+    const teacherName = teacherBook.getName();
+    Logger.log(`📊 提取 ${teacherName} 的進度追蹤數據`);
+    
+    // 獲取進度追蹤工作表
+    const progressSheet = teacherBook.getSheetByName(SYSTEM_CONFIG.SHEET_NAMES.PROGRESS);
+    if (!progressSheet) {
+      Logger.log(`⚠️ ${teacherName} 沒有進度追蹤工作表`);
+      return {
+        teacherName: teacherName,
+        hasProgressSheet: false,
+        error: '沒有進度追蹤工作表'
+      };
+    }
+    
+    // 獲取工作表數據
+    const lastRow = progressSheet.getLastRow();
+    const lastCol = progressSheet.getLastColumn();
+    
+    if (lastRow < 5) {
+      return {
+        teacherName: teacherName,
+        hasProgressSheet: true,
+        isEmpty: true,
+        error: '進度追蹤工作表沒有數據'
+      };
+    }
+    
+    const allData = progressSheet.getRange(1, 1, lastRow, lastCol).getValues();
+    
+    // 分析工作表結構
+    const structure = analyzeProgressSheetStructure(allData);
+    if (!structure.isValid) {
+      return {
+        teacherName: teacherName,
+        hasProgressSheet: true,
+        isValidStructure: false,
+        error: '進度追蹤工作表結構不正確'
+      };
+    }
+    
+    // 提取進度數據
+    const progressData = [];
+    for (let row = structure.dataStartRow; row < lastRow; row++) {
+      const rowData = allData[row];
+      if (!rowData[0]) continue; // 跳過空行
+      
+      const semesterTerm = rowData[0].toString();
+      const completedCount = parseFloat(rowData[2]) || 0;
+      const totalCount = parseFloat(rowData[3]) || 0;
+      const completionRate = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+      const status = rowData[5] ? rowData[5].toString() : '未知';
+      
+      progressData.push({
+        semesterTerm: semesterTerm,
+        completedCount: completedCount,
+        totalCount: totalCount,
+        completionRate: completionRate,
+        status: status,
+        rowIndex: row + 1
+      });
+    }
+    
+    Logger.log(`✅ 成功提取 ${teacherName} 的進度數據: ${progressData.length} 個學期Term`);
+    
+    return {
+      teacherName: teacherName,
+      hasProgressSheet: true,
+      isValidStructure: true,
+      progressData: progressData,
+      totalSemesterTerms: progressData.length,
+      extractedAt: new Date()
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 提取進度追蹤數據失敗 (${teacherBook.getName()}): ${error.message}`);
+    return {
+      teacherName: teacherBook.getName(),
+      hasProgressSheet: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * 🔍 分析進度追蹤工作表結構
+ * @param {Array} allData - 工作表所有數據
+ * @returns {Object} 結構分析結果
+ */
+function analyzeProgressSheetStructure(allData) {
+  try {
+    // 檢查標題行
+    const titleCell = allData[0][0];
+    const isValidTitle = titleCell && titleCell.toString().includes('電聯進度追蹤');
+    
+    // 尋找數據開始行 (通常在第5行，索引4)
+    let dataStartRow = 4;
+    for (let i = 3; i < Math.min(10, allData.length); i++) {
+      const firstCell = allData[i][0];
+      if (firstCell && (firstCell.toString().includes('Fall') || firstCell.toString().includes('Spring'))) {
+        dataStartRow = i;
+        break;
+      }
+    }
+    
+    // 檢查是否有標準的學期制結構
+    const hasExpectedColumns = allData.length > dataStartRow && allData[dataStartRow].length >= 6;
+    
+    return {
+      isValid: isValidTitle && hasExpectedColumns,
+      dataStartRow: dataStartRow,
+      hasValidTitle: isValidTitle,
+      hasExpectedColumns: hasExpectedColumns
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 分析進度工作表結構失敗: ${error.message}`);
+    return { isValid: false, error: error.message };
+  }
+}
+
+/**
+ * 📈 分析進度追蹤統計數據
+ * @param {Array} allProgressData - 所有老師的進度數據
+ * @returns {Object} 統計分析結果
+ */
+function analyzeProgressTrackingStats(allProgressData) {
+  try {
+    Logger.log('📊 開始分析進度追蹤統計數據');
+    
+    const stats = {
+      totalTeachers: 0,
+      teachersWithProgressSheet: 0,
+      teachersWithValidData: 0,
+      totalSemesterTerms: 0,
+      overallStats: {
+        totalCompleted: 0,
+        totalScheduled: 0,
+        averageCompletionRate: 0
+      },
+      semesterStats: {},
+      statusDistribution: {
+        '已完成': 0,
+        '進行中': 0,
+        '待開始': 0,
+        '其他': 0
+      },
+      teacherSummary: []
+    };
+    
+    allProgressData.forEach(teacherData => {
+      stats.totalTeachers++;
+      
+      if (teacherData.hasProgressSheet) {
+        stats.teachersWithProgressSheet++;
+      }
+      
+      if (teacherData.isValidStructure && teacherData.progressData) {
+        stats.teachersWithValidData++;
+        
+        const teacherSummary = {
+          teacherName: teacherData.teacherName,
+          totalSemesterTerms: teacherData.progressData.length,
+          totalCompleted: 0,
+          totalScheduled: 0,
+          overallCompletionRate: 0,
+          semesterTermsStatus: []
+        };
+        
+        teacherData.progressData.forEach(termData => {
+          stats.totalSemesterTerms++;
+          stats.overallStats.totalCompleted += termData.completedCount;
+          stats.overallStats.totalScheduled += termData.totalCount;
+          
+          teacherSummary.totalCompleted += termData.completedCount;
+          teacherSummary.totalScheduled += termData.totalCount;
+          
+          // 學期統計
+          if (!stats.semesterStats[termData.semesterTerm]) {
+            stats.semesterStats[termData.semesterTerm] = {
+              totalCompleted: 0,
+              totalScheduled: 0,
+              teacherCount: 0,
+              averageCompletionRate: 0
+            };
+          }
+          
+          stats.semesterStats[termData.semesterTerm].totalCompleted += termData.completedCount;
+          stats.semesterStats[termData.semesterTerm].totalScheduled += termData.totalCount;
+          stats.semesterStats[termData.semesterTerm].teacherCount++;
+          
+          // 狀態分布
+          const status = termData.status;
+          if (status === '已完成') {
+            stats.statusDistribution['已完成']++;
+          } else if (status === '進行中') {
+            stats.statusDistribution['進行中']++;
+          } else if (status === '待開始') {
+            stats.statusDistribution['待開始']++;
+          } else {
+            stats.statusDistribution['其他']++;
+          }
+          
+          teacherSummary.semesterTermsStatus.push({
+            semesterTerm: termData.semesterTerm,
+            completionRate: termData.completionRate,
+            status: termData.status
+          });
+        });
+        
+        teacherSummary.overallCompletionRate = teacherSummary.totalScheduled > 0 
+          ? Math.round((teacherSummary.totalCompleted / teacherSummary.totalScheduled) * 100) 
+          : 0;
+          
+        stats.teacherSummary.push(teacherSummary);
+      }
+    });
+    
+    // 計算整體完成率
+    stats.overallStats.averageCompletionRate = stats.overallStats.totalScheduled > 0 
+      ? Math.round((stats.overallStats.totalCompleted / stats.overallStats.totalScheduled) * 100) 
+      : 0;
+    
+    // 計算各學期平均完成率
+    Object.keys(stats.semesterStats).forEach(semester => {
+      const semesterStat = stats.semesterStats[semester];
+      semesterStat.averageCompletionRate = semesterStat.totalScheduled > 0 
+        ? Math.round((semesterStat.totalCompleted / semesterStat.totalScheduled) * 100) 
+        : 0;
+    });
+    
+    Logger.log(`✅ 完成進度追蹤統計分析: ${stats.totalTeachers} 位老師，${stats.totalSemesterTerms} 個學期Term`);
+    
+    return stats;
+    
+  } catch (error) {
+    Logger.log(`❌ 分析進度追蹤統計失敗: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 📊 生成進度追蹤工作表專用報告
+ * @param {boolean} useSmartStrategy - 是否使用智能策略選擇
+ * @returns {Object} 報告生成結果
+ */
+function generateProgressTrackingSheetReport(useSmartStrategy = false) {
+  try {
+    const startTime = new Date().getTime();
+    Logger.log('📊 開始生成進度追蹤工作表專用報告');
+    
+    // 系統檢查
+    const systemCheck = performSystemCheck();
+    if (!systemCheck.success) {
+      return {
+        success: false,
+        message: '系統檢查失敗，建議先執行系統修復',
+        errors: systemCheck.errors
+      };
+    }
+    
+    // 獲取所有老師記錄簿
+    const teacherBooks = getAllTeacherBooks();
+    if (teacherBooks.length === 0) {
+      return {
+        success: false,
+        message: '沒有找到任何老師記錄簿',
+        teacherBooksCount: 0
+      };
+    }
+    
+    Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始提取進度追蹤數據`);
+    
+    // 提取所有老師的進度追蹤數據
+    const allProgressData = [];
+    const errors = [];
+    let processedCount = 0;
+    
+    teacherBooks.forEach((book, index) => {
+      try {
+        Logger.log(`[${index + 1}/${teacherBooks.length}] 處理 ${book.getName()}`);
+        const progressData = extractProgressTrackingData(book);
+        allProgressData.push(progressData);
+        
+        if (progressData.hasProgressSheet && progressData.isValidStructure) {
+          processedCount++;
+        }
+        
+      } catch (error) {
+        const errorMsg = `提取 ${book.getName()} 進度數據失敗: ${error.message}`;
+        Logger.log(`❌ ${errorMsg}`);
+        errors.push(errorMsg);
+      }
+    });
+    
+    if (processedCount === 0) {
+      return {
+        success: false,
+        message: '沒有老師記錄簿包含有效的進度追蹤工作表',
+        processedCount: 0,
+        totalBooks: teacherBooks.length,
+        errors: errors
+      };
+    }
+    
+    // 分析統計數據
+    const stats = analyzeProgressTrackingStats(allProgressData);
+    
+    // 創建報告工作表
+    const reportSheet = createProgressTrackingReportSheet();
+    
+    // 寫入報告數據
+    writeProgressTrackingReportData(reportSheet, stats, allProgressData);
+    
+    const totalTime = new Date().getTime() - startTime;
+    const reportUrl = reportSheet.getUrl();
+    
+    Logger.log(`🎉 進度追蹤報告生成完成！處理 ${processedCount}/${teacherBooks.length} 本記錄簿，耗時 ${Math.round(totalTime/1000)} 秒`);
+    
+    // 顯示結果給用戶
+    const summaryMsg = `進度追蹤工作表報告生成完成！\n\n• 處理記錄簿: ${processedCount}/${teacherBooks.length}\n• 總學期Terms: ${stats.totalSemesterTerms}\n• 整體完成率: ${stats.overallStats.averageCompletionRate}%\n• 執行時間: ${Math.round(totalTime/1000)} 秒\n• 報告位置: ${reportUrl}`;
+    safeUIAlert('進度追蹤報告完成', summaryMsg);
+    
+    return {
+      success: true,
+      message: '進度追蹤工作表報告生成完成',
+      processedCount: processedCount,
+      totalBooks: teacherBooks.length,
+      totalTime: totalTime,
+      reportSheet: reportSheet,
+      reportUrl: reportUrl,
+      errors: errors,
+      stats: stats,
+      reportType: 'PROGRESS_TRACKING_SHEET'
+    };
+    
+  } catch (error) {
+    Logger.log(`❌ 生成進度追蹤報告失敗: ${error.message}`);
+    const errorMsg = `進度追蹤報告生成失敗: ${error.message}`;
+    safeUIAlert('錯誤', errorMsg);
+    
+    return {
+      success: false,
+      message: errorMsg,
+      error: error.toString(),
+      reportType: 'PROGRESS_TRACKING_SHEET'
+    };
+  }
+}
+
+/**
+ * 📋 創建進度追蹤報告專用工作表
+ * @returns {GoogleAppsScript.Spreadsheet.Spreadsheet} 報告工作表
+ */
+function createProgressTrackingReportSheet() {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+  const sheetName = `進度追蹤工作表報告_${timestamp}`;
+  
+  const reportSheet = SpreadsheetApp.create(sheetName);
+  const sheet = reportSheet.getActiveSheet();
+  
+  // 設定基本樣式
+  sheet.setName('進度追蹤總覽');
+  
+  Logger.log(`✅ 進度追蹤報告工作表已創建: ${sheetName}`);
+  return reportSheet;
+}
+
+/**
+ * ✍️ 寫入進度追蹤報告數據
+ * @param {GoogleAppsScript.Spreadsheet.Spreadsheet} reportSheet - 報告工作表
+ * @param {Object} stats - 統計數據
+ * @param {Array} allProgressData - 所有進度數據
+ */
+function writeProgressTrackingReportData(reportSheet, stats, allProgressData) {
+  try {
+    Logger.log('✍️ 開始寫入進度追蹤報告數據');
+    
+    const summarySheet = reportSheet.getActiveSheet();
+    
+    // 1. 寫入標題和統計摘要
+    writeProgressTrackingSummary(summarySheet, stats);
+    
+    // 2. 創建老師詳細資料工作表
+    const teacherDetailSheet = reportSheet.insertSheet('老師詳細進度');
+    writeTeacherProgressDetails(teacherDetailSheet, stats.teacherSummary);
+    
+    // 3. 創建學期統計工作表
+    const semesterStatsSheet = reportSheet.insertSheet('學期統計分析');
+    writeSemesterStatistics(semesterStatsSheet, stats.semesterStats);
+    
+    // 4. 設定所有工作表的樣式
+    [summarySheet, teacherDetailSheet, semesterStatsSheet].forEach(sheet => {
+      if (sheet.getLastRow() > 0) {
+        sheet.autoResizeColumns(1, sheet.getLastColumn());
+        
+        // 設定標題行樣式
+        const headerRange = sheet.getRange(1, 1, 1, sheet.getLastColumn());
+        headerRange.setFontWeight('bold')
+                  .setBackground('#E8F4FD')
+                  .setFontColor('#1C4E80');
+      }
+    });
+    
+    Logger.log('✅ 進度追蹤報告數據寫入完成');
+    
+  } catch (error) {
+    Logger.log(`❌ 寫入進度追蹤報告數據失敗: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * 📊 寫入進度追蹤統計摘要
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 工作表
+ * @param {Object} stats - 統計數據
+ */
+function writeProgressTrackingSummary(sheet, stats) {
+  const data = [];
+  
+  // 標題
+  data.push(['📊 進度追蹤工作表統計報告']);
+  data.push([`生成時間: ${new Date().toLocaleString()}`]);
+  data.push(['']); // 空行
+  
+  // 基本統計
+  data.push(['📈 基本統計']);
+  data.push(['項目', '數值', '說明']);
+  data.push(['老師總數', stats.totalTeachers, '系統中的老師記錄簿總數']);
+  data.push(['有進度追蹤工作表', stats.teachersWithProgressSheet, '包含進度追蹤工作表的記錄簿數量']);
+  data.push(['有效數據', stats.teachersWithValidData, '進度追蹤工作表結構正確且有數據']);
+  data.push(['學期Terms總數', stats.totalSemesterTerms, '所有老師的學期Term總和']);
+  data.push(['']); // 空行
+  
+  // 整體完成統計
+  data.push(['🎯 整體完成統計']);
+  data.push(['項目', '數值', '說明']);
+  data.push(['已完成電聯總數', stats.overallStats.totalCompleted, '所有學期Term已完成的電聯次數']);
+  data.push(['計劃電聯總數', stats.overallStats.totalScheduled, '所有學期Term計劃的電聯次數']);
+  data.push(['整體完成率', `${stats.overallStats.averageCompletionRate}%`, '全系統平均完成率']);
+  data.push(['']); // 空行
+  
+  // 狀態分布
+  data.push(['📋 進度狀態分布']);
+  data.push(['狀態', '數量', '比例']);
+  const totalTerms = stats.totalSemesterTerms;
+  Object.keys(stats.statusDistribution).forEach(status => {
+    const count = stats.statusDistribution[status];
+    const percentage = totalTerms > 0 ? Math.round((count / totalTerms) * 100) : 0;
+    data.push([status, count, `${percentage}%`]);
+  });
+  
+  // 寫入數據
+  if (data.length > 0) {
+    sheet.getRange(1, 1, data.length, 3).setValues(data);
+  }
+}
+
+/**
+ * 👨‍🏫 寫入老師詳細進度數據
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 工作表
+ * @param {Array} teacherSummary - 老師摘要數據
+ */
+function writeTeacherProgressDetails(sheet, teacherSummary) {
+  const data = [];
+  
+  // 標題行
+  data.push(['老師姓名', '學期Terms數', '已完成電聯', '計劃電聯', '完成率', '狀態概覽']);
+  
+  // 老師數據
+  teacherSummary.forEach(teacher => {
+    const statusSummary = teacher.semesterTermsStatus
+      .map(term => `${term.semesterTerm}: ${term.completionRate}%`)
+      .join('; ');
+      
+    data.push([
+      teacher.teacherName,
+      teacher.totalSemesterTerms,
+      teacher.totalCompleted,
+      teacher.totalScheduled,
+      `${teacher.overallCompletionRate}%`,
+      statusSummary
+    ]);
+  });
+  
+  // 寫入數據
+  if (data.length > 0) {
+    sheet.getRange(1, 1, data.length, 6).setValues(data);
+    
+    // 設定條件式格式 - 完成率列
+    const completionRateRange = sheet.getRange(2, 5, data.length - 1, 1);
+    
+    // 高完成率 (≥80%) - 綠色
+    const highRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextContains('100%').setBackground('#D4EDDA')
+      .build();
+    const goodRule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextContains('80%').setBackground('#E8F5E8')
+      .build();
+    
+    sheet.setConditionalFormatRules([highRule, goodRule]);
+  }
+}
+
+/**
+ * 📅 寫入學期統計數據
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet - 工作表
+ * @param {Object} semesterStats - 學期統計數據
+ */
+function writeSemesterStatistics(sheet, semesterStats) {
+  const data = [];
+  
+  // 標題行
+  data.push(['學期Term', '老師數量', '已完成電聯', '計劃電聯', '平均完成率']);
+  
+  // 學期統計數據
+  Object.keys(semesterStats).sort().forEach(semester => {
+    const stat = semesterStats[semester];
+    data.push([
+      semester,
+      stat.teacherCount,
+      stat.totalCompleted,
+      stat.totalScheduled,
+      `${stat.averageCompletionRate}%`
+    ]);
+  });
+  
+  // 寫入數據
+  if (data.length > 0) {
+    sheet.getRange(1, 1, data.length, 5).setValues(data);
   }
 }
 
