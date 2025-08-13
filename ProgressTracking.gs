@@ -1184,6 +1184,19 @@ function analyzeProgressTrackingStats(allProgressData) {
   try {
     Logger.log('📊 開始分析進度追蹤統計數據');
     
+    // ✅ 參數驗證 - 防止 undefined 錯誤
+    if (!allProgressData) {
+      Logger.log('❌ allProgressData 參數為 null 或 undefined');
+      throw new Error('allProgressData 參數不能為空');
+    }
+    
+    if (!Array.isArray(allProgressData)) {
+      Logger.log(`❌ allProgressData 不是陣列，類型為: ${typeof allProgressData}`);
+      throw new Error('allProgressData 必須是陣列');
+    }
+    
+    Logger.log(`✅ 參數驗證通過，allProgressData 長度: ${allProgressData.length}`);
+    
     const stats = {
       totalTeachers: 0,
       teachersWithProgressSheet: 0,
@@ -1332,13 +1345,27 @@ function generateProgressTrackingSheetReport(useSmartStrategy = false) {
     const errors = [];
     let processedCount = 0;
     
+    Logger.log(`🔍 開始處理 ${teacherBooks.length} 本記錄簿的進度追蹤數據`);
+    
     teacherBooks.forEach((book, index) => {
       try {
         Logger.log(`[${index + 1}/${teacherBooks.length}] 處理 ${book.getName()}`);
         const progressData = extractProgressTrackingData(book);
-        allProgressData.push(progressData);
         
-        if (progressData.hasProgressSheet && progressData.isValidStructure) {
+        // ✅ 驗證返回的數據結構
+        if (!progressData || typeof progressData !== 'object') {
+          Logger.log(`⚠️ ${book.getName()} 返回無效的進度數據結構`);
+          allProgressData.push({
+            teacherName: book.getName(),
+            hasProgressSheet: false,
+            error: '無效的數據結構'
+          });
+        } else {
+          allProgressData.push(progressData);
+          Logger.log(`✅ ${book.getName()} 數據提取完成: hasProgressSheet=${progressData.hasProgressSheet}, isValidStructure=${progressData.isValidStructure}`);
+        }
+        
+        if (progressData && progressData.hasProgressSheet && progressData.isValidStructure) {
           processedCount++;
         }
         
@@ -1346,8 +1373,17 @@ function generateProgressTrackingSheetReport(useSmartStrategy = false) {
         const errorMsg = `提取 ${book.getName()} 進度數據失敗: ${error.message}`;
         Logger.log(`❌ ${errorMsg}`);
         errors.push(errorMsg);
+        
+        // 添加錯誤的數據項目以保持數組完整性
+        allProgressData.push({
+          teacherName: book.getName(),
+          hasProgressSheet: false,
+          error: error.message
+        });
       }
     });
+    
+    Logger.log(`📊 數據提取完成: allProgressData 長度=${allProgressData.length}, processedCount=${processedCount}`);
     
     if (processedCount === 0) {
       return {
@@ -1360,7 +1396,23 @@ function generateProgressTrackingSheetReport(useSmartStrategy = false) {
     }
     
     // 分析統計數據
-    const stats = analyzeProgressTrackingStats(allProgressData);
+    Logger.log(`🔍 準備分析統計數據，allProgressData 類型: ${typeof allProgressData}, 長度: ${allProgressData ? allProgressData.length : 'undefined'}`);
+    
+    let stats;
+    try {
+      stats = analyzeProgressTrackingStats(allProgressData);
+      Logger.log(`✅ 統計分析成功完成`);
+    } catch (statsError) {
+      Logger.log(`❌ 統計分析失敗: ${statsError.message}`);
+      return {
+        success: false,
+        message: `統計分析失敗: ${statsError.message}`,
+        processedCount: processedCount,
+        totalBooks: teacherBooks.length,
+        errors: [...errors, `統計分析錯誤: ${statsError.message}`],
+        reportType: 'PROGRESS_TRACKING_SHEET'
+      };
+    }
     
     // 創建報告工作表
     const reportSheet = createProgressTrackingReportSheet();
