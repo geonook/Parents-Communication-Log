@@ -509,23 +509,26 @@ function generateProgressReportBatch() {
         try {
           const itemStartTime = new Date().getTime();
           
-          // 使用優化的數據收集
-          const progress = checkTeacherProgressOptimized(book);
+          // 使用優化的數據收集 (現在返回數組)
+          const progressArray = checkTeacherProgressOptimized(book);
           
-          // 收集摘要數據 (學期制格式)
-          summaryData.push([
-            progress.teacherName,
-            progress.semester,
-            progress.term,
-            progress.totalStudents,
-            progress.completedContacts,
-            progress.completionRate,
-            progress.status
-          ]);
+          // 收集摘要數據 (學期制格式) - 每個學期&Term組合一行
+          progressArray.forEach(progress => {
+            summaryData.push([
+              progress.teacherName,
+              progress.semester,
+              progress.term,
+              progress.totalStudents,
+              progress.completedContacts,
+              progress.completionRate,
+              progress.status
+            ]);
+          });
           
           processedCount++;
           const itemEndTime = new Date().getTime();
-          Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完成 (${itemEndTime - itemStartTime}ms)`);
+          const teacherName = progressArray.length > 0 ? progressArray[0].teacherName : book.getName();
+          Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${teacherName} 完成 (${progressArray.length} 個學期&Term, ${itemEndTime - itemStartTime}ms)`);
           
         } catch (error) {
           const errorMsg = `處理 ${book.getName()} 失敗: ${error.message}`;
@@ -583,7 +586,7 @@ function generateProgressReportBatch() {
 }
 
 /**
- * 優化版本的教師進度檢查 - 從學期制進度追蹤工作表讀取數據
+ * 優化版本的教師進度檢查 - 從學期制進度追蹤工作表讀取所有學期&Term數據
  */
 function checkTeacherProgressOptimized(recordBook) {
   try {
@@ -595,7 +598,7 @@ function checkTeacherProgressOptimized(recordBook) {
     
     if (!progressSheet) {
       Logger.log(`⚠️ ${teacherName} 缺少進度追蹤工作表`);
-      return {
+      return [{
         teacherName: teacherName,
         semester: '無資料',
         term: '無資料',
@@ -605,14 +608,16 @@ function checkTeacherProgressOptimized(recordBook) {
         status: '缺少進度表',
         alertMessage: '無進度追蹤工作表',
         processingTime: new Date().getTime() - itemStartTime
-      };
+      }];
     }
     
     // 讀取進度追蹤數據 (第5-10行：Fall Beginning/Midterm/Final + Spring Beginning/Midterm/Final)
     const progressData = progressSheet.getRange(5, 1, 6, 6).getValues(); // 6行6列
     
-    // 尋找當前活躍的學期進度 (有完成電聯的第一個)
-    let currentProgress = null;
+    const allProgressData = [];
+    const processingTime = new Date().getTime() - itemStartTime;
+    
+    // 處理所有學期&Term組合，只包含有意義的數據
     for (let i = 0; i < progressData.length; i++) {
       const row = progressData[i];
       const semester = row[0] || '';
@@ -622,73 +627,62 @@ function checkTeacherProgressOptimized(recordBook) {
       const completionRateText = row[4] || '0%';
       const status = row[5] || '待開始';
       
-      // 如果找到有進度的學期-Term，使用它
-      if (semester && term && (completedContacts > 0 || status === '進行中')) {
-        currentProgress = {
+      // 只包含有學期和Term資料的行
+      if (semester && term) {
+        // 生成提醒訊息
+        let alertMessage = '';
+        const rate = parseFloat(completionRateText);
+        
+        if (status === '進行中') {
+          if (rate >= 90) {
+            alertMessage = '進度優秀，即將完成';
+          } else if (rate >= 70) {
+            alertMessage = '進度良好，繼續保持';
+          } else if (rate >= 50) {
+            alertMessage = '進度正常';
+          } else {
+            alertMessage = '進度偏慢，建議加強';
+          }
+        } else if (status === '已完成') {
+          alertMessage = '已完成本期電聯';
+        } else {
+          alertMessage = '待開始電聯';
+        }
+        
+        allProgressData.push({
+          teacherName: teacherName,
           semester: semester,
           term: term,
           totalStudents: totalStudents,
           completedContacts: completedContacts,
           completionRate: completionRateText,
-          status: status
-        };
-        break;
+          status: status,
+          alertMessage: alertMessage,
+          processingTime: processingTime
+        });
       }
     }
     
-    // 如果沒有找到活躍進度，使用第一行數據
-    if (!currentProgress && progressData.length > 0) {
-      const firstRow = progressData[0];
-      currentProgress = {
-        semester: firstRow[0] || '無資料',
-        term: firstRow[1] || '無資料',
-        totalStudents: firstRow[2] || 0,
-        completedContacts: firstRow[3] || 0,
-        completionRate: firstRow[4] || '0%',
-        status: firstRow[5] || '待開始'
-      };
+    // 如果沒有找到任何有效數據，返回默認數據
+    if (allProgressData.length === 0) {
+      return [{
+        teacherName: teacherName,
+        semester: '無資料',
+        term: '無資料',
+        totalStudents: 0,
+        completedContacts: 0,
+        completionRate: '0%',
+        status: '無資料',
+        alertMessage: '無有效進度資料',
+        processingTime: processingTime
+      }];
     }
     
-    // 生成提醒訊息
-    let alertMessage = '';
-    if (currentProgress) {
-      const rate = parseFloat(currentProgress.completionRate);
-      if (currentProgress.status === '進行中') {
-        if (rate >= 90) {
-          alertMessage = '進度優秀，即將完成';
-        } else if (rate >= 70) {
-          alertMessage = '進度良好，繼續保持';
-        } else if (rate >= 50) {
-          alertMessage = '進度正常';
-        } else {
-          alertMessage = '進度偏慢，建議加強';
-        }
-      } else if (currentProgress.status === '已完成') {
-        alertMessage = '已完成本期電聯';
-      } else {
-        alertMessage = '待開始電聯';
-      }
-    } else {
-      alertMessage = '無進度資料';
-    }
-    
-    const processingTime = new Date().getTime() - itemStartTime;
-    
-    return {
-      teacherName: teacherName,
-      semester: currentProgress?.semester || '無資料',
-      term: currentProgress?.term || '無資料', 
-      totalStudents: currentProgress?.totalStudents || 0,
-      completedContacts: currentProgress?.completedContacts || 0,
-      completionRate: currentProgress?.completionRate || '0%',
-      status: currentProgress?.status || '無資料',
-      alertMessage: alertMessage,
-      processingTime: processingTime
-    };
+    return allProgressData;
     
   } catch (error) {
     Logger.log(`優化檢查 ${recordBook.getName()} 失敗: ${error.message}`);
-    return {
+    return [{
       teacherName: recordBook.getName(),
       semester: '錯誤',
       term: '錯誤',
@@ -698,7 +692,7 @@ function checkTeacherProgressOptimized(recordBook) {
       status: '處理失敗',
       alertMessage: '資料讀取失敗',
       error: error.message
-    };
+    }];
   }
 }
 
@@ -2370,14 +2364,17 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
 }
 
 /**
- * 新增進度統計圖表 - 柱狀圖顯示各老師學期進度完成率
+ * 新增進度統計圖表 - 分組柱狀圖顯示老師姓名與學期&Term層級
  */
 function addProgressCharts(sheet, summaryData) {
   if (summaryData.length === 0) return;
   
-  // 建立圖表資料 - 老師個別完成率
+  // 建立分組數據結構 - 按老師分組，按學期&Term細分
   // summaryData 格式: [teacherName, semester, term, totalStudents, completedContacts, completionRate, status]
-  const chartData = [['老師 (學期&Term)', '完成率']];
+  
+  // 步驟1: 收集所有老師和學期&Term組合
+  const teacherGroups = {};
+  const allSemesterTerms = new Set();
   
   summaryData.forEach(row => {
     const teacherName = row[0] || '未知';
@@ -2385,46 +2382,80 @@ function addProgressCharts(sheet, summaryData) {
     const term = row[2] || '';
     const completionRate = row[5] || '0%';
     
-    // 解析完成率百分比為數字
+    const semesterTerm = `${semester} ${term}`;
+    allSemesterTerms.add(semesterTerm);
+    
+    if (!teacherGroups[teacherName]) {
+      teacherGroups[teacherName] = {};
+    }
+    
     const rateNumber = parseFloat(completionRate.toString().replace('%', '')) || 0;
-    
-    // 建立顯示標籤: "老師姓名 (學期 Term)"
-    const displayLabel = `${teacherName} (${semester} ${term})`;
-    
-    chartData.push([displayLabel, rateNumber]);
+    teacherGroups[teacherName][semesterTerm] = rateNumber;
   });
   
-  // 寫入圖表資料到工作表
+  // 步驟2: 建立圖表數據矩陣
+  const semesterTermsArray = Array.from(allSemesterTerms).sort();
+  const teachersArray = Object.keys(teacherGroups).sort();
+  
+  // 建立標題行: [老師姓名, 學期Term1, 學期Term2, ...]
+  const chartData = [['老師姓名', ...semesterTermsArray]];
+  
+  // 為每位老師建立數據行
+  teachersArray.forEach(teacherName => {
+    const teacherRow = [teacherName];
+    semesterTermsArray.forEach(semesterTerm => {
+      const rate = teacherGroups[teacherName][semesterTerm] || 0;
+      teacherRow.push(rate);
+    });
+    chartData.push(teacherRow);
+  });
+  
+  // 步驟3: 寫入圖表資料到工作表
   const chartStartRow = summaryData.length + 5;
-  const chartRange = sheet.getRange(chartStartRow, 1, chartData.length, 2);
+  const chartRange = sheet.getRange(chartStartRow, 1, chartData.length, chartData[0].length);
   chartRange.setValues(chartData);
   
-  // 建立柱狀圖
+  // 步驟4: 建立分組柱狀圖
   const chart = sheet.newChart()
     .setChartType(Charts.ChartType.COLUMN)
     .addRange(chartRange)
-    .setPosition(chartStartRow, 4, 0, 0)
-    .setOption('title', '各老師學期進度完成率')
-    .setOption('width', 600)  // 增加寬度以容納更多老師
-    .setOption('height', 400) // 增加高度
-    .setOption('hAxis.title', '老師姓名 (學期&Term)')
+    .setPosition(chartStartRow, chartData[0].length + 2, 0, 0)
+    .setOption('title', '各老師學期進度完成率 (分組顯示)')
+    .setOption('width', Math.max(600, teachersArray.length * 80 + 200))  // 動態寬度
+    .setOption('height', 450)
+    .setOption('isStacked', false) // 不堆疊，並排顯示
+    .setOption('hAxis.title', '老師姓名')
     .setOption('vAxis.title', '完成率 (%)')
     .setOption('vAxis.minValue', 0)
     .setOption('vAxis.maxValue', 100)
-    .setOption('legend.position', 'none') // 隱藏圖例
-    .setOption('hAxis.textStyle.fontSize', 10)
-    .setOption('hAxis.slantedText', true) // 傾斜X軸標籤以避免重疊
-    .setOption('hAxis.slantedTextAngle', 45)
+    .setOption('legend.position', 'bottom') // 圖例在底部，顯示學期&Term
+    .setOption('legend.textStyle.fontSize', 10)
+    .setOption('hAxis.textStyle.fontSize', 11)
+    .setOption('hAxis.slantedText', teachersArray.length > 5) // 老師多時傾斜標籤
+    .setOption('hAxis.slantedTextAngle', 30)
+    .setOption('colors', ['#4285F4', '#EA4335', '#34A853', '#FBBC04', '#FF6D01', '#9C27B0']) // 不同學期&Term用不同顏色
     .build();
   
   sheet.insertChart(chart);
   
-  // 添加圖表說明
+  // 步驟5: 添加圖表說明和數據表格
   const explanationRow = chartStartRow + chartData.length + 2;
-  sheet.getRange(explanationRow, 1, 1, 3)
-    .setValues([['圖表說明: 顯示各老師當前學期Term的電聯完成率', '', '']])
+  sheet.getRange(explanationRow, 1, 1, chartData[0].length)
+    .setValues([['圖表說明: 分組柱狀圖顯示各老師的學期&Term進度完成率', ...Array(chartData[0].length - 1).fill('')]])
     .setFontWeight('bold')
     .setBackground('#F0F0F0');
+  
+  // 格式化數據表格
+  const headerRange = sheet.getRange(chartStartRow, 1, 1, chartData[0].length);
+  headerRange.setFontWeight('bold').setBackground('#E8F4FD');
+  
+  // 為數據添加百分比格式
+  if (chartData.length > 1) {
+    const dataRange = sheet.getRange(chartStartRow + 1, 2, chartData.length - 1, chartData[0].length - 1);
+    dataRange.setNumberFormat('0.0"%"');
+  }
+  
+  sheet.autoResizeColumns(1, chartData[0].length);
 }
 
 /**
