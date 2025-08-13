@@ -1583,12 +1583,28 @@ function generateProgressReportWeb() {
     const startTime = new Date().getTime();
     Logger.log('📊 Dashboard: 開始生成進度報告');
     
+    // 🔍 執行系統狀態檢查
+    Logger.log('🔍 Dashboard: 執行系統狀態檢查...');
+    const systemCheck = performSystemCheck();
+    
+    if (!systemCheck.success) {
+      Logger.log('❌ Dashboard: 系統檢查失敗');
+      return {
+        success: false,
+        message: `系統檢查失敗：${systemCheck.errors.join('; ')}`,
+        errors: systemCheck.errors,
+        systemCheck: systemCheck
+      };
+    }
+    
     // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooksForDashboard();
     if (teacherBooks.length === 0) {
       return {
         success: false,
-        message: '系統中沒有找到任何老師記錄簿。請先建立老師記錄簿。'
+        message: '系統中沒有找到任何老師記錄簿。可能原因：資料夾結構不正確、檔案命名不符合規範、或權限設定問題。建議執行系統修復功能。',
+        teacherBooksCount: 0,
+        systemCheck: systemCheck
       };
     }
     

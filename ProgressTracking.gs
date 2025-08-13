@@ -98,11 +98,34 @@ function generateProgressReport() {
     // 統一 Web 環境架構 - 移除環境檢查
     const ui = SpreadsheetApp.getUi();
     
+    // 🔍 增強型診斷：檢查系統狀態
+    Logger.log('🔍 執行系統狀態檢查...');
+    const systemCheck = performSystemCheck();
+    
+    if (!systemCheck.success) {
+      const errorMsg = `系統檢查失敗：\n\n${systemCheck.errors.join('\n')}\n\n建議執行系統修復功能。`;
+      ui.alert('系統錯誤', errorMsg, ui.ButtonSet.OK);
+      
+      return {
+        success: false,
+        message: '系統檢查失敗',
+        errors: systemCheck.errors,
+        systemCheck: systemCheck
+      };
+    }
+    
     // 獲取所有老師的記錄簿 (使用快取)
     const teacherBooks = getAllTeacherBooks();
     if (teacherBooks.length === 0) {
-      ui.alert('提醒', '系統中沒有找到任何老師記錄簿', ui.ButtonSet.OK);
-      return;
+      const detailedMsg = `系統中沒有找到任何老師記錄簿。\n\n可能原因：\n• 資料夾結構不正確\n• 檔案命名不符合規範\n• 權限設定問題\n\n建議使用「系統修復」功能解決此問題。`;
+      ui.alert('沒有找到記錄簿', detailedMsg, ui.ButtonSet.OK);
+      
+      return {
+        success: false,
+        message: '沒有找到老師記錄簿',
+        errors: ['系統中沒有找到任何老師記錄簿'],
+        teacherBooksCount: 0
+      };
     }
     
     Logger.log(`📚 找到 ${teacherBooks.length} 本記錄簿，開始收集數據...`);
@@ -2023,6 +2046,89 @@ function testMultiModeStatisticsEngine() {
       error: error.message
     };
   }
+}
+
+/**
+ * 🔍 執行系統狀態檢查 - 用於進度報告前的診斷
+ */
+function performSystemCheck() {
+  const results = {
+    success: true,
+    errors: [],
+    warnings: [],
+    details: {},
+    timestamp: new Date().toLocaleString()
+  };
+  
+  try {
+    Logger.log('🔍 開始系統狀態檢查...');
+    
+    // 檢查 1: SYSTEM_CONFIG 配置
+    if (!SYSTEM_CONFIG) {
+      results.errors.push('SYSTEM_CONFIG 未定義');
+      results.success = false;
+    } else {
+      if (!SYSTEM_CONFIG.MAIN_FOLDER_ID) {
+        results.warnings.push('MAIN_FOLDER_ID 未設定');
+      }
+      if (!SYSTEM_CONFIG.MAIN_FOLDER_NAME) {
+        results.errors.push('MAIN_FOLDER_NAME 未設定');
+        results.success = false;
+      }
+    }
+    
+    // 檢查 2: 系統資料夾存取
+    try {
+      const mainFolder = getSystemMainFolder();
+      if (mainFolder) {
+        Logger.log('✅ 系統主資料夾存取正常');
+        results.details.mainFolder = {
+          name: mainFolder.getName(),
+          id: mainFolder.getId()
+        };
+      } else {
+        results.errors.push('無法存取系統主資料夾');
+        results.success = false;
+      }
+    } catch (folderError) {
+      results.errors.push(`系統資料夾存取失敗: ${folderError.message}`);
+      results.success = false;
+    }
+    
+    // 檢查 3: PropertiesService 服務
+    try {
+      const properties = PropertiesService.getScriptProperties();
+      properties.setProperty('SYSTEM_CHECK_TEST', 'test');
+      properties.deleteProperty('SYSTEM_CHECK_TEST');
+      Logger.log('✅ PropertiesService 正常');
+    } catch (propError) {
+      results.warnings.push(`PropertiesService 異常: ${propError.message}`);
+    }
+    
+    // 檢查 4: 核心函數存在性
+    const coreFunctions = [
+      'getAllTeacherBooks',
+      'checkTeacherProgress', 
+      'calculateSemesterProgress',
+      'createProgressReportSheet'
+    ];
+    
+    coreFunctions.forEach(funcName => {
+      if (typeof eval(funcName) !== 'function') {
+        results.errors.push(`核心函數 ${funcName} 不存在`);
+        results.success = false;
+      }
+    });
+    
+    Logger.log(`🔍 系統檢查完成，成功: ${results.success}`);
+    
+  } catch (error) {
+    Logger.log(`💥 系統檢查過程發生錯誤: ${error.message}`);
+    results.errors.push(`系統檢查錯誤: ${error.message}`);
+    results.success = false;
+  }
+  
+  return results;
 }
 
 /**

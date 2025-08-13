@@ -1122,8 +1122,8 @@
                     <button class="action-button secondary" onclick="generateProgressReport()">
                         📈 生成進度報告
                     </button>
-                    <button class="action-button" onclick="updateTeachersList()">
-                        🔄 更新老師列表
+                    <button class="action-button warning" onclick="repairSystemFolder()" title="修復進度報告功能問題">
+                        🔧 系統修復
                     </button>
                     <button class="action-button secondary" onclick="executeSystemTest()">
                         🧪 執行系統測試
@@ -2618,15 +2618,98 @@
                             window.open(result.reportUrl, '_blank');
                         }
                     } else {
-                        alert('❌ ' + result.message);
+                        // 進度報告失敗時提供修復選項
+                        let errorMessage = '❌ 進度報告生成失敗\\n\\n';
+                        errorMessage += `錯誤: ${result.message}\\n\\n`;
+                        errorMessage += '建議執行系統修復功能來解決此問題。';
+                        alert(errorMessage);
                     }
                 })
                 .withFailureHandler(function(error) {
                     button.textContent = originalText;
                     button.disabled = false;
-                    alert('生成失敗：' + error.message);
+                    alert('生成失敗：' + error.message + '\\n\\n建議執行系統修復功能。');
                 })
                 .executeSystemFunction('generateProgressReport');
+        }
+
+        // 🔧 系統修復功能
+        function repairSystemFolder() {
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = '修復中...';
+            button.disabled = true;
+            
+            // 顯示修復說明
+            const confirmMsg = '🔧 系統修復功能\\n\\n' +
+                              '此功能將：\\n' +
+                              '• 檢查系統資料夾存取權限\\n' +
+                              '• 掃描老師記錄簿檔案\\n' +
+                              '• 清理並重建快取\\n' +
+                              '• 測試進度報告功能\\n\\n' +
+                              '執行時間約 1-2 分鐘，確定要繼續嗎？';
+                              
+            if (!confirm(confirmMsg)) {
+                button.textContent = originalText;
+                button.disabled = false;
+                return;
+            }
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    
+                    let message = '🔧 系統修復完成！\\n\\n';
+                    
+                    if (result.mainFolderStatus === 'success' || result.mainFolderStatus === 'found_by_name') {
+                        message += '✅ 系統資料夾: 正常\\n';
+                    } else {
+                        message += '❌ 系統資料夾: 異常\\n';
+                    }
+                    
+                    if (result.teacherBooksFound > 0) {
+                        message += `✅ 老師記錄簿: 找到 ${result.teacherBooksFound} 本\\n`;
+                    } else {
+                        message += '❌ 老師記錄簿: 未找到檔案\\n';
+                    }
+                    
+                    if (result.repairs && result.repairs.length > 0) {
+                        message += '\\n已完成修復:\\n';
+                        result.repairs.forEach(repair => {
+                            message += `• ${repair}\\n`;
+                        });
+                    }
+                    
+                    if (result.errors && result.errors.length > 0) {
+                        message += '\\n需要注意的問題:\\n';
+                        result.errors.slice(0, 3).forEach(error => {
+                            message += `• ${error}\\n`;
+                        });
+                    }
+                    
+                    if (result.recommendations && result.recommendations.length > 0) {
+                        message += '\\n建議採取的行動:\\n';
+                        result.recommendations.slice(0, 2).forEach(rec => {
+                            message += `• ${rec.title}\\n`;
+                        });
+                    }
+                    
+                    alert(message);
+                    
+                    // 如果修復成功，建議測試進度報告
+                    if (result.teacherBooksFound > 0) {
+                        if (confirm('修復完成！是否要測試進度報告功能？')) {
+                            generateProgressReport();
+                        }
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    button.textContent = originalText;
+                    button.disabled = false;
+                    alert('修復失敗：' + error.message);
+                })
+                .repairSystemFolderAccess();
         }
 
 
