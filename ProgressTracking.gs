@@ -2370,39 +2370,61 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
 }
 
 /**
- * 新增進度統計圖表
+ * 新增進度統計圖表 - 柱狀圖顯示各老師學期進度完成率
  */
 function addProgressCharts(sheet, summaryData) {
   if (summaryData.length === 0) return;
   
-  // 統計狀態分布
-  const statusCount = {};
+  // 建立圖表資料 - 老師個別完成率
+  // summaryData 格式: [teacherName, semester, term, totalStudents, completedContacts, completionRate, status]
+  const chartData = [['老師 (學期&Term)', '完成率']];
+  
   summaryData.forEach(row => {
-    const status = row[5]; // 狀態欄位
-    statusCount[status] = (statusCount[status] || 0) + 1;
+    const teacherName = row[0] || '未知';
+    const semester = row[1] || '';
+    const term = row[2] || '';
+    const completionRate = row[5] || '0%';
+    
+    // 解析完成率百分比為數字
+    const rateNumber = parseFloat(completionRate.toString().replace('%', '')) || 0;
+    
+    // 建立顯示標籤: "老師姓名 (學期 Term)"
+    const displayLabel = `${teacherName} (${semester} ${term})`;
+    
+    chartData.push([displayLabel, rateNumber]);
   });
   
-  // 建立狀態統計資料
-  const chartData = [['狀態', '人數']];
-  Object.keys(statusCount).forEach(status => {
-    chartData.push([status, statusCount[status]]);
-  });
-  
-  // 寫入圖表資料
-  const chartRange = sheet.getRange(summaryData.length + 5, 1, chartData.length, 2);
+  // 寫入圖表資料到工作表
+  const chartStartRow = summaryData.length + 5;
+  const chartRange = sheet.getRange(chartStartRow, 1, chartData.length, 2);
   chartRange.setValues(chartData);
   
-  // 建立圓餅圖
+  // 建立柱狀圖
   const chart = sheet.newChart()
-    .setChartType(Charts.ChartType.PIE)
+    .setChartType(Charts.ChartType.COLUMN)
     .addRange(chartRange)
-    .setPosition(summaryData.length + 5, 4, 0, 0)
-    .setOption('title', '老師電聯進度狀態分布')
-    .setOption('width', 400)
-    .setOption('height', 300)
+    .setPosition(chartStartRow, 4, 0, 0)
+    .setOption('title', '各老師學期進度完成率')
+    .setOption('width', 600)  // 增加寬度以容納更多老師
+    .setOption('height', 400) // 增加高度
+    .setOption('hAxis.title', '老師姓名 (學期&Term)')
+    .setOption('vAxis.title', '完成率 (%)')
+    .setOption('vAxis.minValue', 0)
+    .setOption('vAxis.maxValue', 100)
+    .setOption('legend.position', 'none') // 隱藏圖例
+    .setOption('hAxis.textStyle.fontSize', 10)
+    .setOption('hAxis.slantedText', true) // 傾斜X軸標籤以避免重疊
+    .setOption('hAxis.slantedTextAngle', 45)
     .build();
   
   sheet.insertChart(chart);
+  
+  // 添加圖表說明
+  const explanationRow = chartStartRow + chartData.length + 2;
+  sheet.getRange(explanationRow, 1, 1, 3)
+    .setValues([['圖表說明: 顯示各老師當前學期Term的電聯完成率', '', '']])
+    .setFontWeight('bold')
+    .setBackground('#F0F0F0');
 }
 
 /**
