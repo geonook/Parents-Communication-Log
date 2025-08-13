@@ -482,8 +482,7 @@ function generateProgressReportBatch() {
     const reportSheet = createProgressReportSheet();
     Logger.log(`✅ 分批報告工作表已建立`);
     
-    // 初始化數據收集
-    const allProgressData = [];
+    // 初始化數據收集 (只需要摘要數據)
     const summaryData = [];
     const errors = [];
     let processedCount = 0;
@@ -524,11 +523,6 @@ function generateProgressReportBatch() {
             progress.alertMessage || progress.error || ''
           ]);
           
-          // 收集詳細數據（簡化版本）
-          if (progress.detailData && progress.detailData.length > 0) {
-            allProgressData.push(...progress.detailData);
-          }
-          
           processedCount++;
           const itemEndTime = new Date().getTime();
           Logger.log(`✅ [${processedCount}/${teacherBooks.length}] ${progress.teacherName} 完成 (${itemEndTime - itemStartTime}ms)`);
@@ -551,8 +545,8 @@ function generateProgressReportBatch() {
     }
     
     // 寫入數據到報告
-    Logger.log(`📝 開始寫入數據: ${summaryData.length} 筆摘要, ${allProgressData.length} 筆詳細記錄`);
-    writeProgressReportData(reportSheet, summaryData, allProgressData);
+    Logger.log(`📝 開始寫入數據: ${summaryData.length} 筆摘要`);
+    writeProgressReportData(reportSheet, summaryData, []);
     
     const totalTime = new Date().getTime() - startTime;
     Logger.log(`🎉 分批進度報告完成！處理 ${processedCount}/${teacherBooks.length} 本記錄簿，總耗時 ${Math.round(totalTime/1000)} 秒`);
@@ -605,7 +599,6 @@ function checkTeacherProgressOptimized(recordBook) {
     let lastContactDate = '無記錄';
     let completionRate = '0%';
     let status = '未知';
-    const detailData = [];
     
     // 一次性讀取聯絡記錄
     if (contactSheet) {
@@ -617,28 +610,6 @@ function checkTeacherProgressOptimized(recordBook) {
         const lastRow = contactData[contactData.length - 1];
         if (lastRow && lastRow[4]) {
           lastContactDate = new Date(lastRow[4]).toLocaleDateString();
-        }
-        
-        // 生成詳細數據（完整版本，匹配12列格式）
-        const maxDetails = Math.min(10, contactData.length - 1);
-        for (let i = 1; i <= maxDetails; i++) {
-          const row = contactData[i];
-          if (row && row.length > 0) {
-            detailData.push([
-              teacherName,        // Teacher Name
-              row[0] || '',       // Student ID  
-              row[1] || '',       // Name
-              row[2] || '',       // English Name
-              row[3] || '',       // English Class
-              row[4] || '',       // Date
-              row[5] || '',       // Semester
-              row[6] || '',       // Term
-              row[7] || '',       // Contact Type
-              row[8] || '',       // Teachers Content
-              row[9] || '',       // Parents Responses
-              row[10] || ''       // Contact Method
-            ]);
-          }
         }
       }
     }
@@ -690,7 +661,6 @@ function checkTeacherProgressOptimized(recordBook) {
       completionRate: completionRate,
       status: status,
       lastContactDate: lastContactDate,
-      detailData: detailData,
       alertMessage: alertMessage,
       processingTime: processingTime
     };
@@ -704,7 +674,7 @@ function checkTeacherProgressOptimized(recordBook) {
       completionRate: '0%',
       status: '錯誤',
       lastContactDate: '無法讀取',
-      detailData: [],
+      alertMessage: '處理失敗',
       error: error.message
     };
   }
@@ -2305,7 +2275,7 @@ function createProgressReportSheet() {
  * 寫入進度報告資料
  */
 /**
- * 驗證報告數據格式
+ * 驗證報告數據格式 (只驗證摘要數據)
  */
 function validateReportDataFormat(summaryData, detailData) {
   const validationResults = {
@@ -2316,7 +2286,6 @@ function validateReportDataFormat(summaryData, detailData) {
   
   // 預期的列數
   const EXPECTED_SUMMARY_COLUMNS = 7;
-  const EXPECTED_DETAIL_COLUMNS = 12;
   
   // 驗證摘要數據
   if (summaryData && summaryData.length > 0) {
@@ -2333,19 +2302,9 @@ function validateReportDataFormat(summaryData, detailData) {
     validationResults.warnings.push('摘要數據為空');
   }
   
-  // 驗證詳細數據
+  // 不再驗證詳細數據，因為不需要生成詳細記錄
   if (detailData && detailData.length > 0) {
-    detailData.forEach((row, index) => {
-      if (!Array.isArray(row)) {
-        validationResults.errors.push(`詳細數據第 ${index + 1} 行不是陣列格式`);
-        validationResults.isValid = false;
-      } else if (row.length !== EXPECTED_DETAIL_COLUMNS) {
-        validationResults.errors.push(`詳細數據第 ${index + 1} 行有 ${row.length} 列，期望 ${EXPECTED_DETAIL_COLUMNS} 列`);
-        validationResults.isValid = false;
-      }
-    });
-  } else {
-    validationResults.warnings.push('詳細數據為空');
+    validationResults.warnings.push('包含詳細數據但不會被使用');
   }
   
   return validationResults;
@@ -2373,27 +2332,16 @@ function writeProgressReportData(reportSheet, summaryData, detailData) {
   summarySheet.setName('進度摘要');
   
   // 寫入摘要資料
-  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '定期電聯次數', '最後聯繫日期', '狀態', '提醒訊息']];
+  const summaryHeaders = [['老師姓名', '授課班級數', '總電聯次數', '完成率', '最後聯繫日期', '狀態', '提醒訊息']];
   summarySheet.getRange(1, 1, 1, summaryHeaders[0].length).setValues(summaryHeaders);
   
   if (summaryData.length > 0) {
     summarySheet.getRange(2, 1, summaryData.length, summaryHeaders[0].length).setValues(summaryData);
   }
   
-  // 建立詳細記錄工作表
-  const detailSheet = reportSheet.insertSheet('詳細記錄');
-  const detailHeaders = [['Teacher Name', 'Student ID', 'Name', 'English Name', 'English Class', 'Date', 'Semester', 'Term', 'Contact Type', 'Teachers Content', 'Parents Responses', 'Contact Method']];
-  detailSheet.getRange(1, 1, 1, detailHeaders[0].length).setValues(detailHeaders);
-  
-  if (detailData.length > 0) {
-    detailSheet.getRange(2, 1, detailData.length, detailHeaders[0].length).setValues(detailData);
-  }
-  
-  // 格式設定
-  [summarySheet, detailSheet].forEach(sheet => {
-    sheet.getRange(1, 1, 1, sheet.getLastColumn()).setFontWeight('bold').setBackground('#E8F4FD');
-    sheet.autoResizeColumns(1, sheet.getLastColumn());
-  });
+  // 格式設定 (只針對摘要工作表)
+  summarySheet.getRange(1, 1, 1, summarySheet.getLastColumn()).setFontWeight('bold').setBackground('#E8F4FD');
+  summarySheet.autoResizeColumns(1, summarySheet.getLastColumn());
   
   // 新增統計圖表
   addProgressCharts(summarySheet, summaryData);
