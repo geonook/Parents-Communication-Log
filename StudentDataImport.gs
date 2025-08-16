@@ -115,7 +115,7 @@ function getStudentDataFromSheet() {
   
   const response = ui.prompt(
     '學生總表匯入',
-    '請輸入包含學生資料的 Google Sheets ID：\n\n格式說明：\n第一列應為標題列，包含：ID, Grade, HR, Seat #, Chinese Name, English Name, 112 Level, 113 Level, Previous Teacher, English Class, LT, Mother\'s Phone, Father\'s Phone\n\n※ 電話號碼無特定格式限制，可為純數字如 927055077',
+    '請輸入包含學生資料的 Google Sheets ID：\n\n格式說明：\n第一列應為標題列，包含：ID, Grade, HR, Seat #, Chinese Name, English Name, Previous Level, Level, Previous Teacher, English Class, LT, Mother\'s Phone, Mother\'s Email, Father\'s Phone, Father\'s Email\n\n※ 電話號碼無特定格式限制，可為純數字如 927055077\n※ 電子郵件欄位可為空白，無特定格式限制',
     ui.ButtonSet.OK_CANCEL
   );
   
@@ -879,6 +879,13 @@ function batchCreateTeachersFromMasterList(teachersInfo, masterData) {
         isCreationSuccessful: error.isCreationSuccessful || false
       });
       errorCount++;
+    }
+    
+    // 添加休息時間防止 Google Apps Script 執行限制
+    Utilities.sleep(1000); // 每位老師處理完休息1秒
+    if ((index + 1) % 5 === 0) {
+      Logger.log(`⏸️ 已處理 ${index + 1} 位老師，休息3秒避免超時...`);
+      Utilities.sleep(3000); // 每5位老師休息3秒
     }
   });
   

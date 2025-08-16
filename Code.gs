@@ -34,7 +34,7 @@ const SYSTEM_CONFIG = {
   STUDENT_FIELDS: [
     'ID', 'Grade', 'HR', 'Seat #', 'Chinese Name', 'English Name',
     'Previous Level', 'Level', 'Previous Teacher', 'English Class', 
-    'LT', 'Mother\'s Phone', 'Father\'s Phone'
+    'LT', 'Mother\'s Phone', 'Mother\'s Email', 'Father\'s Phone', 'Father\'s Email'
   ],
   
   // 學年學期設定
@@ -1317,7 +1317,7 @@ function setupMasterListContent(masterListSheet) {
   sheet.getRange(3, 1, 1, headers.length).setFontWeight('bold').setBackground('#4285F4').setFontColor('white');
   
   // 設定欄寬
-  const columnWidths = [80, 60, 60, 60, 120, 120, 80, 80, 120, 120, 80, 120, 120];
+  const columnWidths = [80, 60, 60, 60, 120, 120, 80, 80, 120, 120, 80, 120, 150, 120, 150];
   columnWidths.forEach((width, index) => {
     sheet.setColumnWidth(index + 1, width);
   });
